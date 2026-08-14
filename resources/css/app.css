@@ -1,0 +1,137 @@
+@import 'tailwindcss';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+
+@font-face {
+    font-family: 'Segoe UI';
+    font-style: normal;
+    font-weight: 300;
+    font-display: swap;
+    src: url('/fonts/Segoe%20UI%20Light.ttf') format('truetype');
+}
+
+@font-face {
+    font-family: 'Segoe UI';
+    font-style: italic;
+    font-weight: 300;
+    font-display: swap;
+    src: url('/fonts/Segoe%20UI%20LightItalic.ttf') format('truetype');
+}
+
+@font-face {
+    font-family: 'Segoe UI';
+    font-style: normal;
+    font-weight: 350;
+    font-display: swap;
+    src: url('/fonts/Segoe%20UI%20SemiLight.ttf') format('truetype');
+}
+
+@font-face {
+    font-family: 'Segoe UI';
+    font-style: italic;
+    font-weight: 350;
+    font-display: swap;
+    src: url('/fonts/Segoe%20UI%20SemiLightItalic.ttf') format('truetype');
+}
+
+@font-face {
+    font-family: 'Segoe UI';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('/fonts/Segoe%20UI.ttf') format('truetype');
+}
+
+@font-face {
+    font-family: 'Segoe UI';
+    font-style: italic;
+    font-weight: 400;
+    font-display: swap;
+    src: url('/fonts/Segoe%20UI%20Italic.ttf') format('truetype');
+}
+
+@font-face {
+    font-family: 'Segoe UI';
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    src: url('/fonts/Segoe%20UI%20Semibold.ttf') format('truetype');
+}
+
+@font-face {
+    font-family: 'Segoe UI';
+    font-style: italic;
+    font-weight: 600;
+    font-display: swap;
+    src: url('/fonts/Segoe%20UI%20Semibold%20Italic.ttf') format('truetype');
+}
+
+@font-face {
+    font-family: 'Segoe UI';
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: url('/fonts/Segoe%20UI%20Bold.ttf') format('truetype');
+}
+
+@font-face {
+    font-family: 'Segoe UI';
+    font-style: italic;
+    font-weight: 700;
+    font-display: swap;
+    src: url('/fonts/Segoe%20UI%20BoldItalic.ttf') format('truetype');
+}
+
+@theme {
+    --font-sans: 'Segoe UI', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+        'Segoe UI Symbol', 'Noto Color Emoji';
+
+    /* Fixed accents: identical in both themes. */
+    --color-accent-pink: #f10ea0;
+    --color-accent-orange: #e95214;
+    --color-metro-pink: #e8117f;
+    --color-metro-pink-deep: #e41b58;
+    --color-metro-orange: #f26d21;
+
+    --color-quickplay: #11090f;
+    --color-quickplay-faded: #3b373a;
+
+    --background-image-accent-gradient: linear-gradient(
+        to bottom right,
+        var(--color-accent-pink),
+        var(--color-accent-orange)
+    );
+}
+
+/* Theme-dependent colors resolve through the vars set below. */
+@theme inline {
+    --color-background: var(--background);
+    --color-surface: var(--surface);
+    --color-foreground: var(--foreground);
+    --color-secondary: var(--secondary);
+    --color-inactive: var(--inactive);
+    --color-divider: var(--divider);
+}
+
+/* ponytail: light surface/divider derived — the Flutter tokens only define a light background.
+   Resolved theme is driven by html.dark (set by theme-script from localStorage or system). */
+:root {
+    color-scheme: light;
+    --background: #ffffff;
+    --surface: #f5f5f5;
+    --foreground: #000000;
+    --secondary: #808080;
+    --inactive: #b0b0b0;
+    --divider: rgb(0 0 0 / 0.2);
+}
+
+html.dark {
+    color-scheme: dark;
+    --background: #000000;
+    --surface: #1a1a1a;
+    --foreground: #ffffff;
+    --secondary: rgb(255 255 255 / 0.7);
+    --inactive: rgb(255 255 255 / 0.38);
+    --divider: rgb(255 255 255 / 0.2);
+}

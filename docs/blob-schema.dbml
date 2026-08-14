@@ -1,0 +1,322 @@
+// BLOB Sticker Library — locked v1 schema (dbdiagram.io)
+// Import at https://dbdiagram.io
+//
+// Enums are documented as notes; store as text/varchar + app validation
+// (or PostgreSQL ENUM / CHECK in migrations).
+//
+role: user | member | admin
+account_status: active | pending | suspended | banned
+visibility: public | unlisted | private
+moderation_status: draft | pending_review | approved | rejected | hidden | deleted
+processing_status: processing | ready | failed
+media_kind: original | image | gif | video | thumbnail
+media_asset_status: pending | ready | failed
+fit_mode: crop | fit | pad
+print_format: pdf | png
+print_status: pending | ready | failed
+
+// ---------------------------------------------------------------------------
+// Identity
+// ---------------------------------------------------------------------------
+
+Table users {
+  id bigserial [pk]
+  username varchar(50) [unique, not null, note: 'URL-safe handle']
+  display_name varchar(100) [not null]
+  email varchar(255) [unique, not null]
+  email_verified_at timestamptz [null, note: 'Deferred in v1 UI; column reserved']
+  password varchar(255) [not null]
+  avatar_glass_object_id uuid [null, note: 'GLASS object UUID; null = no avatar']
+  avatar_glass_prism_id uuid [null]
+  role varchar(20) [not null, default: 'user', note: 'user | member | admin']
+  account_status varchar(20) [not null, default: 'active', note: 'active | pending | suspended | banned']
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  Note: 'Registration defaults: role=user, account_status=active (spectator). Upload requires role=member|admin AND account_status=active. Admin promotes user→member.'
+}
+
+Table password_reset_tokens {
+  email varchar(255) [pk]
+  token varchar(255) [not null]
+  created_at timestamptz [null]
+
+  Note: 'Laravel password reset store'
+}
+
+Table sessions {
+  id varchar(255) [pk]
+  user_id bigint [null, ref: > users.id]
+  ip_address varchar(45) [null]
+  user_agent text [null]
+  payload longtext [not null]
+  last_activity integer [not null]
+
+  Note: 'Laravel session store (SESSION_DRIVER=database)'
+}
+
+// ---------------------------------------------------------------------------
+// Catalog: categories & tags
+// ---------------------------------------------------------------------------
+
+Table categories {
+  id bigserial [pk]
+  parent_id bigint [null, ref: > categories.id, note: 'Null = top-level']
+  slug varchar(80) [unique, not null]
+  name varchar(100) [not null]
+  description text [null]
+  sort_order integer [not null, default: 0]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  Note: 'Controlled hierarchy (Memes, Reactions, Animals, …). Not free-form.'
+}
+
+Table tags {
+  id bigserial [pk]
+  slug varchar(80) [unique, not null]
+  name varchar(80) [not null]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  Note: 'Free-form descriptive metadata (cat, angry, keyboard, …).'
+}
+
+Table tag_aliases {
+  id bigserial [pk]
+  tag_id bigint [not null, ref: > tags.id]
+  alias varchar(80) [unique, not null, note: 'Normalized alias string, e.g. kitty → cat']
+  created_at timestamptz [not null]
+
+  Note: 'Schema ready in v1; alias expansion in search is Should-have.'
+}
+
+// ---------------------------------------------------------------------------
+// Stickers
+// ---------------------------------------------------------------------------
+
+Table stickers {
+  id bigserial [pk]
+  title varchar(200) [not null]
+  description text [null]
+  slug varchar(220) [unique, not null]
+
+  created_by bigint [not null, ref: > users.id, note: 'Original creator / artist']
+  uploaded_by bigint [not null, ref: > users.id, note: 'Account that uploaded the file']
+
+  category_id bigint [null, ref: > categories.id, note: 'Single primary category']
+
+  // Attribution / copyright
+  author_name varchar(200) [null, note: 'Display attribution if different from created_by']
+  attribution text [null]
+  source_url varchar(2048) [null]
+  license varchar(100) [null]
+  copyright_status varchar(50) [null]
+
+  // Alternate names / keywords for search (beyond tags)
+  alternate_names text [null, note: 'Newline or comma-separated aliases for search']
+  keywords text [null, note: 'Extra search keywords']
+
+  visibility varchar(20) [not null, default: 'public', note: 'public | unlisted | private']
+  moderation_status varchar(30) [not null, default: 'pending_review', note: 'draft | pending_review | approved | rejected | hidden | deleted']
+  processing_status varchar(20) [not null, default: 'processing', note: 'processing | ready | failed']
+  processing_error text [null]
+
+  // Locked at create/upload only — media immutable after create
+  fit_mode varchar(10) [not null, default: 'pad', note: 'crop | fit | pad — set at create only']
+  pad_background varchar(30) [not null, default: 'transparent', note: 'transparent | #RRGGBB']
+
+  // Aggregate counters (v1 — no per-event analytics tables)
+  views_count bigint [not null, default: 0]
+  downloads_count bigint [not null, default: 0]
+  likes_count bigint [not null, default: 0]
+  shares_count bigint [not null, default: 0]
+  search_appearances_count bigint [not null, default: 0]
+
+  // PostgreSQL FTS (maintained by trigger or app)
+  search_vector text [null, note: 'tsvector stored as text in DBML; use tsvector in PG']
+
+  published_at timestamptz [null, note: 'Set when first approved + public']
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  Note: 'Primary content object. Binaries live in media_assets → GLASS. Media/fit_mode immutable after create; metadata editable by owner/admin.'
+}
+
+Table sticker_tags {
+  sticker_id bigint [not null, ref: > stickers.id]
+  tag_id bigint [not null, ref: > tags.id]
+
+  indexes {
+    (sticker_id, tag_id) [pk]
+  }
+}
+
+Table media_assets {
+  id bigserial [pk]
+  sticker_id bigint [not null, ref: > stickers.id]
+
+  kind varchar(20) [not null, note: 'original | image | gif | video | thumbnail']
+  mime_type varchar(100) [not null]
+  file_extension varchar(20) [not null]
+  width integer [null]
+  height integer [null]
+  duration_ms integer [null, note: 'Video/GIF duration; null for static image']
+  frame_count integer [null, note: 'GIF frames if known']
+  has_audio boolean [not null, default: false, note: 'Video: preserve audio when present']
+  size_bytes bigint [not null, default: 0]
+  checksum_sha256 char(64) [null, note: 'Lowercase hex SHA-256 from GLASS upload']
+
+  glass_object_id uuid [not null, note: 'GLASS object UUID']
+  glass_prism_id uuid [not null, note: 'PRISM the object is linked into']
+
+  status varchar(20) [not null, default: 'pending', note: 'pending | ready | failed']
+  sort_order integer [not null, default: 0]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  indexes {
+    (sticker_id, kind) [unique, note: 'One asset per kind per sticker in v1']
+  }
+
+  Note: 'Do not hardcode image/gif/video columns on stickers. Original retained for regeneration. Public outputs strip EXIF.'
+}
+
+Table sticker_likes {
+  user_id bigint [not null, ref: > users.id]
+  sticker_id bigint [not null, ref: > stickers.id]
+  created_at timestamptz [not null]
+
+  indexes {
+    (user_id, sticker_id) [pk]
+  }
+
+  Note: 'Like = "I like this." Distinct from favorites.'
+}
+
+Table sticker_favorites {
+  user_id bigint [not null, ref: > users.id]
+  sticker_id bigint [not null, ref: > stickers.id]
+  created_at timestamptz [not null]
+
+  indexes {
+    (user_id, sticker_id) [pk]
+  }
+
+  Note: 'Favorite/save = "I want to find this again." Schema in v1; UI Should-have.'
+}
+
+// ---------------------------------------------------------------------------
+// Collections (schema ready; UI Should-have)
+// ---------------------------------------------------------------------------
+
+Table collections {
+  id bigserial [pk]
+  user_id bigint [not null, ref: > users.id]
+  name varchar(120) [not null]
+  slug varchar(140) [not null]
+  description text [null]
+  visibility varchar(20) [not null, default: 'private', note: 'public | unlisted | private']
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  indexes {
+    (user_id, slug) [unique]
+  }
+}
+
+Table collection_stickers {
+  collection_id bigint [not null, ref: > collections.id]
+  sticker_id bigint [not null, ref: > stickers.id]
+  sort_order integer [not null, default: 0]
+  added_at timestamptz [not null]
+
+  indexes {
+    (collection_id, sticker_id) [pk]
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Prints domain
+// ---------------------------------------------------------------------------
+
+Table sticker_packs {
+  id bigserial [pk]
+  name varchar(200) [not null]
+  slug varchar(220) [unique, not null]
+  description text [null]
+  cover_glass_object_id uuid [null]
+  cover_glass_prism_id uuid [null]
+  created_by bigint [not null, ref: > users.id]
+  visibility varchar(20) [not null, default: 'public']
+  published boolean [not null, default: false]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  Note: 'Premade pack of stickers for print generation.'
+}
+
+Table pack_stickers {
+  pack_id bigint [not null, ref: > sticker_packs.id]
+  sticker_id bigint [not null, ref: > stickers.id]
+  sort_order integer [not null, default: 0]
+
+  indexes {
+    (pack_id, sticker_id) [pk]
+  }
+}
+
+Table print_layouts {
+  id bigserial [pk]
+  name varchar(120) [not null]
+  slug varchar(140) [unique, not null]
+  description text [null]
+
+  // Page geometry (mm unless noted)
+  page_width_mm decimal(8,2) [not null, note: 'e.g. 210 for A4']
+  page_height_mm decimal(8,2) [not null, note: 'e.g. 297 for A4']
+  orientation varchar(20) [not null, default: 'portrait', note: 'portrait | landscape']
+  margin_top_mm decimal(8,2) [not null, default: 10]
+  margin_right_mm decimal(8,2) [not null, default: 10]
+  margin_bottom_mm decimal(8,2) [not null, default: 10]
+  margin_left_mm decimal(8,2) [not null, default: 10]
+
+  rows integer [not null]
+  columns integer [not null]
+  sticker_width_mm decimal(8,2) [not null]
+  sticker_height_mm decimal(8,2) [not null]
+  gap_x_mm decimal(8,2) [not null, default: 2]
+  gap_y_mm decimal(8,2) [not null, default: 2]
+  cut_marks boolean [not null, default: true]
+  background varchar(30) [not null, default: '#FFFFFF']
+
+  // Escape hatch for future knobs without redesign
+  extra_params json [null, note: 'Optional JSON for non-column layout params']
+
+  published boolean [not null, default: true]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  Note: 'Reusable print templates. Do not hardcode A4 2×3 only.'
+}
+
+Table generated_prints {
+  id bigserial [pk]
+  pack_id bigint [not null, ref: > sticker_packs.id]
+  layout_id bigint [not null, ref: > print_layouts.id]
+  format varchar(10) [not null, note: 'pdf | png']
+  cache_key varchar(64) [unique, not null, note: 'Hash of pack+layout+format+content revision']
+  glass_object_id uuid [null, note: 'Set when generation succeeds']
+  glass_prism_id uuid [null]
+  status varchar(20) [not null, default: 'pending', note: 'pending | ready | failed']
+  error_message text [null]
+  size_bytes bigint [null]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  indexes {
+    (pack_id, layout_id, format) [name: 'idx_generated_prints_lookup']
+  }
+
+  Note: 'Generate on demand; cache in GLASS. Do not pre-generate every pack×layout combination.'
+}
