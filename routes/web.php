@@ -1,6 +1,16 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Laravel\Socialite\Socialite;
+
+Route::get('/auth/redirect', function () {
+    return Socialite::driver('zitadel')->redirect();
+});
+
+Route::get('/auth/callback', function () {
+    // just dump the stuff received from the callback
+    // dd(Socialite::driver('zitadel'));
+});
 
 Route::get('/', function () {
     return view('home.index', [
