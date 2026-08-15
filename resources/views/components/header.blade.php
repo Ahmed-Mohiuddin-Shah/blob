@@ -15,16 +15,10 @@
         <div class="flex items-center gap-3">
             <x-theme-toggle />
 
-            <a href="https://devzitadel.mamajees.com/oauth/v2/authorize?client_id=386074152420769795&redirect_uri=https://devstickers.mamajees.com/auth/callback&response_type=code&scope=openid profile email"
+            <a href="/auth/redirect"
                 class="hidden rounded-full px-4 py-2 text-sm font-semibold text-secondary transition-colors hover:text-foreground sm:block">
                 Log in
             </a>
-            @if ($isAuthenticated)
-                <a href="/logout"
-                    class="hidden rounded-full px-4 py-2 text-sm font-semibold text-secondary transition-colors hover:text-foreground sm:block">
-                    Log out
-                </a>
-            @endif
             <a href="/register"
                 class="rounded-full bg-foreground px-5 py-2.5 text-sm font-semibold text-background transition-transform duration-200 hover:scale-105">
                 Join BLOB

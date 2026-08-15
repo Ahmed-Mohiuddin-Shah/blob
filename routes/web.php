@@ -1,15 +1,18 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use Laravel\Socialite\Socialite;
+use Laravel\Socialite\Facades\Socialite;
 
 Route::get('/auth/redirect', function () {
+    // Zitadel keeps its own session cookie; without a prompt it silently reuses it.
     return Socialite::driver('zitadel')->redirect();
 });
 
 Route::get('/auth/callback', function () {
     // just dump the stuff received from the callback
-    // dd(Socialite::driver('zitadel'));
+    $zitadelUser = Socialite::driver('zitadel')->user();
+    dd($zitadelUser);
+    return redirect('/');
 });
 
 Route::get('/', function () {
