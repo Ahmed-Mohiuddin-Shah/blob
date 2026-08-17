@@ -1,4 +1,4 @@
-<x-layouts.app title="BLOB — Sticker Library">
+<x-layouts.app title="BLOB Sticker Library">
     <x-home.hero :popular="$popular" />
     <x-home.categories :categories="$categories" />
     <x-home.featured :stickers="$stickers" />
