@@ -1,0 +1,60 @@
+# BLOB stack: Next.js + Postgres + daily DB backups.
+# Run: docker compose up -d --build
+# Backups: ./storage/backups/postgres/
+# Restore: npm run db:restore -- <backup.sql.gz>
+
+name: blob
+
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${DB_USERNAME}:${DB_PASSWORD}@db:5432/${DB_DATABASE}?schema=public
+      RUN_MIGRATIONS: "true"
+      AUTH_URL: ${AUTH_URL:-${NEXTAUTH_URL:-http://localhost:3000}}
+    ports:
+      - "${APP_PORT:-8080}:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_DATABASE}
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "${DB_PUBLISH_PORT:-5433}:5432"
+    volumes:
+      - blob_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  pgbackups:
+    image: prodrigestivill/postgres-backup-local
+    restart: unless-stopped
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_DB: ${DB_DATABASE}
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_EXTRA_OPTS: "-Z9"
+      SCHEDULE: "@daily"
+      BACKUP_KEEP_DAYS: 14
+      BACKUP_KEEP_WEEKS: 0
+      BACKUP_KEEP_MONTHS: 0
+    volumes:
+      - ./storage/backups/postgres:/backups
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  blob_pgdata:

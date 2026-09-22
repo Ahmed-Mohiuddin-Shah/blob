@@ -2,8 +2,8 @@
 
 **Status:** Locked  
 **Scope:** Product and engineering requirements for BLOB v1  
-**Companion schema:** [`docs/blob-schema.dbml`](blob-schema.dbml)  
-**Storage contracts:** GLASS [`upload_download_api.md`](/home/server/dev-drive/glass/doc/upload_download_api.md), [`prisms_api.md`](/home/server/dev-drive/glass/doc/prisms_api.md)
+**Companion schema:** `[docs/blob-schema.dbml](blob-schema.dbml)`  
+**Storage contracts:** GLASS `[upload_download_api.md](/home/server/dev-drive/glass/doc/upload_download_api.md)`, `[prisms_api.md](/home/server/dev-drive/glass/doc/prisms_api.md)`
 
 This document freezes v1. Implement against this file and the DBML. Do not reopen decisions listed under **Locked decisions** without an explicit requirements revision.
 
@@ -18,10 +18,13 @@ BLOB is a **public sticker library and sticker creation/browsing website** with 
 
 **Stack (v1):**
 
-- Frontend: Laravel Blade (+ Vite/Tailwind as already in the app)
-- Metadata DB: PostgreSQL
-- Object storage: GLASS (via a `MediaStorage` abstraction)
-- Jobs: Laravel queue workers for media processing and print generation
+- App: **Next.js** (App Router) — React Server Components for browse/detail; Client Components only where interactivity needs them (upload, like, fit-mode picker, admin actions)
+- Styling: Tailwind CSS
+- Metadata DB: PostgreSQL (access via Prisma or equivalent typed client)
+- Object storage: GLASS (via a gitsubmodule or custom npm package)
+- Jobs: separate Node workers (e.g. BullMQ / Redis, or equivalent) for media processing and print generation — **not** inside the Next.js request lifecycle
+- Auth: Auth.js configured with **Zitadel as the sole provider** (OIDC + PKCE); no other IdPs or auth methods
+- Avatars: [blobatar](https://blobatar.dev/) from `username` only (never Zitadel `picture`)
 - Search: PostgreSQL full-text search + `pg_trgm` (no Elasticsearch)
 
 Search must find what the user typed (title, aliases, tags, categories, keywords)—not unrelated results.
@@ -30,19 +33,22 @@ Search must find what the user typed (title, aliases, tags, categories, keywords
 
 ## 2. Locked decisions
 
-| Decision | Lock |
-|----------|------|
-| Auth | `role` + `account_status`, not `is_admin` / `is_member` booleans |
-| Sticker media | `stickers` → many `media_assets`; never `image_path` / `gif_path` / `video_path` columns |
-| Media mutation | Fit/crop/pad and binary media are set **only at create/upload**. After create, media assets are **immutable**. Metadata remains editable. |
-| Primary category | One `category_id` per sticker + many tags |
-| Tags | First-class `tags` table + pivot; not a comma string on the sticker row |
-| Storage | Postgres = metadata + GLASS UUIDs; binaries only in GLASS |
-| Search v1 | PostgreSQL FTS + `pg_trgm` |
-| Prints | Separate domain: packs, layouts, generated_prints; generate on demand + cache |
-| Video audio | Optional: preserve when present; not required; do not strip by default |
-| Email verification | Deferred (column reserved; no v1 flow required) |
-| Favorites / collections / tag aliases | Tables in schema; UI deferred to Should-have unless noted |
+
+| Decision                              | Lock                                                                                                                                      |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Authorization                         | `role` + `account_status`, not `is_admin` / `is_member` booleans                                                                          |
+| Identity                              | **Zitadel only** (OIDC + PKCE via Auth.js). No Credentials provider, no Google/GitHub/etc., no magic link, no local password or register form |
+| Sticker media                         | `stickers` → many `media_assets`; never `image_path` / `gif_path` / `video_path` columns                                                  |
+| Media mutation                        | Fit/crop/pad and binary media are set **only at create/upload**. After create, media assets are **immutable**. Metadata remains editable. |
+| Primary category                      | One `category_id` per sticker + many tags                                                                                                 |
+| Tags                                  | First-class `tags` table + pivot; not a comma string on the sticker row                                                                   |
+| Storage                               | Postgres = metadata + GLASS UUIDs; binaries only in GLASS                                                                                 |
+| Search v1                             | PostgreSQL FTS + `pg_trgm`                                                                                                                |
+| Prints                                | Separate domain: packs, layouts, generated_prints; generate on demand + cache                                                             |
+| Video audio                           | Optional: preserve when present; not required; do not strip by default                                                                    |
+| Email verification                    | Deferred (column reserved; no v1 flow required)                                                                                           |
+| Favorites / collections / tag aliases | Tables in schema; UI deferred to Should-have unless noted                                                                                 |
+
 
 ---
 
@@ -56,6 +62,7 @@ Search must find what the user typed (title, aliases, tags, categories, keywords
 - Post-create media replace or in-browser canvas re-edit
 - SVG print output (PDF + PNG only)
 - Hardcoding every pack×layout file permanently upfront
+- Any auth besides Zitadel (Credentials, social IdPs, magic links, API keys for end-user login, local password/register)
 
 ---
 
@@ -63,38 +70,44 @@ Search must find what the user typed (title, aliases, tags, categories, keywords
 
 ### 4.1 User role
 
-| Value | Meaning |
-|-------|---------|
-| `user` | Registered spectator (default after register) |
-| `member` | Approved contributor; may upload |
-| `admin` | Full management |
+
+| Value    | Meaning                                       |
+| -------- | --------------------------------------------- |
+| `user`   | Registered spectator (default after register) |
+| `member` | Approved contributor; may upload              |
+| `admin`  | Full management                               |
+
 
 ### 4.2 Account status
 
-| Value | Meaning |
-|-------|---------|
-| `pending` | Awaiting activation / member approval gate |
-| `active` | May use role capabilities |
+
+| Value       | Meaning                                     |
+| ----------- | ------------------------------------------- |
+| `pending`   | Awaiting activation / member approval gate  |
+| `active`    | May use role capabilities                   |
 | `suspended` | Temporarily blocked from privileged actions |
-| `banned` | Permanently blocked |
+| `banned`    | Permanently blocked                         |
+
 
 **Upload and management require** `account_status = active` **and** an appropriate `role`. Suspended/banned users must not upload or manage content even if role remains `member`/`admin` until status is restored.
 
 ### 4.3 Capability matrix
 
-| Capability | Anonymous | Registered (`user`) | Member | Admin |
-|------------|:---------:|:-------------------:|:------:|:-----:|
-| Browse / search public | Yes | Yes | Yes | Yes |
-| Like | No | Yes* | Yes* | Yes* |
-| Download | Yes† | Yes† | Yes† | Yes† |
-| Upload stickers | No | No | Yes | Yes |
-| Edit own sticker metadata | No | No | Yes | Yes |
-| Manage own uploads (metadata, soft-hide request) | No | No | Yes | Yes |
-| Approve members | No | No | No | Yes |
-| Moderate any sticker | No | No | No | Yes |
-| Manage packs / layouts | No | No | No | Yes |
 
-\* Requires `account_status = active`.  
+| Capability                                       | Anonymous | Registered (`user`) | Member | Admin |
+| ------------------------------------------------ | --------- | ------------------- | ------ | ----- |
+| Browse / search public                           | Yes       | Yes                 | Yes    | Yes   |
+| Like                                             | No        | Yes*                | Yes*   | Yes*  |
+| Download                                         | Yes†      | Yes†                | Yes†   | Yes†  |
+| Upload stickers                                  | No        | No                  | Yes    | Yes   |
+| Edit own sticker metadata                        | No        | No                  | Yes    | Yes   |
+| Manage own uploads (metadata, soft-hide request) | No        | No                  | Yes    | Yes   |
+| Approve members                                  | No        | No                  | No     | Yes   |
+| Moderate any sticker                             | No        | No                  | No     | Yes   |
+| Manage packs / layouts                           | No        | No                  | No     | Yes   |
+
+
+ Requires `account_status = active`.  
 † Subject to sticker visibility and download policy; unlisted requires knowing the link; private only for authorized users.
 
 **Registration defaults (locked):** `role = user`, `account_status = active`. New accounts are registered spectators (browse, search, like, download). Upload requires an admin to set `role = member` (or `admin`). `account_status` of `suspended` or `banned` blocks likes, uploads, and management regardless of role. Use `pending` only when an admin deliberately gates an account before activation.
@@ -105,21 +118,23 @@ Search must find what the user typed (title, aliases, tags, categories, keywords
 
 ### Must have
 
-- Registration (email, password, username, display name)
-- Login / logout
-- Password reset
-- Profile: username, display name, avatar
-- Admin: change `role`, change `account_status`, approve members
+- Login / logout via **Zitadel only** (OIDC + PKCE through Auth.js). Auth.js must register a single Zitadel provider — no Credentials, Google, GitHub, Apple, magic-link, or other providers
+- No local password hash, no email/password register or login UI, no multi-account linking
+- First login upserts local `users` by `zitadel_id` (OIDC `sub`); defaults `role=user`, `account_status=active`
+- Profile fields synced from Zitadel claims: display name, email, `email_verified_at` (never sync or display Zitadel `picture`)
+- Local `username` set on first create (URL-safe handle)
+- Admin: change `role`, change `account_status`, approve members (app DB only)
+- Protect routes with Next.js middleware / server-side session checks; expose role + account_status on the session for capability gates
 
 ### Deferred
 
-- Email verification UI/flow (keep `email_verified_at` nullable)
+- Email verification UI/flow (keep `email_verified_at` nullable; populated from Zitadel claim)
 
 ### Avatar
 
-Avatar image uploads go **application server → GLASS**. Postgres stores `avatar_glass_object_id` (+ prism id). Do not store avatar binaries in Postgres or only on local disk for production.
+User faces are **[blobatar](https://blobatar.dev/)** generated from `username` only. Do **not** store or display Zitadel `picture` / profile images (no `avatar_url` column). Sticker/media binaries still go application server → GLASS.
 
-Use boring Laravel session auth (e.g. Breeze or equivalent). No exotic auth for v1.
+Auth.js establishes the app session after the Zitadel OIDC callback. Zitadel is the only identity source; roles live in each app’s `users.role` (not Zitadel roles).
 
 ---
 
@@ -191,23 +206,27 @@ All display renditions target a **1:1 square** canvas. **Do not** blindly crop w
 
 `fit_mode` (set once at create):
 
-| Mode | Behavior |
-|------|----------|
-| `crop` | Center-crop (or documented crop policy) to square |
-| `fit` | Scale to fit inside square; pad remainder |
-| `pad` | Scale to fit; pad with `pad_background` (`transparent` or `#RRGGBB`) |
+
+| Mode   | Behavior                                                             |
+| ------ | -------------------------------------------------------------------- |
+| `crop` | Center-crop (or documented crop policy) to square                    |
+| `fit`  | Scale to fit inside square; pad remainder                            |
+| `pad`  | Scale to fit; pad with `pad_background` (`transparent` or `#RRGGBB`) |
+
 
 ### 7.3 Edit rules (locked)
 
-| What | When editable |
-|------|----------------|
-| Original file / derived binaries | **Create/upload only** — immutable afterward |
-| `fit_mode`, `pad_background` | **Create only** |
-| Title, description, tags, category, visibility, attribution, keywords | After create: owner (member) for own stickers; admin for any — subject to moderation rules |
-| Replacing media | **Out of scope** — delete/reject and re-upload as a new sticker if needed |
 
-Metadata edits: website → Laravel → PostgreSQL.  
-Any **new** binary (create upload, avatar): website → Laravel → GLASS → store object UUID in Postgres.
+| What                                                                  | When editable                                                                              |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Original file / derived binaries                                      | **Create/upload only** — immutable afterward                                               |
+| `fit_mode`, `pad_background`                                          | **Create only**                                                                            |
+| Title, description, tags, category, visibility, attribution, keywords | After create: owner (member) for own stickers; admin for any — subject to moderation rules |
+| Replacing media                                                       | **Out of scope** — delete/reject and re-upload as a new sticker if needed                  |
+
+
+Metadata edits: browser → Next.js Route Handler / Server Action → PostgreSQL.  
+Any **new** sticker binary (create upload): browser → Next.js Route Handler → GLASS → store object UUID in Postgres → enqueue worker job. User faces use blobatar(`username`), not GLASS or Zitadel pictures.
 
 ---
 
@@ -232,7 +251,7 @@ Any **new** binary (create upload, avatar): website → Laravel → GLASS → st
 - Validate declared MIME **and** file signatures
 - Enforce size / resolution / duration / frame / timeout / worker memory / queue concurrency limits
 - Strip unnecessary EXIF/metadata from **generated public** assets
-- Process in isolated queue workers, not the web PHP process
+- Process in isolated queue workers, not the Next.js Node process that serves HTTP
 
 ### 8.4 Original retention
 
@@ -293,11 +312,13 @@ Do not store tags as `"cat, angry, funny"` on the sticker row.
 
 ## 12. Likes, favorites, collections
 
-| Feature | Semantics | v1 |
-|---------|-----------|-----|
-| Like | “I like this” | **Must** — UI + `sticker_likes` + `likes_count` |
-| Favorite | “Save to find again” | Schema **Must**; UI **Should** |
-| Collections | User lists of stickers | Schema **Must**; UI **Should** |
+
+| Feature     | Semantics              | v1                                              |
+| ----------- | ---------------------- | ----------------------------------------------- |
+| Like        | “I like this”          | **Must** — UI + `sticker_likes` + `likes_count` |
+| Favorite    | “Save to find again”   | Schema **Must**; UI **Should**                  |
+| Collections | User lists of stickers | Schema **Must**; UI **Should**                  |
+
 
 Likes and favorites are distinct tables.
 
@@ -346,11 +367,13 @@ Application code shall depend on a **MediaStorage** interface (upload, download 
 
 ### PRISM strategy (v1 lock)
 
-| Content | PRISM |
-|---------|--------|
-| Approved **public** derived assets (and public downloads) | Public PRISM — anonymous `GET` / `HEAD` |
-| Originals, pending/rejected, **private** / **unlisted** assets | Private PRISM — service key or signed object/PRISM JWT |
-| Generated prints | Private or public per product need; default **private** with signed download for the requester, or public if the pack is public — **lock:** use private PRISM + short-lived download JWT/path token for downloads unless pack is public, in which case public PRISM is allowed |
+
+| Content                                                        | PRISM                                                                                                                                                                                                                                                                          |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Approved **public** derived assets (and public downloads)      | Public PRISM — anonymous `GET` / `HEAD`                                                                                                                                                                                                                                        |
+| Originals, pending/rejected, **private** / **unlisted** assets | Private PRISM — service key or signed object/PRISM JWT                                                                                                                                                                                                                         |
+| Generated prints                                               | Private or public per product need; default **private** with signed download for the requester, or public if the pack is public — **lock:** use private PRISM + short-lived download JWT/path token for downloads unless pack is public, in which case public PRISM is allowed |
+
 
 Persist on every stored object reference: `glass_object_id`, `glass_prism_id`, and checksum when provided by GLASS.
 
@@ -368,7 +391,9 @@ Increment on meaningful actions (view detail, download, like, share, search impr
 
 ## 16. API surface
 
-Even with Blade first, backends should stay service-clean. Intended HTTP API (JSON) for v1:
+Prefer **Server Components / Server Actions** for first-party UI reads and simple mutations. Expose the same domain through **Route Handlers** (`app/api/...`) as a JSON contract for uploads, likes, print generation, and any non-Next client. Keep domain logic in shared server modules — not duplicated in pages and handlers.
+
+Intended HTTP API (JSON) for v1:
 
 ```
 GET    /api/stickers
@@ -391,7 +416,7 @@ GET    /api/prints/layouts
 POST   /api/prints/generate
 ```
 
-Blade may call domain services directly; the above is the contract boundary for any SPA/API client later. `PATCH` must reject media file replacement.
+`PATCH` must reject media file replacement. Large uploads and long-running work go through handlers that return quickly and enqueue workers.
 
 ---
 
@@ -415,7 +440,7 @@ Blade may call domain services directly; the above is the contract boundary for 
 ### Must have
 
 - [ ] Users with `role` + `account_status`
-- [ ] Registration, login/logout, password reset, profile (+ avatar via GLASS)
+- [ ] Zitadel-only login/logout (no other Auth.js providers), local profile (`username` / `display_name`), blobatar avatars
 - [ ] Admin member promotion / status management
 - [ ] Public browse + search (FTS + pg_trgm)
 - [ ] Stickers with tags + primary category
@@ -447,16 +472,20 @@ Blade may call domain services directly; the above is the contract boundary for 
 - [ ] Comments / social graph / chat / realtime notifications
 - [ ] Event-level analytics warehouse
 - [ ] Post-create media editing or replace-upload
+- [ ] Non-Zitadel auth (Credentials, social IdPs, magic link, local passwords)
 
 ---
 
 ## 19. Platform assumptions
 
-- App: Laravel (current repo), PostgreSQL (`DB_CONNECTION=pgsql`)
-- Queue: database driver acceptable for v1; workers must run in deployment
-- Align Laravel env keys with framework expectations (`DB_DATABASE` / `DB_USERNAME`, not nonstandard aliases) before running migrations
+- App: Next.js (App Router), Node.js runtime for Route Handlers that talk to GLASS / Postgres
+- DB: PostgreSQL via `DATABASE_URL` (Prisma migrate or equivalent); enable `pg_trgm` extension
+- Queue: Redis + worker processes for media/print jobs; workers must run in deployment (not serverless-only for FFmpeg/ImageMagick)
+- Auth env: Zitadel issuer + client id/secret only (sole Auth.js provider); Auth.js `AUTH_SECRET`; callback URL aligned with `NEXTAUTH_URL` / `AUTH_URL`
+- Session store: Auth.js JWT by default (no app `sessions` table; see DBML). Database adapter only if JWT proves insufficient
 - GLASS base URL, service API key, public/private PRISM UUIDs configured via env (not committed secrets)
-- `APP_URL` and CORS on GLASS (if browser hits GLASS directly) must allow the BLOB origin; prefer proxying or signed URLs through the app when uncertain
+- App origin (`NEXTAUTH_URL` / public site URL) and CORS on GLASS (if browser hits GLASS directly) must allow the BLOB origin; prefer proxying or signed URLs through the app when uncertain
+- Deployment: web (Next.js) + at least one media/print worker; do not rely on Next.js alone for CPU-heavy processing
 
 ---
 
@@ -475,7 +504,7 @@ USER (role, account_status)
          └── GENERATED_PRINTS (layout + GLASS cache)
 ```
 
-Schema detail: [`blob-schema.dbml`](blob-schema.dbml).
+Schema detail: `[blob-schema.dbml](blob-schema.dbml)`.
 
 ---
 
