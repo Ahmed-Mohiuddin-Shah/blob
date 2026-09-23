@@ -13,7 +13,14 @@ services:
     environment:
       DATABASE_URL: postgresql://${DB_USERNAME}:${DB_PASSWORD}@db:5432/${DB_DATABASE}?schema=public
       RUN_MIGRATIONS: "true"
-      AUTH_URL: ${AUTH_URL:-${NEXTAUTH_URL:-http://localhost:3000}}
+      AUTH_URL: ${AUTH_URL:-http://localhost:3000}
+      SESSION_SECRET: ${SESSION_SECRET}
+      SESSION_DURATION: ${SESSION_DURATION:-3600}
+      ZITADEL_DOMAIN: ${ZITADEL_DOMAIN}
+      ZITADEL_CLIENT_ID: ${ZITADEL_CLIENT_ID}
+      ZITADEL_CLIENT_SECRET: ${ZITADEL_CLIENT_SECRET}
+      ZITADEL_POST_LOGIN_URL: ${ZITADEL_POST_LOGIN_URL:-/profile}
+      ZITADEL_POST_LOGOUT_URL: ${ZITADEL_POST_LOGOUT_URL}
     ports:
       - "${APP_PORT:-8080}:3000"
     depends_on:

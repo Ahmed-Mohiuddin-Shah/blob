@@ -14,7 +14,7 @@ See [docs/blob-requirements.md](docs/blob-requirements.md), [docs/style-guide.md
 ## Quick start
 
 ```bash
-cp .env.example .env   # fill AUTH_SECRET, Zitadel, DB
+cp .env.example .env   # fill SESSION_SECRET, Zitadel, DB
 docker compose up -d --build
 ```
 
@@ -40,5 +40,6 @@ npm run dev
 ## Zitadel console
 
 - Redirect URI: `{AUTH_URL}/api/auth/callback/zitadel`
-- Post-logout URI: `{AUTH_URL}/auth/logout/callback`
-- Auth method: PKCE (Web)
+- Post-logout URI: `{AUTH_URL}/api/auth/logout/callback`
+- Auth method: Authorization Code + PKCE (Web)
+

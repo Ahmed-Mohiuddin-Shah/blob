@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { BlobBackground } from "@/components/blob-background";
 import { Footer } from "@/components/footer";
 import { Header } from "@/components/header";
 import { Providers } from "@/components/providers";
 import { ThemeScript } from "@/components/theme-script";
-import { auth } from "@/auth";
+import { getSession } from "@/lib/auth";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -13,7 +14,10 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const session = await auth();
+  const reqHeaders = await headers();
+  const session = await getSession(
+    new Request("http://localhost", { headers: reqHeaders }),
+  );
   const user = session?.user
     ? {
         name: session.user.name,

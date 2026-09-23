@@ -1,18 +1,27 @@
-import { auth } from "@/auth";
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import { SignOutTextButton } from "@/components/auth-buttons";
 import { UserBlobatar } from "@/components/user-blobatar";
+import { getSession, signInUrl } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { redirect } from "next/navigation";
 
 export default async function ProfilePage() {
-  const session = await auth();
-  if (!session?.user?.id) redirect("/api/auth/signin/zitadel?callbackUrl=/profile");
+  const reqHeaders = await headers();
+  const session = await getSession(
+    new Request("http://localhost", { headers: reqHeaders }),
+  );
+
+  if (!session?.user?.id) {
+    redirect(signInUrl({ redirectTo: "/profile" }));
+  }
 
   const user = await prisma.user.findUnique({
     where: { id: BigInt(session.user.id) },
   });
 
-  if (!user) redirect("/api/auth/signin/zitadel?callbackUrl=/profile");
+  if (!user) {
+    redirect(signInUrl({ redirectTo: "/profile" }));
+  }
 
   return (
     <section className="mx-auto max-w-7xl px-5 py-16 sm:px-8">
@@ -24,7 +33,9 @@ export default async function ProfilePage() {
             className="overflow-hidden rounded-full ring-1 ring-divider"
           />
 
-          <h1 className="mt-6 text-2xl font-semibold tracking-tight sm:text-3xl">{user.displayName}</h1>
+          <h1 className="mt-6 text-2xl font-semibold tracking-tight sm:text-3xl">
+            {user.displayName}
+          </h1>
           <p className="mt-1 text-sm text-secondary">@{user.username}</p>
         </div>
 
@@ -39,12 +50,15 @@ export default async function ProfilePage() {
           </div>
           <div className="flex items-baseline justify-between gap-4">
             <dt className="text-secondary">Status</dt>
-            <dd className="font-medium capitalize">{user.accountStatus.replaceAll("_", " ")}</dd>
+            <dd className="font-medium capitalize">
+              {user.accountStatus.replaceAll("_", " ")}
+            </dd>
           </div>
         </dl>
 
         <p className="mt-8 text-center text-sm leading-6 text-secondary">
-          Name and email are managed in your Zitadel account. Your blobatar is generated from your username.
+          Name and email are managed in your Zitadel account. Your blobatar is
+          generated from your username.
         </p>
 
         <div className="mt-8 flex justify-center">

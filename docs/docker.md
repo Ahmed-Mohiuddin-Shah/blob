@@ -20,12 +20,17 @@ Host ports (from `.env`):
 Copy `.env.example` → `.env`. Required:
 
 - `DATABASE_URL` (compose overrides host to `db` for the app service)
-- `AUTH_SECRET`, `AUTH_URL` / `NEXTAUTH_URL`
-- `ZITADEL_ISSUER`, `ZITADEL_CLIENT_ID`, `ZITADEL_CLIENT_SECRET`
-- `ZITADEL_POST_LOGOUT_REDIRECT_URI`
+- `SESSION_SECRET`, `AUTH_URL`
+- `ZITADEL_DOMAIN`, `ZITADEL_CLIENT_ID`, `ZITADEL_CLIENT_SECRET`
+- `ZITADEL_POST_LOGOUT_URL`
 
-Zitadel app redirect URI: `{AUTH_URL}/api/auth/callback/zitadel`  
-Post-logout URI: `{AUTH_URL}/auth/logout/callback`
+Zitadel app settings (must match exactly):
+
+- Redirect URI: `{AUTH_URL}/api/auth/callback/zitadel`
+- Post-logout URI: `{AUTH_URL}/api/auth/logout/callback`
+- Auth method: Authorization Code + PKCE (Web)
+
+Login page: `/auth/login` (CSRF form → Zitadel). Logout: `POST /api/auth/logout`.
 
 ## Backups
 
@@ -45,8 +50,6 @@ npm run db:restore -- ./storage/backups/postgres/daily/blob-YYYYMMDD.sql.gz
 ```
 
 Prompts for `yes`, stops `app`, pipes the dump into `db`, starts `app` again.
-
-Manual one-liner:
 
 ```bash
 gunzip -c storage/backups/postgres/last/blob-latest.sql.gz \

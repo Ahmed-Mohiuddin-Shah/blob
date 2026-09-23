@@ -1,9 +1,10 @@
-import { auth } from "@/auth";
+import { headers } from "next/headers";
 import { Categories } from "@/components/home/categories";
 import { Featured } from "@/components/home/featured";
 import { Hero } from "@/components/home/hero";
 import { MemberCta } from "@/components/home/member-cta";
 import { PrintsCta } from "@/components/home/prints-cta";
+import { getSession } from "@/lib/auth";
 
 const popular = ["cat", "angry", "happy", "bruh"];
 
@@ -26,7 +27,10 @@ const stickers = [
 ];
 
 export default async function HomePage() {
-  const session = await auth();
+  const reqHeaders = await headers();
+  const session = await getSession(
+    new Request("http://localhost", { headers: reqHeaders }),
+  );
   const user = session?.user
     ? {
         name: session.user.name,

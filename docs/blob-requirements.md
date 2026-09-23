@@ -481,10 +481,10 @@ POST   /api/prints/generate
 - App: Next.js (App Router), Node.js runtime for Route Handlers that talk to GLASS / Postgres
 - DB: PostgreSQL via `DATABASE_URL` (Prisma migrate or equivalent); enable `pg_trgm` extension
 - Queue: Redis + worker processes for media/print jobs; workers must run in deployment (not serverless-only for FFmpeg/ImageMagick)
-- Auth env: Zitadel issuer + client id/secret only (sole Auth.js provider); Auth.js `AUTH_SECRET`; callback URL aligned with `NEXTAUTH_URL` / `AUTH_URL`
+- Auth env: Zitadel domain + client id/secret only (sole Auth.js provider); Auth.js `SESSION_SECRET`; callback URL aligned with `AUTH_URL`
 - Session store: Auth.js JWT by default (no app `sessions` table; see DBML). Database adapter only if JWT proves insufficient
 - GLASS base URL, service API key, public/private PRISM UUIDs configured via env (not committed secrets)
-- App origin (`NEXTAUTH_URL` / public site URL) and CORS on GLASS (if browser hits GLASS directly) must allow the BLOB origin; prefer proxying or signed URLs through the app when uncertain
+- App origin (`AUTH_URL` / public site URL) and CORS on GLASS (if browser hits GLASS directly) must allow the BLOB origin; prefer proxying or signed URLs through the app when uncertain
 - Deployment: web (Next.js) + at least one media/print worker; do not rely on Next.js alone for CPU-heavy processing
 
 ---
