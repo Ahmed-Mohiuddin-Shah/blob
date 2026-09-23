@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Style Guide — BLOB</title>
+  <link rel="stylesheet" href="tokens.css">
+  <script src="https://unpkg.com/lucide@0.469.0"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--font-family-sans);
+      background: var(--color-background);
+      color: var(--color-text-primary);
+      line-height: 1.5;
+      padding: var(--spacing-6);
+    }
+    .nav {
+      display: flex;
+      gap: var(--spacing-4);
+      margin-bottom: var(--spacing-8);
+      padding-bottom: var(--spacing-4);
+      border-bottom: 1px solid var(--color-border);
+      align-items: center;
+    }
+    .nav a {
+      color: var(--color-text-secondary);
+      text-decoration: none;
+      font-weight: var(--font-weight-semibold);
+      font-size: var(--font-size-sm);
+    }
+    .nav a:hover, .nav a.active { color: var(--color-accent-pink); }
+    .nav .spacer { flex: 1; }
+    .theme-toggle {
+      display: inline-flex;
+      gap: 2px;
+      padding: 4px;
+      border-radius: var(--radius-full);
+      border: 1px solid var(--color-border);
+      background: var(--color-surface);
+    }
+    .theme-toggle button {
+      width: 32px; height: 32px;
+      border: none; background: transparent;
+      border-radius: var(--radius-full);
+      color: var(--color-text-inactive);
+      cursor: pointer;
+      display: grid; place-items: center;
+    }
+    .theme-toggle button[aria-pressed="true"] {
+      background: var(--color-background);
+      color: var(--color-text-primary);
+    }
+    h1 {
+      font-size: var(--font-size-3xl);
+      font-weight: var(--font-weight-semibold);
+      letter-spacing: var(--font-tracking-tight);
+      margin-bottom: var(--spacing-2);
+    }
+    .meta {
+      color: var(--color-text-secondary);
+      font-size: var(--font-size-sm);
+      margin-bottom: var(--spacing-8);
+    }
+    section { margin-bottom: var(--spacing-10); }
+    h2 {
+      font-size: var(--font-size-lg);
+      font-weight: var(--font-weight-semibold);
+      margin-bottom: var(--spacing-4);
+    }
+    .color-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: var(--spacing-4);
+    }
+    .color-swatch {
+      border-radius: var(--radius-xl);
+      overflow: hidden;
+      border: 1px solid var(--color-border);
+      background: var(--color-surface);
+    }
+    .color-swatch__preview { height: 80px; }
+    .color-swatch__info { padding: var(--spacing-3); font-size: var(--font-size-xs); }
+    .color-swatch__name { font-weight: var(--font-weight-semibold); }
+    .color-swatch__hex { color: var(--color-text-secondary); font-family: ui-monospace, monospace; }
+    .type-sample { margin-bottom: var(--spacing-5); }
+    .type-sample__label {
+      font-size: var(--font-size-xs);
+      color: var(--color-text-secondary);
+      margin-bottom: var(--spacing-1);
+      text-transform: uppercase;
+      letter-spacing: var(--font-tracking-eyebrow);
+    }
+    .eyebrow {
+      color: var(--color-accent-pink);
+      font-size: var(--font-size-xs);
+      font-weight: var(--font-weight-semibold);
+      letter-spacing: var(--font-tracking-eyebrow);
+      text-transform: uppercase;
+      line-height: 1;
+      margin-bottom: 2px;
+    }
+    /* Zune: baseline sits on the content margin; ascenders/descenders overflow visibly — never clip */
+    .zune-overflow {
+      overflow: visible;
+      margin-bottom: var(--spacing-6);
+      border-bottom: 1px solid var(--color-border);
+      padding-bottom: 0;
+    }
+    .zune-overflow__text {
+      font-size: var(--font-size-overflow);
+      font-weight: var(--font-weight-light);
+      letter-spacing: var(--font-tracking-tight);
+      line-height: 1;
+      text-transform: lowercase;
+      white-space: nowrap;
+      /* baseline flush to the margin line; descenders hang below into the next section */
+      margin-bottom: -0.2em;
+      padding-bottom: 0.2em;
+    }
+    .zune-overflow__text .active { color: var(--color-text-primary); font-weight: var(--font-weight-semibold); }
+    .zune-overflow__text .idle { color: var(--color-text-inactive); margin-left: 0.35em; }
+    .hero-title {
+      font-size: var(--font-size-5xl);
+      font-weight: var(--font-weight-semibold);
+      letter-spacing: var(--font-tracking-tight);
+      line-height: 1.05;
+    }
+    .hero-title .grad {
+      background: var(--gradient-accent);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    .section-title {
+      font-size: var(--font-size-3xl);
+      font-weight: var(--font-weight-semibold);
+      letter-spacing: var(--font-tracking-tight);
+    }
+    .spacing-row { display: flex; align-items: center; gap: var(--spacing-4); margin-bottom: var(--spacing-2); }
+    .spacing-bar { background: var(--gradient-accent); height: 24px; border-radius: var(--radius-sm); }
+    .radius-row { display: flex; gap: var(--spacing-4); flex-wrap: wrap; }
+    .radius-box {
+      width: 80px; height: 80px;
+      background: var(--gradient-accent);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10px; color: var(--color-white); text-align: center; padding: 4px;
+    }
+    .shadow-row { display: flex; gap: var(--spacing-6); flex-wrap: wrap; }
+    .shadow-box {
+      width: 120px; height: 80px;
+      background: var(--color-surface);
+      border-radius: var(--radius-xl);
+      display: flex; align-items: center; justify-content: center;
+      font-size: var(--font-size-xs); color: var(--color-text-secondary);
+    }
+    .principle {
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-xl);
+      padding: var(--spacing-5);
+      background: var(--color-surface);
+      margin-bottom: var(--spacing-4);
+    }
+    .principle h3 { font-size: var(--font-size-base); margin-bottom: var(--spacing-2); }
+    .principle p { color: var(--color-text-secondary); font-size: var(--font-size-sm); }
+    .icon-row { display: flex; gap: var(--spacing-4); flex-wrap: wrap; align-items: center; }
+    .icon-well {
+      width: 48px; height: 48px;
+      border-radius: var(--radius-full);
+      background: var(--gradient-accent);
+      display: grid; place-items: center;
+      color: var(--color-white);
+    }
+    .icon-well i, .icon-well svg { width: var(--icon-size-md); height: var(--icon-size-md); }
+  </style>
+</head>
+<body>
+  <nav class="nav">
+    <a href="style-guide.html" class="active">Style Guide</a>
+    <a href="components.html">Components</a>
+    <div class="spacer"></div>
+    <div class="theme-toggle" role="group" aria-label="Theme">
+      <button type="button" data-theme-set="light" aria-pressed="false" title="Light"><i data-lucide="sun"></i></button>
+      <button type="button" data-theme-set="dark" aria-pressed="true" title="Dark"><i data-lucide="moon"></i></button>
+    </div>
+  </nav>
+
+  <h1>BLOB — Style Guide</h1>
+  <p class="meta">Platform: Web · Canvas: 1024×904 · Source: reference.png (+ Zune light/dark) · Icons: Lucide</p>
+
+  <section>
+    <h2>Principles</h2>
+    <div class="principle">
+      <h3>1. Bloby</h3>
+      <p>Pills, soft cards (24–32px), organic blob radii for brand marks and icon motifs. Prefer round over sharp.</p>
+    </div>
+    <div class="principle">
+      <h3>2. Zune overflow</h3>
+      <p>Oversized light lowercase headers sit on the content margin along their baseline. Ascenders and descenders may overflow that margin but must stay fully visible — never top- or bottom-clipped. Eyebrows sit tight above titles. Active = solid; idle = inactive gray.</p>
+    </div>
+    <div class="principle">
+      <h3>3. Lucide</h3>
+      <p>All UI icons from Lucide, thin stroke (~1.75). Place icons in circular gradient wells when decorative.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Colors</h2>
+    <div class="color-grid">
+      <div class="color-swatch"><div class="color-swatch__preview" style="background:var(--color-background)"></div><div class="color-swatch__info"><div class="color-swatch__name">background</div><div class="color-swatch__hex">#000000</div></div></div>
+      <div class="color-swatch"><div class="color-swatch__preview" style="background:var(--color-surface)"></div><div class="color-swatch__info"><div class="color-swatch__name">surface</div><div class="color-swatch__hex">#1A1A1A</div></div></div>
+      <div class="color-swatch"><div class="color-swatch__preview" style="background:var(--color-accent-pink)"></div><div class="color-swatch__info"><div class="color-swatch__name">accent-pink</div><div class="color-swatch__hex">#F10EA0</div></div></div>
+      <div class="color-swatch"><div class="color-swatch__preview" style="background:var(--color-accent-orange)"></div><div class="color-swatch__info"><div class="color-swatch__name">accent-orange</div><div class="color-swatch__hex">#E95214</div></div></div>
+      <div class="color-swatch"><div class="color-swatch__preview" style="background:var(--gradient-accent)"></div><div class="color-swatch__info"><div class="color-swatch__name">accent-gradient</div><div class="color-swatch__hex">pink → orange</div></div></div>
+      <div class="color-swatch"><div class="color-swatch__preview" style="background:var(--color-metro-pink)"></div><div class="color-swatch__info"><div class="color-swatch__name">metro-pink</div><div class="color-swatch__hex">#E8117F</div></div></div>
+      <div class="color-swatch"><div class="color-swatch__preview" style="background:var(--color-text-primary)"></div><div class="color-swatch__info"><div class="color-swatch__name">text-primary</div><div class="color-swatch__hex">#FFFFFF</div></div></div>
+      <div class="color-swatch"><div class="color-swatch__preview" style="background:#b3b3b3"></div><div class="color-swatch__info"><div class="color-swatch__name">text-secondary</div><div class="color-swatch__hex">white/70</div></div></div>
+      <div class="color-swatch"><div class="color-swatch__preview" style="background:#616161"></div><div class="color-swatch__info"><div class="color-swatch__name">text-inactive</div><div class="color-swatch__hex">white/38</div></div></div>
+      <div class="color-swatch"><div class="color-swatch__preview" style="background:var(--color-badge-dark)"></div><div class="color-swatch__info"><div class="color-swatch__name">badge</div><div class="color-swatch__hex">#383838</div></div></div>
+      <div class="color-swatch"><div class="color-swatch__preview" style="background:var(--color-quickplay)"></div><div class="color-swatch__info"><div class="color-swatch__name">quickplay</div><div class="color-swatch__hex">#11090F</div></div></div>
+      <div class="color-swatch"><div class="color-swatch__preview" style="background:var(--color-error)"></div><div class="color-swatch__info"><div class="color-swatch__name">error</div><div class="color-swatch__hex">#EF4444</div></div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Typography</h2>
+    <div class="type-sample">
+      <div class="type-sample__label">Zune overflow — 72px / light · baseline on margin · visible overflow</div>
+      <div class="zune-overflow">
+        <div class="zune-overflow__text"><span class="active">pins</span><span class="idle">new</span><span class="idle">history</span></div>
+      </div>
+    </div>
+    <div class="type-sample">
+      <div class="type-sample__label">Section eyebrow + title</div>
+      <div class="eyebrow">Explore</div>
+      <div class="section-title">Browse the blob</div>
+    </div>
+    <div class="type-sample">
+      <div class="type-sample__label">Display hero — 56px / semibold</div>
+      <div class="hero-title">Find something <span class="grad">sticky.</span></div>
+    </div>
+    <div class="type-sample">
+      <div class="type-sample__label">Body — 16px / regular · secondary</div>
+      <div style="font-size:var(--font-size-base);color:var(--color-text-secondary);max-width:36rem;">
+        A growing library of stickers, reactions, weird little things, and other perfectly reasonable uses of the internet.
+      </div>
+    </div>
+    <div class="type-sample">
+      <div class="type-sample__label">Caption / button — 12–14px</div>
+      <div style="font-size:var(--font-size-sm);font-weight:var(--font-weight-semibold);">Search · All categories →</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Icons (Lucide)</h2>
+    <div class="icon-row">
+      <div class="icon-well"><i data-lucide="zap"></i></div>
+      <div class="icon-well"><i data-lucide="star"></i></div>
+      <div class="icon-well"><i data-lucide="heart"></i></div>
+      <div class="icon-well"><i data-lucide="search"></i></div>
+      <div class="icon-well"><i data-lucide="image"></i></div>
+      <div class="icon-well"><i data-lucide="play"></i></div>
+      <span style="color:var(--color-text-secondary);font-size:var(--font-size-sm);">stroke ≈ 1.75 · wells = gradient circles</span>
+    </div>
+  </section>
+
+  <section>
+    <h2>Spacing</h2>
+    <div class="spacing-row"><div class="spacing-bar" style="width:var(--spacing-2)"></div><span>2 · 8px</span></div>
+    <div class="spacing-row"><div class="spacing-bar" style="width:var(--spacing-4)"></div><span>4 · 16px</span></div>
+    <div class="spacing-row"><div class="spacing-bar" style="width:var(--spacing-6)"></div><span>6 · 24px</span></div>
+    <div class="spacing-row"><div class="spacing-bar" style="width:var(--spacing-8)"></div><span>8 · 32px</span></div>
+  </section>
+
+  <section>
+    <h2>Radius</h2>
+    <div class="radius-row">
+      <div class="radius-box" style="border-radius:var(--radius-md)">md 12</div>
+      <div class="radius-box" style="border-radius:var(--radius-xl)">xl 24</div>
+      <div class="radius-box" style="border-radius:var(--radius-2xl)">2xl 32</div>
+      <div class="radius-box" style="border-radius:var(--radius-full)">pill</div>
+      <div class="radius-box" style="border-radius:var(--radius-blob)">blob</div>
+      <div class="radius-box" style="border-radius:var(--radius-blob-alt)">blob-alt</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Shadow</h2>
+    <div class="shadow-row">
+      <div class="shadow-box" style="box-shadow:var(--shadow-sm)">sm</div>
+      <div class="shadow-box" style="box-shadow:var(--shadow-md)">md</div>
+      <div class="shadow-box" style="box-shadow:var(--shadow-lg)">lg</div>
+      <div class="shadow-box" style="box-shadow:var(--shadow-pink)">pink / CTA</div>
+    </div>
+  </section>
+
+  <script>
+    lucide.createIcons({ attrs: { "stroke-width": 1.75 } });
+    document.querySelectorAll("[data-theme-set]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const t = btn.getAttribute("data-theme-set");
+        document.documentElement.setAttribute("data-theme", t);
+        document.querySelectorAll("[data-theme-set]").forEach((b) =>
+          b.setAttribute("aria-pressed", b === btn ? "true" : "false")
+        );
+      });
+    });
+  </script>
+</body>
+</html>

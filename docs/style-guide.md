@@ -1,13 +1,20 @@
-# BLOB UI style guide
+# BLOB UI style guide (canonical)
 
-Ported from the Laravel Blade/Tailwind UI. Keep this look — blobby, interactive, pink→orange accents. No shadcn unless explicitly requested.
+**Source of truth for all UI work.** Demo: `demo/blob/`. Tokens: `demo/blob/tokens.css` + `app/globals.css`. Agents must follow this file and `.cursor/rules/blob-ui.mdc`.
+
+## Principles (non-negotiable)
+
+1. **Bloby** — pills, soft cards (24–32px), organic blob radii for brand marks. Round over sharp.
+2. **Zune overflow** — oversized light lowercase headers sit on the content margin along their **baseline**. Ascenders/descenders may hang past that margin but must stay **fully visible** (never top- or bottom-clipped; no `overflow: hidden` on heading boxes). Colored uppercase eyebrows sit tight above titles; active = solid, idle = inactive gray.
+3. **Lucide** — all UI icons from Lucide (`lucide-react`), stroke ≈ 1.75. Decorative icons sit in circular pink→orange gradient wells.
 
 ## Fonts
 
 - Family: **Segoe UI** (self-hosted TTFs in `public/fonts/`)
 - Weights: 300, 350, 400, 600, 700 (+ italics)
 - Body: `font-sans`; headlines `font-semibold` + tight tracking
-- Eyebrows: `uppercase tracking-[0.18em|0.2em] text-xs font-semibold`
+- Eyebrows: `uppercase tracking-[0.18em] text-xs font-semibold` + accent color
+- Overflow display: ~72px, weight 300, lowercase; baseline flush to content margin; `overflow: visible` so descenders (e.g. “p”) and dots stay intact
 
 ## Colors (CSS tokens)
 
@@ -61,17 +68,31 @@ Hover/focus only (no noise):
 | Pattern | Look |
 |---------|------|
 | Shell | `bg-background`, fixed blurred accent orbs |
-| Header | Logo + wordmark, muted nav, theme toggle, inverted Login pill |
+| Header | Logo + wordmark, muted nav, theme toggle (Lucide sun/monitor/moon), inverted Login pill |
 | Hero | Eyebrow pill, huge tight headline, gradient word, search |
 | Search | Soft surface capsule + gradient Search btn + chip tags |
-| Section heading | Colored uppercase eyebrow + tight h2 + “→” link |
-| Category card | Surface tile, blob icon, lift on hover |
+| Section heading | Colored uppercase eyebrow + tight h2 (+ optional Zune overflow on metro pages) + “→” link |
+| Category card | Surface tile, Lucide in gradient circle well, lift on hover |
 | Sticker card | Soft gradient tile, organic blob mark, type chip, hover overlay |
 | Prints CTA | Dark `quickplay` panel, floating gradient blob, white pill |
 | Member CTA | Large surface rounded panel, logo, CTA |
 | Profile | Centered **blobatar** (never Zitadel picture), name/@, divider dl |
 | Logo | Gradient organic square with “B” (+ optional orange dot) |
 
+## Icons
+
+- Package: `lucide-react`
+- Default size 20px; strokeWidth `{1.75}`
+- Do not invent custom SVG icons for UI chrome
+
 ## Avatars
 
 Always [blobatar](https://blobatar.dev/) from `username` (`animate="hover"`). Never render Zitadel `picture` / profile image URLs.
+
+## Do not
+
+- shadcn / generic dashboard kits unless explicitly requested
+- Hard corners on interactive surfaces
+- Non-Lucide icon packs for UI
+- Ignore Zune eyebrow + baseline-overflow hierarchy on section headers
+- Clip heading ascenders/descenders (`overflow: hidden` on title boxes)

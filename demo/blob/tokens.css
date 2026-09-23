@@ -1,0 +1,138 @@
+/* BLOB design tokens — dark default (matches primary screenshot).
+   Light overrides via [data-theme="light"] for dual-theme demos. */
+
+:root {
+  /* Primitive — color */
+  --color-black: #000000;
+  --color-white: #ffffff;
+  --color-surface-dark: #1a1a1a;
+  --color-surface-light: #f5f5f5;
+  --color-gray-secondary-light: #808080;
+  --color-gray-inactive-light: #b0b0b0;
+  --color-badge-dark: #383838;
+  --color-accent-pink: #f10ea0;
+  --color-accent-orange: #e95214;
+  --color-metro-pink: #e8117f;
+  --color-metro-pink-deep: #e41b58;
+  --color-metro-orange: #f26d21;
+  --color-quickplay: #11090f;
+  --color-quickplay-faded: #3b373a;
+  --color-success-raw: #22c55e;
+  --color-warning-raw: #f59e0b;
+  --color-error-raw: #ef4444;
+  --color-info-raw: #3b82f6;
+
+  /* Primitive — radius */
+  --radius-none: 0;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-2xl: 32px;
+  --radius-3xl: 48px;
+  --radius-full: 9999px;
+  --radius-blob: 42% 58% 61% 39% / 48% 41% 59% 52%;
+  --radius-blob-alt: 52% 48% 43% 57% / 45% 53% 47% 55%;
+
+  /* Primitive — shadow */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 12px 40px rgba(241, 14, 160, 0.12);
+  --shadow-pink: 0 8px 24px rgba(241, 14, 160, 0.2);
+
+  /* Primitive — spacing */
+  --spacing-1: 4px;
+  --spacing-2: 8px;
+  --spacing-3: 12px;
+  --spacing-4: 16px;
+  --spacing-5: 20px;
+  --spacing-6: 24px;
+  --spacing-8: 32px;
+  --spacing-10: 40px;
+  --spacing-12: 48px;
+
+  /* Primitive — font */
+  --font-family-sans: "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  --font-size-xs: 12px;
+  --font-size-sm: 14px;
+  --font-size-base: 16px;
+  --font-size-lg: 18px;
+  --font-size-xl: 20px;
+  --font-size-2xl: 24px;
+  --font-size-3xl: 32px;
+  --font-size-4xl: 40px;
+  --font-size-5xl: 56px;
+  --font-size-overflow: 72px;
+  --font-weight-light: 300;
+  --font-weight-semilight: 350;
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --font-tracking-tight: -0.02em;
+  --font-tracking-eyebrow: 0.18em;
+
+  /* Semantic — dark (default) */
+  --color-primary: var(--color-accent-pink);
+  --color-primary-end: var(--color-accent-orange);
+  --color-background: var(--color-black);
+  --color-background-secondary: var(--color-surface-dark);
+  --color-surface: var(--color-surface-dark);
+  --color-text-primary: var(--color-white);
+  --color-text-secondary: rgba(255, 255, 255, 0.7);
+  --color-text-inactive: rgba(255, 255, 255, 0.38);
+  --color-border: rgba(255, 255, 255, 0.2);
+  --color-success: var(--color-success-raw);
+  --color-warning: var(--color-warning-raw);
+  --color-error: var(--color-error-raw);
+  --color-info: var(--color-info-raw);
+  --gradient-accent: linear-gradient(
+    to bottom right,
+    var(--color-accent-pink),
+    var(--color-accent-orange)
+  );
+  --radius-button: var(--radius-full);
+  --radius-card: var(--radius-xl);
+  --radius-input: var(--radius-2xl);
+  --shadow-card: var(--shadow-md);
+  --shadow-cta: var(--shadow-pink);
+
+  /* Component */
+  --button-primary-bg: var(--gradient-accent);
+  --button-primary-text: var(--color-white);
+  --button-primary-radius: var(--radius-button);
+  --button-primary-padding: var(--spacing-3) var(--spacing-6);
+  --button-secondary-border: var(--color-accent-pink);
+  --button-ghost-text: var(--color-accent-pink);
+  --card-bg: var(--color-surface);
+  --card-radius: var(--radius-card);
+  --card-shadow: var(--shadow-card);
+  --card-padding: var(--spacing-5);
+  --input-bg: var(--color-surface);
+  --input-border: var(--color-border);
+  --input-radius: var(--radius-input);
+  --input-padding: var(--spacing-3) var(--spacing-4);
+  --chip-bg: var(--color-surface);
+  --chip-radius: var(--radius-full);
+  --badge-bg: var(--color-badge-dark);
+  --badge-radius: var(--radius-full);
+
+  /* Lucide */
+  --icon-stroke: 1.75;
+  --icon-size-sm: 16px;
+  --icon-size-md: 20px;
+  --icon-size-lg: 24px;
+}
+
+[data-theme="light"] {
+  --color-background: var(--color-white);
+  --color-background-secondary: var(--color-surface-light);
+  --color-surface: var(--color-surface-light);
+  --color-text-primary: var(--color-black);
+  --color-text-secondary: var(--color-gray-secondary-light);
+  --color-text-inactive: var(--color-gray-inactive-light);
+  --color-border: rgba(0, 0, 0, 0.2);
+  --badge-bg: #e8e8e8;
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 12px 40px rgba(241, 14, 160, 0.08);
+}

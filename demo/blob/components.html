@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Components — BLOB</title>
+  <link rel="stylesheet" href="tokens.css">
+  <script src="https://unpkg.com/lucide@0.469.0"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--font-family-sans);
+      background: var(--color-background);
+      color: var(--color-text-primary);
+      line-height: 1.5;
+      padding: var(--spacing-6);
+    }
+    .nav {
+      display: flex; gap: var(--spacing-4); margin-bottom: var(--spacing-8);
+      padding-bottom: var(--spacing-4); border-bottom: 1px solid var(--color-border); align-items: center;
+    }
+    .nav a { color: var(--color-text-secondary); text-decoration: none; font-weight: var(--font-weight-semibold); font-size: var(--font-size-sm); }
+    .nav a:hover, .nav a.active { color: var(--color-accent-pink); }
+    .nav .spacer { flex: 1; }
+    .theme-toggle {
+      display: inline-flex; gap: 2px; padding: 4px; border-radius: var(--radius-full);
+      border: 1px solid var(--color-border); background: var(--color-surface);
+    }
+    .theme-toggle button {
+      width: 32px; height: 32px; border: none; background: transparent; border-radius: var(--radius-full);
+      color: var(--color-text-inactive); cursor: pointer; display: grid; place-items: center;
+    }
+    .theme-toggle button[aria-pressed="true"] { background: var(--color-background); color: var(--color-text-primary); }
+    h1 { font-size: var(--font-size-3xl); font-weight: var(--font-weight-semibold); letter-spacing: var(--font-tracking-tight); margin-bottom: var(--spacing-2); }
+    .subtitle { color: var(--color-text-secondary); font-size: var(--font-size-sm); margin-bottom: var(--spacing-8); }
+    section { margin-bottom: var(--spacing-10); }
+    h2 {
+      font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); margin-bottom: var(--spacing-4);
+      padding-bottom: var(--spacing-2); border-bottom: 1px solid var(--color-border);
+      display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+    }
+    .component-row { display: flex; flex-wrap: wrap; gap: var(--spacing-4); align-items: center; margin-bottom: var(--spacing-4); }
+    .component-label {
+      width: 100%; font-size: var(--font-size-xs); color: var(--color-text-secondary);
+      margin-bottom: var(--spacing-1); display: flex; align-items: center; gap: 8px;
+    }
+    .source-tag { font-size: 11px; padding: 2px 8px; border-radius: 9999px; font-weight: 500; }
+    .source-tag--screenshot { background: #166534; color: #dcfce7; }
+    .source-tag--inferred { background: #92400e; color: #fef3c7; }
+    .source-tag--mixed { background: #3730a3; color: #e0e7ff; }
+
+    .ds-placeholder {
+      display: inline-block; background: var(--color-text-inactive);
+      border-radius: var(--radius-sm); opacity: 0.5;
+    }
+
+    /* Buttons */
+    .ds-button {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      border: none; cursor: pointer; font-family: inherit;
+      font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold);
+      padding: var(--button-primary-padding); border-radius: var(--button-primary-radius);
+      transition: transform 0.2s, opacity 0.15s;
+    }
+    .ds-button:hover:not(:disabled) { transform: scale(1.03); }
+    .ds-button:active:not(:disabled) { transform: scale(0.98); }
+    .ds-button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    .ds-button--primary {
+      background: var(--button-primary-bg); color: var(--button-primary-text);
+      box-shadow: var(--shadow-cta);
+    }
+    .ds-button--secondary {
+      background: transparent; color: var(--color-accent-pink);
+      border: 1px solid var(--button-secondary-border);
+    }
+    .ds-button--ghost { background: transparent; color: var(--button-ghost-text); }
+    .ds-button--icon {
+      width: 40px; height: 40px; padding: 0; border-radius: var(--radius-full);
+      background: var(--button-primary-bg); color: var(--button-primary-text);
+    }
+
+    /* Inputs */
+    .ds-input, .ds-textarea, .ds-select {
+      display: block; width: 100%; max-width: 360px;
+      padding: var(--input-padding); font-size: var(--font-size-base);
+      background: var(--input-bg); border: 1px solid var(--input-border);
+      border-radius: var(--input-radius); color: var(--color-text-primary); font-family: inherit;
+    }
+    .ds-textarea { min-height: 96px; resize: vertical; border-radius: var(--radius-xl); }
+    .ds-input:focus, .ds-textarea:focus, .ds-select:focus {
+      outline: none; border-color: color-mix(in srgb, var(--color-accent-pink) 50%, transparent);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent-pink) 15%, transparent);
+    }
+    .ds-input:disabled, .ds-textarea:disabled, .ds-select:disabled { opacity: 0.5; }
+    .ds-search {
+      display: flex; align-items: center; gap: var(--spacing-2);
+      max-width: 480px; width: 100%;
+      padding: var(--spacing-2); background: var(--input-bg);
+      border: 1px solid var(--input-border); border-radius: var(--radius-full);
+    }
+    .ds-search:focus-within {
+      border-color: color-mix(in srgb, var(--color-accent-pink) 50%, transparent);
+      box-shadow: var(--shadow-pink);
+    }
+    .ds-search__field {
+      flex: 1; border: none; background: transparent; color: var(--color-text-primary);
+      font: inherit; padding: var(--spacing-2) var(--spacing-3); outline: none;
+    }
+    .ds-search__field::placeholder { color: var(--color-text-inactive); }
+    .ds-search__icon { color: var(--color-text-inactive); margin-left: var(--spacing-2); display: grid; place-items: center; }
+
+    /* Cards */
+    .ds-card {
+      background: var(--card-bg); border-radius: var(--card-radius);
+      border: 1px solid var(--color-border); padding: var(--card-padding);
+      max-width: 220px; transition: transform 0.3s, box-shadow 0.3s, border-color 0.3s;
+    }
+    .ds-card:hover {
+      transform: translateY(-4px);
+      border-color: color-mix(in srgb, var(--color-accent-pink) 30%, transparent);
+      box-shadow: var(--shadow-lg);
+    }
+    .ds-card--elevated { box-shadow: var(--shadow-lg); }
+    .ds-card__icon {
+      width: 44px; height: 44px; border-radius: var(--radius-full);
+      background: var(--gradient-accent); display: grid; place-items: center;
+      color: var(--color-white); margin-bottom: var(--spacing-3);
+    }
+    .ds-card__icon--pink { background: var(--color-accent-pink); }
+    .ds-card__icon--orange { background: var(--color-accent-orange); }
+    .ds-card__title { font-weight: var(--font-weight-semibold); margin-bottom: 2px; }
+    .ds-card__desc { font-size: var(--font-size-sm); color: var(--color-text-secondary); }
+    .ds-card--sticker {
+      max-width: 180px; padding: 0; overflow: hidden; border-radius: var(--radius-2xl);
+      background: linear-gradient(135deg, color-mix(in srgb, var(--color-accent-pink) 25%, transparent), color-mix(in srgb, var(--color-accent-orange) 15%, transparent));
+    }
+    .ds-card--sticker .ds-card__media {
+      aspect-ratio: 1; display: grid; place-items: center; position: relative;
+    }
+    .ds-blob-mark {
+      width: 88px; height: 88px; border-radius: var(--radius-blob);
+      background: var(--gradient-accent); display: grid; place-items: center;
+      color: var(--color-white); font-weight: var(--font-weight-bold); font-size: var(--font-size-2xl);
+      position: relative; box-shadow: var(--shadow-pink);
+    }
+    .ds-blob-mark::after {
+      content: ""; position: absolute; top: -4px; right: -6px;
+      width: 28px; height: 28px; border-radius: var(--radius-full);
+      background: var(--color-accent-orange);
+    }
+    .ds-card--sticker .ds-card__meta { padding: var(--spacing-3) var(--spacing-4) var(--spacing-4); }
+    .ds-card--sticker .ds-badge {
+      position: absolute; top: 10px; right: 10px;
+      background: rgba(0, 0, 0, 0.72);
+    }
+
+    /* Lists */
+    .ds-list { max-width: 320px; border: 1px solid var(--color-border); border-radius: var(--radius-xl); overflow: hidden; }
+    .ds-list-item {
+      display: flex; align-items: center; gap: 12px; padding: 12px 16px;
+      background: var(--card-bg); border-bottom: 1px solid var(--color-border);
+    }
+    .ds-list-item:last-child { border-bottom: none; }
+    .ds-list-item:active, .ds-list-item--active { background: color-mix(in srgb, var(--color-accent-pink) 12%, var(--card-bg)); }
+    .ds-list-item__title { font-weight: var(--font-weight-medium); }
+    .ds-list-item__desc { font-size: var(--font-size-sm); color: var(--color-text-secondary); }
+    .ds-list-item__action { margin-left: auto; color: var(--color-text-inactive); }
+
+    /* Tabs */
+    .ds-tab {
+      padding: 8px 16px; border: none; background: transparent;
+      color: var(--color-text-inactive); cursor: pointer; font-family: inherit;
+      font-size: var(--font-size-sm); letter-spacing: var(--font-tracking-eyebrow);
+      text-transform: uppercase; border-bottom: 2px solid transparent;
+    }
+    .ds-tab--selected {
+      color: var(--color-text-primary); border-bottom-color: var(--color-accent-pink);
+      font-weight: var(--font-weight-semibold);
+    }
+
+    /* Segmented */
+    .ds-segmented {
+      display: inline-flex; background: var(--color-surface);
+      border-radius: var(--radius-full); padding: 4px; border: 1px solid var(--color-border);
+    }
+    .ds-segmented__item {
+      padding: 8px 14px; border: none; background: transparent; border-radius: var(--radius-full);
+      cursor: pointer; font-family: inherit; color: var(--color-text-inactive);
+      display: grid; place-items: center; min-width: 36px;
+    }
+    .ds-segmented__item--selected {
+      background: var(--color-background); color: var(--color-text-primary);
+      box-shadow: var(--shadow-sm);
+    }
+
+    /* Nav / TabBar */
+    .ds-navbar {
+      display: flex; align-items: center; gap: var(--spacing-4);
+      padding: 12px 16px; background: var(--color-background);
+      border: 1px solid var(--color-border); border-radius: var(--radius-xl);
+      max-width: 720px; font-weight: var(--font-weight-semibold);
+    }
+    .ds-navbar__brand { display: flex; align-items: center; gap: 10px; letter-spacing: 0.08em; }
+    .ds-navbar__mark {
+      width: 36px; height: 36px; border-radius: var(--radius-blob);
+      background: var(--gradient-accent); display: grid; place-items: center;
+      color: #fff; font-weight: 700; position: relative;
+    }
+    .ds-navbar__mark::after {
+      content: ""; position: absolute; top: -2px; right: -4px;
+      width: 12px; height: 12px; border-radius: var(--radius-full);
+      background: var(--color-accent-orange);
+    }
+    .ds-navbar__links { display: flex; gap: var(--spacing-4); flex: 1; justify-content: center; }
+    .ds-navbar__links a { color: var(--color-text-secondary); text-decoration: none; font-weight: 400; font-size: var(--font-size-sm); }
+    .ds-navbar__links a:hover { color: var(--color-text-primary); }
+    .ds-tabbar {
+      display: flex; justify-content: space-around; padding: 10px 0 12px;
+      background: var(--color-surface); border: 1px solid var(--color-border);
+      border-radius: var(--radius-xl); max-width: 390px;
+    }
+    .ds-tabbar__item {
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+      font-size: var(--font-size-xs); color: var(--color-text-inactive);
+      border: none; background: none; cursor: pointer; font-family: inherit;
+    }
+    .ds-tabbar__item--selected { color: var(--color-accent-pink); }
+
+    /* Badge / Chip */
+    .ds-badge {
+      display: inline-block; padding: 2px 10px; font-size: 10px;
+      font-weight: var(--font-weight-semibold); letter-spacing: 0.06em;
+      background: var(--badge-bg); color: var(--color-text-primary);
+      border-radius: var(--badge-radius); text-transform: uppercase;
+    }
+    .ds-badge--dot {
+      width: 8px; height: 8px; padding: 0; border-radius: var(--radius-full);
+      background: var(--color-accent-pink); display: inline-block;
+    }
+    .ds-badge--eyebrow {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 6px 14px; background: var(--color-surface);
+      border: 1px solid var(--color-border); border-radius: var(--radius-full);
+      font-size: 11px; letter-spacing: var(--font-tracking-eyebrow);
+      text-transform: uppercase; color: var(--color-text-secondary);
+    }
+    .ds-chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 14px; font-size: var(--font-size-sm);
+      background: var(--chip-bg); border-radius: var(--chip-radius);
+      border: 1px solid var(--color-border); color: var(--color-text-secondary); cursor: pointer;
+    }
+    .ds-chip:hover { border-color: color-mix(in srgb, var(--color-accent-pink) 40%, transparent); color: var(--color-accent-pink); }
+    .ds-chip--selected {
+      background: color-mix(in srgb, var(--color-accent-pink) 18%, transparent);
+      color: var(--color-accent-pink); border-color: color-mix(in srgb, var(--color-accent-pink) 40%, transparent);
+    }
+    .ds-chip__x { opacity: 0.6; }
+
+    /* Form controls */
+    .ds-switch {
+      width: 48px; height: 28px; border-radius: 14px; background: var(--color-border);
+      border: none; cursor: pointer; position: relative;
+    }
+    .ds-switch--on { background: var(--gradient-accent); }
+    .ds-switch::after {
+      content: ''; position: absolute; top: 2px; left: 2px; width: 24px; height: 24px;
+      border-radius: 50%; background: #fff; transition: transform 0.15s;
+    }
+    .ds-switch--on::after { transform: translateX(20px); }
+    .ds-switch:disabled { opacity: 0.5; cursor: not-allowed; }
+    .ds-checkbox, .ds-radio { width: 20px; height: 20px; accent-color: var(--color-accent-pink); }
+
+    /* Avatar */
+    .ds-avatar {
+      display: inline-flex; align-items: center; justify-content: center;
+      border-radius: var(--radius-full); background: var(--gradient-accent);
+      color: #fff; font-weight: var(--font-weight-semibold); overflow: hidden;
+    }
+    .ds-avatar--sm { width: 28px; height: 28px; font-size: 11px; }
+    .ds-avatar--md { width: 40px; height: 40px; font-size: 14px; }
+    .ds-avatar--lg { width: 56px; height: 56px; font-size: 18px; border-radius: var(--radius-blob); }
+    .ds-avatar .ds-placeholder { width: 60%; height: 60%; border-radius: 4px; background: rgba(255,255,255,0.35); }
+
+    .ds-divider { height: 1px; background: var(--color-border); max-width: 320px; margin: 8px 0; }
+
+    /* Alert / Toast / Modal / Sheet */
+    .ds-alert {
+      padding: 12px 16px; border-radius: var(--radius-xl); font-size: var(--font-size-sm);
+      max-width: 360px; border: 1px solid;
+    }
+    .ds-alert--info { background: color-mix(in srgb, var(--color-info) 15%, transparent); color: #93c5fd; border-color: color-mix(in srgb, var(--color-info) 40%, transparent); }
+    .ds-alert--success { background: color-mix(in srgb, var(--color-success) 15%, transparent); color: #86efac; border-color: color-mix(in srgb, var(--color-success) 40%, transparent); }
+    .ds-alert--warning { background: color-mix(in srgb, var(--color-warning) 15%, transparent); color: #fcd34d; border-color: color-mix(in srgb, var(--color-warning) 40%, transparent); }
+    .ds-alert--error { background: color-mix(in srgb, var(--color-error) 15%, transparent); color: #fca5a5; border-color: color-mix(in srgb, var(--color-error) 40%, transparent); }
+    .ds-toast {
+      padding: 12px 20px; background: var(--color-surface); color: var(--color-text-primary);
+      border-radius: var(--radius-full); font-size: var(--font-size-sm);
+      max-width: 280px; border: 1px solid var(--color-border); box-shadow: var(--shadow-md);
+    }
+    .ds-modal, .ds-sheet {
+      background: var(--card-bg); border-radius: var(--radius-2xl); box-shadow: var(--shadow-lg);
+      padding: var(--spacing-6); max-width: 320px; border: 1px solid var(--color-border);
+    }
+    .ds-sheet { border-radius: var(--radius-2xl) var(--radius-2xl) 0 0; }
+
+    .ds-progress { width: 200px; height: 3px; background: var(--color-border); border-radius: var(--radius-full); overflow: hidden; }
+    .ds-progress__bar { height: 100%; width: 60%; background: var(--gradient-accent); border-radius: var(--radius-full); }
+    .ds-progress--circle {
+      width: 40px; height: 40px; border-radius: 50%;
+      border: 3px solid var(--color-border); border-top-color: var(--color-accent-pink);
+    }
+    .ds-slider { width: 200px; accent-color: var(--color-accent-pink); }
+    .ds-tooltip {
+      display: inline-block; padding: 6px 10px; background: var(--color-surface);
+      color: var(--color-text-primary); font-size: var(--font-size-xs);
+      border-radius: var(--radius-md); border: 1px solid var(--color-border);
+    }
+
+    /* Zune section heading: no clipping — full glyphs visible */
+    .ds-section-head { margin-bottom: var(--spacing-4); overflow: visible; }
+    .ds-section-head__eyebrow {
+      color: var(--color-accent-pink); font-size: var(--font-size-xs);
+      font-weight: var(--font-weight-semibold); letter-spacing: var(--font-tracking-eyebrow);
+      text-transform: uppercase; line-height: 1; margin-bottom: 2px;
+    }
+    .ds-section-head__title {
+      font-size: var(--font-size-3xl); font-weight: var(--font-weight-semibold);
+      letter-spacing: var(--font-tracking-tight); line-height: 1.15;
+      overflow: visible;
+    }
+    .ds-section-head--zune .ds-section-head__title {
+      font-size: var(--font-size-overflow); font-weight: var(--font-weight-light);
+      text-transform: lowercase; line-height: 1;
+      /* baseline sits on following content margin; descenders hang visibly */
+      margin-bottom: -0.2em; padding-bottom: 0.2em;
+    }
+  </style>
+</head>
+<body>
+  <nav class="nav">
+    <a href="style-guide.html">Style Guide</a>
+    <a href="components.html" class="active">Components</a>
+    <div class="spacer"></div>
+    <div class="theme-toggle" role="group" aria-label="Theme">
+      <button type="button" data-theme-set="light" aria-pressed="false" title="Light"><i data-lucide="sun"></i></button>
+      <button type="button" data-theme-set="dark" aria-pressed="true" title="Dark"><i data-lucide="moon"></i></button>
+    </div>
+  </nav>
+
+  <h1>BLOB — Components</h1>
+  <p class="subtitle">Full control library · bloby + Zune · Lucide icons · see <a href="components-list.md" style="color:var(--color-accent-pink)">components-list.md</a></p>
+
+  <section id="buttons">
+    <h2>Buttons <span class="source-tag source-tag--mixed">1 screenshot · 3 inferred</span></h2>
+    <div class="component-label">Primary <span class="source-tag source-tag--screenshot">screenshot</span></div>
+    <div class="component-row">
+      <button class="ds-button ds-button--primary" type="button">Search</button>
+      <button class="ds-button ds-button--primary" type="button" disabled>Disabled</button>
+    </div>
+    <div class="component-label">Secondary <span class="source-tag source-tag--inferred">inferred</span></div>
+    <div class="component-row"><button class="ds-button ds-button--secondary" type="button">Cancel</button></div>
+    <div class="component-label">Ghost <span class="source-tag source-tag--inferred">inferred</span></div>
+    <div class="component-row"><button class="ds-button ds-button--ghost" type="button">Log out</button></div>
+    <div class="component-label">Icon <span class="source-tag source-tag--inferred">inferred</span></div>
+    <div class="component-row"><button class="ds-button ds-button--icon" type="button" aria-label="Add"><i data-lucide="plus"></i></button></div>
+  </section>
+
+  <section id="inputs">
+    <h2>Inputs <span class="source-tag source-tag--mixed">1 screenshot · 1 inferred</span></h2>
+    <div class="component-label">Search capsule <span class="source-tag source-tag--screenshot">screenshot</span></div>
+    <div class="component-row">
+      <div class="ds-search">
+        <span class="ds-search__icon"><i data-lucide="search"></i></span>
+        <input class="ds-search__field" type="search" placeholder="Search stickers…">
+        <button class="ds-button ds-button--primary" type="button">Search</button>
+      </div>
+    </div>
+    <div class="component-label">Text <span class="source-tag source-tag--inferred">inferred</span></div>
+    <div class="component-row"><input class="ds-input" type="text" placeholder="Display name"></div>
+  </section>
+
+  <section id="textarea">
+    <h2>Textarea <span class="source-tag source-tag--inferred">inferred</span></h2>
+    <div class="component-row"><textarea class="ds-textarea" placeholder="Bio…"></textarea></div>
+  </section>
+
+  <section id="select">
+    <h2>Select <span class="source-tag source-tag--inferred">inferred</span></h2>
+    <div class="component-row">
+      <select class="ds-select"><option>All categories</option><option>Reactions</option><option>Memes</option></select>
+    </div>
+  </section>
+
+  <section id="cards">
+    <h2>Cards <span class="source-tag source-tag--mixed">2 screenshot · 1 inferred</span></h2>
+    <div class="component-label">Category <span class="source-tag source-tag--screenshot">screenshot</span></div>
+    <div class="component-row">
+      <div class="ds-card">
+        <div class="ds-card__icon ds-card__icon--pink"><i data-lucide="zap"></i></div>
+        <div class="ds-card__title">Memes</div>
+        <div class="ds-card__desc">Browse stickers</div>
+      </div>
+      <div class="ds-card">
+        <div class="ds-card__icon ds-card__icon--orange"><i data-lucide="heart"></i></div>
+        <div class="ds-card__title">Reactions</div>
+        <div class="ds-card__desc">Browse stickers</div>
+      </div>
+    </div>
+    <div class="component-label">Sticker <span class="source-tag source-tag--screenshot">screenshot</span></div>
+    <div class="component-row">
+      <div class="ds-card ds-card--sticker">
+        <div class="ds-card__media">
+          <span class="ds-badge">GIF</span>
+          <div class="ds-blob-mark">B</div>
+        </div>
+        <div class="ds-card__meta">
+          <div class="ds-card__title">Excited blob</div>
+          <div class="ds-card__desc">by Ahmed</div>
+        </div>
+      </div>
+    </div>
+    <div class="component-label">Elevated <span class="source-tag source-tag--inferred">inferred</span></div>
+    <div class="component-row">
+      <div class="ds-card ds-card--elevated">
+        <div class="ds-section-head">
+          <div class="ds-section-head__eyebrow">Fresh from the blob</div>
+          <div class="ds-section-head__title" style="font-size:var(--font-size-xl)">Featured</div>
+        </div>
+        <div class="ds-card__desc">Panel with soft pink shadow</div>
+      </div>
+    </div>
+    <div class="component-label">Zune section title <span class="source-tag source-tag--screenshot">screenshot</span></div>
+    <div class="component-row" style="width:100%;border-bottom:1px solid var(--color-border);padding-bottom:0;margin-bottom:var(--spacing-4);overflow:visible;">
+      <div class="ds-section-head ds-section-head--zune" style="margin-bottom:0;width:100%;">
+        <div class="ds-section-head__title">pins</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="lists">
+    <h2>Lists <span class="source-tag source-tag--mixed">1 screenshot · 2 inferred</span></h2>
+    <div class="component-label">Default (Zune list language) <span class="source-tag source-tag--screenshot">screenshot</span></div>
+    <div class="component-row">
+      <div class="ds-list">
+        <div class="ds-list-item ds-list-item--active"><div><div class="ds-list-item__title">Lady Gaga</div><div class="ds-list-item__desc">Artist</div></div></div>
+        <div class="ds-list-item"><div><div class="ds-list-item__title">Ladytron</div><div class="ds-list-item__desc">Artist</div></div></div>
+      </div>
+    </div>
+    <div class="component-label">With icon <span class="source-tag source-tag--inferred">inferred</span></div>
+    <div class="component-row">
+      <div class="ds-list">
+        <div class="ds-list-item">
+          <span class="ds-placeholder" style="width:28px;height:28px;border-radius:50%"></span>
+          <div><div class="ds-list-item__title">Stickers</div><div class="ds-list-item__desc">Library</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="component-label">With action <span class="source-tag source-tag--inferred">inferred</span></div>
+    <div class="component-row">
+      <div class="ds-list">
+        <div class="ds-list-item">
+          <div><div class="ds-list-item__title">Collections</div></div>
+          <span class="ds-list-item__action"><i data-lucide="chevron-right"></i></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="tabs">
+    <h2>Tabs <span class="source-tag source-tag--screenshot">screenshot</span></h2>
+    <div class="component-row">
+      <button class="ds-tab ds-tab--selected" type="button">Music</button>
+      <button class="ds-tab" type="button">Videos</button>
+      <button class="ds-tab" type="button">Pictures</button>
+    </div>
+  </section>
+
+  <section id="segmented">
+    <h2>Segmented Control <span class="source-tag source-tag--screenshot">screenshot</span></h2>
+    <div class="ds-segmented">
+      <button class="ds-segmented__item" type="button" aria-label="Light"><i data-lucide="sun"></i></button>
+      <button class="ds-segmented__item ds-segmented__item--selected" type="button" aria-label="System"><i data-lucide="monitor"></i></button>
+      <button class="ds-segmented__item" type="button" aria-label="Dark"><i data-lucide="moon"></i></button>
+    </div>
+  </section>
+
+  <section id="navbar">
+    <h2>NavBar <span class="source-tag source-tag--screenshot">screenshot</span></h2>
+    <div class="ds-navbar">
+      <div class="ds-navbar__brand"><span class="ds-navbar__mark">B</span> BLOB</div>
+      <div class="ds-navbar__links">
+        <a href="#">Stickers</a><a href="#">Prints</a><a href="#">Collections</a>
+      </div>
+      <button class="ds-button ds-button--ghost" type="button" style="padding:4px 8px">Log out</button>
+    </div>
+  </section>
+
+  <section id="tabbar">
+    <h2>TabBar <span class="source-tag source-tag--inferred">inferred</span></h2>
+    <div class="ds-tabbar">
+      <button class="ds-tabbar__item ds-tabbar__item--selected" type="button"><i data-lucide="home"></i>Home</button>
+      <button class="ds-tabbar__item" type="button"><i data-lucide="compass"></i>Explore</button>
+      <button class="ds-tabbar__item" type="button"><i data-lucide="user"></i>Profile</button>
+    </div>
+  </section>
+
+  <section id="badges">
+    <h2>Badges <span class="source-tag source-tag--screenshot">screenshot</span></h2>
+    <div class="component-row">
+      <span class="ds-badge">GIF</span>
+      <span class="ds-badge">IMAGE</span>
+      <span class="ds-badge">VIDEO</span>
+      <span class="ds-badge--dot"></span>
+      <span class="ds-badge--eyebrow"><span class="ds-badge--dot"></span> A public sticker library</span>
+    </div>
+  </section>
+
+  <section id="chips">
+    <h2>Chips <span class="source-tag source-tag--screenshot">screenshot</span></h2>
+    <div class="component-row">
+      <button class="ds-chip" type="button">cat</button>
+      <button class="ds-chip ds-chip--selected" type="button">angry</button>
+      <button class="ds-chip" type="button">happy</button>
+      <button class="ds-chip" type="button">bruh <span class="ds-chip__x"><i data-lucide="x" style="width:12px;height:12px"></i></span></button>
+    </div>
+  </section>
+
+  <section id="switch">
+    <h2>Switch <span class="source-tag source-tag--inferred">inferred</span></h2>
+    <div class="component-row">
+      <button class="ds-switch" type="button" aria-label="Off"></button>
+      <button class="ds-switch ds-switch--on" type="button" aria-label="On"></button>
+      <button class="ds-switch" type="button" disabled aria-label="Disabled"></button>
+    </div>
+  </section>
+
+  <section id="checkbox">
+    <h2>Checkbox <span class="source-tag source-tag--inferred">inferred</span></h2>
+    <div class="component-row">
+      <input class="ds-checkbox" type="checkbox">
+      <input class="ds-checkbox" type="checkbox" checked>
+      <input class="ds-checkbox" type="checkbox" disabled>
+    </div>
+  </section>
+
+  <section id="radio">
+    <h2>Radio <span class="source-tag source-tag--inferred">inferred</span></h2>
+    <div class="component-row">
+      <input class="ds-radio" type="radio" name="r" checked>
+      <input class="ds-radio" type="radio" name="r">
+      <input class="ds-radio" type="radio" name="r2" disabled>
+    </div>
+  </section>
+
+  <section id="avatar">
+    <h2>Avatar <span class="source-tag source-tag--screenshot">screenshot</span></h2>
+    <div class="component-row">
+      <span class="ds-avatar ds-avatar--sm">B</span>
+      <span class="ds-avatar ds-avatar--md">B</span>
+      <span class="ds-avatar ds-avatar--lg"><span class="ds-placeholder"></span></span>
+    </div>
+    <p style="font-size:var(--font-size-xs);color:var(--color-text-secondary);margin-top:8px">App: always blobatar from username — never Zitadel picture URLs.</p>
+  </section>
+
+  <section id="divider">
+    <h2>Divider <span class="source-tag source-tag--inferred">inferred</span></h2>
+    <div class="ds-divider"></div>
+  </section>
+
+  <section id="alert">
+    <h2>Alert <span class="source-tag source-tag--inferred">inferred</span></h2>
+    <div class="component-row" style="flex-direction:column;align-items:flex-start;">
+      <div class="ds-alert ds-alert--info">Info — upload queued</div>
+      <div class="ds-alert ds-alert--success">Success — sticker approved</div>
+      <div class="ds-alert ds-alert--warning">Warning — file large</div>
+      <div class="ds-alert ds-alert--error">Error — upload failed</div>
+    </div>
+  </section>
+
+  <section id="toast">
+    <h2>Toast <span class="source-tag source-tag--inferred">inferred</span></h2>
+    <div class="ds-toast">Saved successfully</div>
+  </section>
+
+  <section id="modal">
+    <h2>Modal <span class="source-tag source-tag--inferred">inferred</span></h2>
+    <div class="ds-modal">
+      <div class="ds-card__title">Approve upload?</div>
+      <div class="ds-card__desc" style="margin:8px 0 16px">This sticker will appear in the public library.</div>
+      <div class="component-row">
+        <button class="ds-button ds-button--primary" type="button">Approve</button>
+        <button class="ds-button ds-button--ghost" type="button">Cancel</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="sheet">
+    <h2>Sheet <span class="source-tag source-tag--inferred">inferred</span></h2>
+    <div class="ds-sheet">
+      <div class="ds-card__title">Filters</div>
+      <div class="ds-card__desc">Bottom sheet with blob radii</div>
+    </div>
+  </section>
+
+  <section id="progress">
+    <h2>Progress <span class="source-tag source-tag--mixed">1 screenshot · 1 inferred</span></h2>
+    <div class="component-label">Bar (Zune thin track) <span class="source-tag source-tag--screenshot">screenshot</span></div>
+    <div class="component-row"><div class="ds-progress"><div class="ds-progress__bar"></div></div></div>
+    <div class="component-label">Circular <span class="source-tag source-tag--inferred">inferred</span></div>
+    <div class="component-row"><div class="ds-progress--circle" aria-label="Loading"></div></div>
+  </section>
+
+  <section id="slider">
+    <h2>Slider <span class="source-tag source-tag--inferred">inferred</span></h2>
+    <input class="ds-slider" type="range" value="60">
+  </section>
+
+  <section id="tooltip">
+    <h2>Tooltip <span class="source-tag source-tag--inferred">inferred</span></h2>
+    <span class="ds-tooltip">Volume 37</span>
+  </section>
+
+  <script>
+    lucide.createIcons({ attrs: { "stroke-width": 1.75 } });
+    document.querySelectorAll("[data-theme-set]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const t = btn.getAttribute("data-theme-set");
+        document.documentElement.setAttribute("data-theme", t);
+        document.querySelectorAll("[data-theme-set]").forEach((b) =>
+          b.setAttribute("aria-pressed", b === btn ? "true" : "false")
+        );
+      });
+    });
+  </script>
+</body>
+</html>
