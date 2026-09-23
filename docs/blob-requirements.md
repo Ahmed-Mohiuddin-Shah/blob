@@ -31,26 +31,30 @@ Search must find what the user typed (title, aliases, tags, categories, keywords
 
 ---
 
+
+
 ## 2. Locked decisions
 
 
-| Decision                              | Lock                                                                                                                                      |
-| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| Authorization                         | `role` + `account_status`, not `is_admin` / `is_member` booleans                                                                          |
+| Decision                              | Lock                                                                                                                                          |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Authorization                         | `role` + `account_status`, not `is_admin` / `is_member` booleans                                                                              |
 | Identity                              | **Zitadel only** (OIDC + PKCE via Auth.js). No Credentials provider, no Google/GitHub/etc., no magic link, no local password or register form |
-| Sticker media                         | `stickers` → many `media_assets`; never `image_path` / `gif_path` / `video_path` columns                                                  |
-| Media mutation                        | Fit/crop/pad and binary media are set **only at create/upload**. After create, media assets are **immutable**. Metadata remains editable. |
-| Primary category                      | One `category_id` per sticker + many tags                                                                                                 |
-| Tags                                  | First-class `tags` table + pivot; not a comma string on the sticker row                                                                   |
-| Storage                               | Postgres = metadata + GLASS UUIDs; binaries only in GLASS                                                                                 |
-| Search v1                             | PostgreSQL FTS + `pg_trgm`                                                                                                                |
-| Prints                                | Separate domain: packs, layouts, generated_prints; generate on demand + cache                                                             |
-| Video audio                           | Optional: preserve when present; not required; do not strip by default                                                                    |
-| Email verification                    | Deferred (column reserved; no v1 flow required)                                                                                           |
-| Favorites / collections / tag aliases | Tables in schema; UI deferred to Should-have unless noted                                                                                 |
+| Sticker media                         | `stickers` → many `media_assets`; never `image_path` / `gif_path` / `video_path` columns                                                      |
+| Media mutation                        | Fit/crop/pad and binary media are set **only at create/upload**. After create, media assets are **immutable**. Metadata remains editable.     |
+| Primary category                      | One `category_id` per sticker + many tags                                                                                                     |
+| Tags                                  | First-class `tags` table + pivot; not a comma string on the sticker row                                                                       |
+| Storage                               | Postgres = metadata + GLASS UUIDs; binaries only in GLASS                                                                                     |
+| Search v1                             | PostgreSQL FTS + `pg_trgm`                                                                                                                    |
+| Prints                                | Separate domain: packs, layouts, generated_prints; generate on demand + cache                                                                 |
+| Video audio                           | Optional: preserve when present; not required; do not strip by default                                                                        |
+| Email verification                    | Deferred (column reserved; no v1 flow required)                                                                                               |
+| Favorites / collections / tag aliases | Tables in schema; UI deferred to Should-have unless noted                                                                                     |
 
 
 ---
+
+
 
 ## 3. Out of scope (v1 won’t build)
 
@@ -66,7 +70,11 @@ Search must find what the user typed (title, aliases, tags, categories, keywords
 
 ---
 
+
+
 ## 4. Actors and authorization
+
+
 
 ### 4.1 User role
 
@@ -76,6 +84,8 @@ Search must find what the user typed (title, aliases, tags, categories, keywords
 | `user`   | Registered spectator (default after register) |
 | `member` | Approved contributor; may upload              |
 | `admin`  | Full management                               |
+
+
 
 
 ### 4.2 Account status
@@ -114,7 +124,11 @@ Search must find what the user typed (title, aliases, tags, categories, keywords
 
 ---
 
+
+
 ## 5. Authentication and profiles
+
+
 
 ### Must have
 
@@ -126,9 +140,13 @@ Search must find what the user typed (title, aliases, tags, categories, keywords
 - Admin: change `role`, change `account_status`, approve members (app DB only)
 - Protect routes with Next.js middleware / server-side session checks; expose role + account_status on the session for capability gates
 
+
+
 ### Deferred
 
 - Email verification UI/flow (keep `email_verified_at` nullable; populated from Zitadel claim)
+
+
 
 ### Avatar
 
@@ -137,6 +155,8 @@ User faces are **[blobatar](https://blobatar.dev/)** generated from `username` o
 Auth.js establishes the app session after the Zitadel OIDC callback. Zitadel is the only identity source; roles live in each app’s `users.role` (not Zitadel roles).
 
 ---
+
+
 
 ## 6. Sticker model
 
@@ -153,6 +173,8 @@ A **sticker** is the primary content object. Required metadata fields:
 - `processing_status`: `processing` | `ready` | `failed`
 - `fit_mode` + `pad_background` (immutable after create)
 - Aggregate counters: views, downloads, likes, shares, search_appearances
+
+
 
 ### Content representations
 
@@ -171,7 +193,11 @@ Which derived kinds are produced depends on the uploaded original (static image 
 
 ---
 
+
+
 ## 7. Create / upload lifecycle (media locked here)
+
+
 
 ### 7.1 Flow
 
@@ -214,6 +240,8 @@ All display renditions target a **1:1 square** canvas. **Do not** blindly crop w
 | `pad`  | Scale to fit; pad with `pad_background` (`transparent` or `#RRGGBB`) |
 
 
+
+
 ### 7.3 Edit rules (locked)
 
 
@@ -230,7 +258,11 @@ Any **new** sticker binary (create upload): browser → Next.js Route Handler �
 
 ---
 
+
+
 ## 8. Media rules
+
+
 
 ### 8.1 Video
 
@@ -240,11 +272,15 @@ Any **new** sticker binary (create upload): browser → Next.js Route Handler �
 - Always generate `thumbnail` (e.g. webp/jpeg) for cards
 - Enforce file size and resolution caps (configure in app; document in env)
 
+
+
 ### 8.2 GIF
 
 - Enforce max dimensions, frame count, file size, processing timeout, output size
 - Prefer lightweight preview for browse grids (thumbnail / optimized asset); retain downloadable GIF asset when that is the deliverable
 - Do not load dozens of full-size animated GIFs on a browse page without thumbnails
+
+
 
 ### 8.3 Trust and safety for files
 
@@ -253,11 +289,15 @@ Any **new** sticker binary (create upload): browser → Next.js Route Handler �
 - Strip unnecessary EXIF/metadata from **generated public** assets
 - Process in isolated queue workers, not the Next.js Node process that serves HTTP
 
+
+
 ### 8.4 Original retention
 
 Keep the **original** in GLASS whenever legally/technically appropriate so processing settings can be revisited in a future version without re-upload. v1 still does **not** expose post-create reprocess UI.
 
 ---
+
+
 
 ## 9. Moderation
 
@@ -280,6 +320,8 @@ Private: only owner and admins.
 
 ---
 
+
+
 ## 10. Search
 
 First-class feature. Index / query against:
@@ -289,6 +331,8 @@ First-class feature. Index / query against:
 - Category name
 - Author (username / display_name / author_name)
 - Alternate names, keywords
+
+
 
 ### v1 engine
 
@@ -300,6 +344,8 @@ Tag alias expansion in query planning is **Should-have** (table exists in schema
 
 ---
 
+
+
 ## 11. Tags and categories
 
 **Categories** — controlled hierarchy (admin-managed): e.g. Memes, Reactions, Animals, People, Gaming, Anime, Movies, Internet, Miscellaneous.
@@ -309,6 +355,8 @@ Tag alias expansion in query planning is **Should-have** (table exists in schema
 Do not store tags as `"cat, angry, funny"` on the sticker row.
 
 ---
+
+
 
 ## 12. Likes, favorites, collections
 
@@ -324,6 +372,8 @@ Likes and favorites are distinct tables.
 
 ---
 
+
+
 ## 13. Prints domain
 
 Treat as separate from the core sticker row:
@@ -333,6 +383,8 @@ Sticker Pack → stickers (ordered)
 Print Layout → geometry template
 Pack + Layout → Generated sheet (PDF | PNG) cached in GLASS
 ```
+
+
 
 ### Pack
 
@@ -351,6 +403,8 @@ Reusable template: page size (mm), orientation, margins, rows, columns, sticker 
 
 ---
 
+
+
 ## 14. Storage architecture (GLASS)
 
 ```
@@ -360,6 +414,8 @@ users, stickers     objects (bytes)
 media_assets  ──►   glass_object_id + glass_prism_id
 packs/prints  ──►   same
 ```
+
+
 
 ### MediaStorage abstraction
 
@@ -381,6 +437,8 @@ Uploads use GLASS `PUT` (simple or multipart) with `prism_id` and SHA-256 checks
 
 ---
 
+
+
 ## 15. Statistics
 
 v1: **aggregate counters only** on `stickers` (and pack-level later if needed). No eternal per-view event log.
@@ -388,6 +446,8 @@ v1: **aggregate counters only** on `stickers` (and pack-level later if needed). 
 Increment on meaningful actions (view detail, download, like, share, search impression) with reasonable debouncing left to implementation—but do not build a full analytics warehouse.
 
 ---
+
+
 
 ## 16. API surface
 
@@ -420,6 +480,8 @@ POST   /api/prints/generate
 
 ---
 
+
+
 ## 17. Hard rules (pitfalls → requirements)
 
 1. Retain originals in GLASS; do not keep only processed derivatives.
@@ -435,7 +497,11 @@ POST   /api/prints/generate
 
 ---
 
+
+
 ## 18. v1 checklist
+
+
 
 ### Must have
 
@@ -455,6 +521,8 @@ POST   /api/prints/generate
 - [ ] GLASS-backed storage via MediaStorage
 - [ ] Favorites, collections, tag_aliases **tables** present
 
+
+
 ### Should have (after Must)
 
 - [ ] Favorites UI
@@ -464,6 +532,8 @@ POST   /api/prints/generate
 - [ ] Richer download stats / share tracking
 - [ ] Presigned / path-token media URLs where private
 - [ ] Additional print page sizes beyond initial seed layouts
+
+
 
 ### Won’t (this version)
 
@@ -475,6 +545,8 @@ POST   /api/prints/generate
 - [ ] Non-Zitadel auth (Credentials, social IdPs, magic link, local passwords)
 
 ---
+
+
 
 ## 19. Platform assumptions
 
@@ -488,6 +560,8 @@ POST   /api/prints/generate
 - Deployment: web (Next.js) + at least one media/print worker; do not rely on Next.js alone for CPU-heavy processing
 
 ---
+
+
 
 ## 20. Domain sketch
 
