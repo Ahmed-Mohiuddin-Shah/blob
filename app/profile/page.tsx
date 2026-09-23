@@ -1,27 +1,22 @@
-import { headers } from "next/headers";
-import { redirect } from "next/navigation";
+import Link from "next/link";
 import { SignOutTextButton } from "@/components/auth-buttons";
+import { ProfileEditForm } from "@/components/profile-edit-form";
+import { ProfileUploads } from "@/components/profile-uploads";
 import { UserBlobatar } from "@/components/user-blobatar";
-import { getSession, signInUrl } from "@/lib/auth";
+import { canManageUsers, canUpload } from "@/lib/capabilities";
+import { requireSessionUser } from "@/lib/require-user";
 import { prisma } from "@/lib/prisma";
 
 export default async function ProfilePage() {
-  const reqHeaders = await headers();
-  const session = await getSession(
-    new Request("http://localhost", { headers: reqHeaders }),
-  );
+  const { user } = await requireSessionUser();
 
-  if (!session?.user?.id) {
-    redirect(signInUrl({ redirectTo: "/profile" }));
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: BigInt(session.user.id) },
+  const uploads = await prisma.glassUpload.findMany({
+    where: { userId: user.id },
+    orderBy: { createdAt: "desc" },
+    take: 50,
   });
 
-  if (!user) {
-    redirect(signInUrl({ redirectTo: "/profile" }));
-  }
+  const caps = { role: user.role, accountStatus: user.accountStatus };
 
   return (
     <section className="mx-auto max-w-7xl px-5 py-16 sm:px-8">
@@ -56,10 +51,40 @@ export default async function ProfilePage() {
           </div>
         </dl>
 
-        <p className="mt-8 text-center text-sm leading-6 text-secondary">
-          Name and email are managed in your Zitadel account. Your blobatar is
-          generated from your username.
-        </p>
+        {canManageUsers(caps) ? (
+          <p className="mt-6 text-center text-sm">
+            <Link
+              href="/admin/users"
+              className="font-semibold text-accent-pink hover:underline"
+            >
+              Admin: manage users →
+            </Link>
+            {" · "}
+            <Link
+              href="/admin/uploads"
+              className="font-semibold text-accent-pink hover:underline"
+            >
+              Uploads →
+            </Link>
+          </p>
+        ) : null}
+
+        <ProfileEditForm
+          displayName={user.displayName}
+          email={user.email}
+          username={user.username}
+        />
+
+        <ProfileUploads
+          canUpload={canUpload(caps)}
+          uploads={uploads.map((u) => ({
+            id: u.id.toString(),
+            title: u.title,
+            size: u.size,
+            status: u.status,
+            createdAt: u.createdAt.toISOString(),
+          }))}
+        />
 
         <div className="mt-8 flex justify-center">
           <SignOutTextButton />

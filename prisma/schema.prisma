@@ -7,18 +7,51 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/// Local app user. Zitadel is sole IdP. Avatars via blobatar(username) — no avatarUrl.
+/// Local app user. Zitadel is sole IdP. Roles mirrored from Zitadel. Avatars via blobatar(username).
 model User {
-  id              BigInt    @id @default(autoincrement())
-  zitadelId       String    @unique @map("zitadel_id") @db.VarChar(64)
-  username        String    @unique @db.VarChar(50)
-  displayName     String    @map("display_name") @db.VarChar(100)
-  email           String    @unique @db.VarChar(255)
-  emailVerifiedAt DateTime? @map("email_verified_at") @db.Timestamptz(6)
-  role            String    @default("user") @db.VarChar(20)
-  accountStatus   String    @default("active") @map("account_status") @db.VarChar(20)
-  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                 BigInt    @id @default(autoincrement())
+  zitadelId          String    @unique @map("zitadel_id") @db.VarChar(64)
+  username           String    @unique @db.VarChar(50)
+  displayName        String    @map("display_name") @db.VarChar(100)
+  email              String    @unique @db.VarChar(255)
+  emailVerifiedAt    DateTime? @map("email_verified_at") @db.Timestamptz(6)
+  role               String    @default("user") @db.VarChar(20)
+  accountStatus      String    @default("active") @map("account_status") @db.VarChar(20)
+  glassPrivatePrismId String?  @map("glass_private_prism_id") @db.Uuid
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  glassUploads GlassUpload[]
 
   @@map("users")
+}
+
+/// Temporary Glass object tracker (profile upload/view before full stickers).
+model GlassUpload {
+  id        BigInt   @id @default(autoincrement())
+  userId    BigInt   @map("user_id")
+  objectId  String   @map("object_id") @db.Uuid
+  prismId   String   @map("prism_id") @db.Uuid
+  title     String   @db.VarChar(200)
+  size      Int      @default(0)
+  checksum  String?  @db.VarChar(128)
+  status    String   @default("pending") @db.VarChar(20)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("glass_uploads")
+}
+
+/// Singleton app public GLASS PRISM. Created once by BLOB via glass-ts; not an env UUID.
+model PublicPrism {
+  id           BigInt   @id @default(autoincrement())
+  key          String   @unique @default("default") @db.VarChar(32)
+  glassPrismId String   @unique @map("glass_prism_id") @db.Uuid
+  label        String   @db.VarChar(100)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("public_prism")
 }

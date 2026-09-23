@@ -27,12 +27,42 @@ Table users {
   display_name varchar(100) [not null]
   email varchar(255) [unique, not null]
   email_verified_at timestamptz [null, note: 'From Zitadel email_verified claim']
-  role varchar(20) [not null, default: 'user', note: 'user | member | admin']
-  account_status varchar(20) [not null, default: 'active', note: 'active | pending | suspended | banned']
+  role varchar(20) [not null, default: 'user', note: 'Mirror of Zitadel project role: user | member | admin']
+  account_status varchar(20) [not null, default: 'active', note: 'Local only: active | pending | suspended | banned']
+  glass_private_prism_id uuid [null, note: 'Per-user private GLASS PRISM for pending uploads']
   created_at timestamptz [not null]
   updated_at timestamptz [not null]
 
-  Note: 'Zitadel is the sole IdP (Auth.js OIDC + PKCE). No password, no avatar_url — UI uses blobatar from username. Upsert on first login by zitadel_id. Defaults: role=user, account_status=active. App owns roles locally. Session is Auth.js JWT — no app sessions table.'
+  Note: 'Zitadel is the sole IdP (Auth.js OIDC + PKCE). Roles SoT = Zitadel project roles; users.role is a mirror. Profile name/email SoT = Zitadel (editable via Management API from BLOB). username local (blobatar). account_status local. No password, no avatar_url. Session is Auth.js JWT — no app sessions table.'
+}
+
+// ---------------------------------------------------------------------------
+// GLASS: app public PRISM (singleton) + temporary upload tracker
+// ---------------------------------------------------------------------------
+
+Table public_prism {
+  id bigserial [pk]
+  key varchar(32) [unique, not null, default: 'default', note: 'Singleton sentinel — only one row (key=default)']
+  glass_prism_id uuid [unique, not null, note: 'GLASS PRISM UUID created by BLOB via glass-ts; is_public=true']
+  label varchar(100) [not null, note: 'e.g. blob-public']
+  created_at timestamptz [not null]
+
+  Note: 'LOCKED: App-owned public PRISM. Not configured via env. On first need, BLOB calls Glass prisms.create(is_public=true), inserts here, caches glass_prism_id in-process. Restarts load from this table. Disjoint from users/stickers/media_assets.'
+}
+
+Table glass_uploads {
+  id bigserial [pk]
+  user_id bigint [not null, ref: > users.id]
+  object_id uuid [not null, note: 'GLASS object UUID']
+  prism_id uuid [not null, note: 'Current PRISM (private until approved)']
+  title varchar(200) [not null]
+  size integer [not null, default: 0]
+  checksum varchar(128) [null]
+  status varchar(20) [not null, default: 'pending', note: 'pending | approved | rejected']
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  Note: 'Temporary Glass upload tracker for profile upload/view before full stickers/media_assets. On admin approve: link object to public_prism.glass_prism_id, unlink from user private prism.'
 }
 
 # ---------------------------------------------------------------------------

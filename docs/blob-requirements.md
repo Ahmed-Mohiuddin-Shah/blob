@@ -120,7 +120,7 @@ Search must find what the user typed (title, aliases, tags, categories, keywords
  Requires `account_status = active`.  
 † Subject to sticker visibility and download policy; unlisted requires knowing the link; private only for authorized users.
 
-**Registration defaults (locked):** `role = user`, `account_status = active`. New accounts are registered spectators (browse, search, like, download). Upload requires an admin to set `role = member` (or `admin`). `account_status` of `suspended` or `banned` blocks likes, uploads, and management regardless of role. Use `pending` only when an admin deliberately gates an account before activation.
+**Registration defaults (locked):** `role = user` (Zitadel grant + local mirror), `account_status = active`. New accounts are registered spectators (browse, search, like, download). Upload requires an admin to grant Zitadel `member` (or `admin`) via BLOB admin UI. `account_status` of `suspended` or `banned` blocks likes, uploads, and management regardless of role. Use `pending` only when an admin deliberately gates an account before activation.
 
 ---
 
@@ -135,9 +135,11 @@ Search must find what the user typed (title, aliases, tags, categories, keywords
 - Login / logout via **Zitadel only** (OIDC + PKCE through Auth.js). Auth.js must register a single Zitadel provider — no Credentials, Google, GitHub, Apple, magic-link, or other providers
 - No local password hash, no email/password register or login UI, no multi-account linking
 - First login upserts local `users` by `zitadel_id` (OIDC `sub`); defaults `role=user`, `account_status=active`
-- Profile fields synced from Zitadel claims: display name, email, `email_verified_at` (never sync or display Zitadel `picture`)
-- Local `username` set on first create (URL-safe handle)
-- Admin: change `role`, change `account_status`, approve members (app DB only)
+- **Roles:** Zitadel project roles (`user` \| `member` \| `admin`) are source of truth. BLOB mirrors into `users.role` from OIDC claims on login. Fine-grained capabilities stay in app code (capability matrix)
+- **Role / profile writes:** BLOB drives Zitadel via Management API using a service-account PAT (`ZITADEL_SERVICE_PAT` + org/project ids). Admins assign roles in-app; users edit display name / email in-app. No parallel role store for writes
+- Profile fields synced from Zitadel claims on login: display name, email, `email_verified_at` (never sync or display Zitadel `picture`). Users may also edit display name / email / local `username` from the BLOB profile UI
+- Local `username` set on first create (URL-safe handle); editable in BLOB only (blobatar)
+- Admin: change `role` (via Zitadel user grant), change `account_status` (app DB only)
 - Protect routes with Next.js middleware / server-side session checks; expose role + account_status on the session for capability gates
 
 
@@ -152,7 +154,7 @@ Search must find what the user typed (title, aliases, tags, categories, keywords
 
 User faces are **[blobatar](https://blobatar.dev/)** generated from `username` only. Do **not** store or display Zitadel `picture` / profile images (no `avatar_url` column). Sticker/media binaries still go application server → GLASS.
 
-Auth.js establishes the app session after the Zitadel OIDC callback. Zitadel is the only identity source; roles live in each app’s `users.role` (not Zitadel roles).
+Auth.js establishes the app session after the Zitadel OIDC callback. Zitadel is the identity and role source; `users.role` is a local mirror for gates and queries.
 
 ---
 
@@ -221,7 +223,7 @@ processing_status = ready | failed
         ↓
 Admin reviews → approved | rejected | …
         ↓
-On approve + public: ensure public-readable assets linked to public PRISM
+On approve + public: link assets to the app-owned public PRISM (`public_prism` row; create via Glass on first use if missing)
 ```
 
 Upload **must not** block the HTTP request on FFmpeg/ImageMagick. Show “Processing…” in the UI while `processing_status = processing`.
@@ -408,11 +410,13 @@ Reusable template: page size (mm), orientation, margins, rows, columns, sticker 
 ## 14. Storage architecture (GLASS)
 
 ```
-PostgreSQL          GLASS
-─────────────       ─────────────────────────
-users, stickers     objects (bytes)
-media_assets  ──►   glass_object_id + glass_prism_id
-packs/prints  ──►   same
+PostgreSQL                    GLASS
+─────────────                 ─────────────────────────
+users, stickers               objects (bytes)
+media_assets  ──►             glass_object_id + glass_prism_id
+packs/prints  ──►             same
+public_prism  ──► (1 row)     app public PRISM UUID (created by BLOB)
+users.glass_private_prism_id  per-user private PRISM
 ```
 
 
@@ -426,10 +430,17 @@ Application code shall depend on a **MediaStorage** interface (upload, download 
 
 | Content                                                        | PRISM                                                                                                                                                                                                                                                                          |
 | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Approved **public** derived assets (and public downloads)      | Public PRISM — anonymous `GET` / `HEAD`                                                                                                                                                                                                                                        |
-| Originals, pending/rejected, **private** / **unlisted** assets | Private PRISM — service key or signed object/PRISM JWT                                                                                                                                                                                                                         |
-| Generated prints                                               | Private or public per product need; default **private** with signed download for the requester, or public if the pack is public — **lock:** use private PRISM + short-lived download JWT/path token for downloads unless pack is public, in which case public PRISM is allowed |
+| Approved **public** derived assets (and public downloads)      | **App-owned public PRISM** — BLOB creates one GLASS PRISM (`is_public: true`) via `glass-ts`, persists it in the disjoint `public_prism` table (singleton `key=default`), and caches the UUID in-process. **Do not** configure a public PRISM UUID via env. Anonymous `GET` / `HEAD` on that prism. |
+| Originals, pending/rejected, **private** / **unlisted** assets | **Per-user private PRISM** — created on first upload for that user; UUID on `users.glass_private_prism_id`. Service key or signed object/PRISM JWT                                                                                                                                 |
+| Generated prints                                               | Private or public per product need; default **private** with signed download for the requester, or public if the pack is public — **lock:** use private PRISM + short-lived download JWT/path token for downloads unless pack is public, in which case the app public PRISM is allowed |
 
+
+**Public PRISM lifecycle (locked):**
+
+1. First time BLOB needs a public prism (e.g. admin approve), call Glass `prisms.create({ label: "blob-public", is_public: true })`.
+2. Insert into `public_prism` (`key` unique sentinel `"default"`, `glass_prism_id`, `label`).
+3. Cache `glass_prism_id` in the app process; on restart, load from `public_prism` — never recreate if the row exists.
+4. Concurrent first creates: unique on `key` wins; losers discard the race-created Glass prism or leave it unused (prefer the DB row).
 
 Persist on every stored object reference: `glass_object_id`, `glass_prism_id`, and checksum when provided by GLASS.
 
@@ -505,9 +516,9 @@ POST   /api/prints/generate
 
 ### Must have
 
-- [ ] Users with `role` + `account_status`
-- [ ] Zitadel-only login/logout (no other Auth.js providers), local profile (`username` / `display_name`), blobatar avatars
-- [ ] Admin member promotion / status management
+- [ ] Users with `role` + `account_status` (role mirrored from Zitadel)
+- [ ] Zitadel-only login/logout (no other Auth.js providers), local profile (`username` / `display_name`), blobatar avatars; profile edit via Management API
+- [ ] Admin member promotion (Zitadel grant via PAT) / local status management
 - [ ] Public browse + search (FTS + pg_trgm)
 - [ ] Stickers with tags + primary category
 - [ ] Media assets: original / image / gif / video / thumbnail
@@ -553,9 +564,9 @@ POST   /api/prints/generate
 - App: Next.js (App Router), Node.js runtime for Route Handlers that talk to GLASS / Postgres
 - DB: PostgreSQL via `DATABASE_URL` (Prisma migrate or equivalent); enable `pg_trgm` extension
 - Queue: Redis + worker processes for media/print jobs; workers must run in deployment (not serverless-only for FFmpeg/ImageMagick)
-- Auth env: Zitadel domain + client id/secret only (sole Auth.js provider); Auth.js `SESSION_SECRET`; callback URL aligned with `AUTH_URL`
+- Auth env: Zitadel domain + client id/secret (sole Auth.js provider); service-account PAT + org id + project id for Management API; Auth.js `SESSION_SECRET`; callback URL aligned with `AUTH_URL`
 - Session store: Auth.js JWT by default (no app `sessions` table; see DBML). Database adapter only if JWT proves insufficient
-- GLASS base URL, service API key, public/private PRISM UUIDs configured via env (not committed secrets)
+- GLASS base URL + service API key via env (not committed secrets). **Public PRISM UUID is not env** — BLOB creates it and stores it in `public_prism`. Per-user private prism UUIDs live on `users`.
 - App origin (`AUTH_URL` / public site URL) and CORS on GLASS (if browser hits GLASS directly) must allow the BLOB origin; prefer proxying or signed URLs through the app when uncertain
 - Deployment: web (Next.js) + at least one media/print worker; do not rely on Next.js alone for CPU-heavy processing
 
@@ -566,7 +577,7 @@ POST   /api/prints/generate
 ## 20. Domain sketch
 
 ```
-USER (role, account_status)
+USER (role, account_status, glass_private_prism_id)
   ├── STICKERS (created_by / uploaded_by)
   │      ├── MEDIA_ASSETS → GLASS
   │      ├── TAGS (+ aliases)
@@ -576,6 +587,8 @@ USER (role, account_status)
   └── PACKS
          ├── PACK_STICKERS → STICKERS
          └── GENERATED_PRINTS (layout + GLASS cache)
+
+PUBLIC_PRISM (singleton) → GLASS public PRISM UUID
 ```
 
 Schema detail: `[blob-schema.dbml](blob-schema.dbml)`.

@@ -23,6 +23,8 @@ Copy `.env.example` → `.env`. Required:
 - `SESSION_SECRET`, `AUTH_URL`
 - `ZITADEL_DOMAIN`, `ZITADEL_CLIENT_ID`, `ZITADEL_CLIENT_SECRET`
 - `ZITADEL_POST_LOGOUT_URL`
+- `ZITADEL_SERVICE_PAT`, `ZITADEL_ORG_ID`, `ZITADEL_PROJECT_ID` (Management API)
+- For Glass uploads: `GLASS_API_URL`, `GLASS_API_KEY` (public PRISM is created by the app into `public_prism`)
 
 Zitadel app settings (must match exactly):
 

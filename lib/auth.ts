@@ -4,7 +4,9 @@ import { randomUUID } from "crypto";
 import * as oidc from "openid-client";
 import type { JWT } from "@auth/core/jwt";
 import { attributesFromClaims } from "@/lib/zitadel-user-mapper";
-import { ZITADEL_SCOPES } from "@/lib/scopes";
+import { rolesFromClaims } from "@/lib/roles";
+import { zitadelScopes } from "@/lib/scopes";
+import { setUserRole, zitadelProjectId } from "@/lib/zitadel-mgmt";
 
 async function getPrisma() {
   const { prisma } = await import("@/lib/prisma");
@@ -65,7 +67,7 @@ export const authOptions: NextAuthConfig = {
       issuer: process.env.ZITADEL_DOMAIN!,
       clientId: process.env.ZITADEL_CLIENT_ID!,
       clientSecret: process.env.ZITADEL_CLIENT_SECRET!,
-      authorization: { params: { scope: ZITADEL_SCOPES } },
+      authorization: { params: { scope: zitadelScopes() } },
     }),
   ],
   session: {
@@ -96,6 +98,11 @@ export const authOptions: NextAuthConfig = {
           .preferred_username,
       });
 
+      const role = rolesFromClaims(
+        profile as Record<string, unknown>,
+        zitadelProjectId(),
+      );
+
       const existing = await prisma.user.findUnique({
         where: { zitadelId: attrs.zitadelId },
       });
@@ -108,10 +115,16 @@ export const authOptions: NextAuthConfig = {
             displayName: attrs.displayName,
             email: attrs.email,
             emailVerifiedAt: attrs.emailVerifiedAt,
-            role: "user",
+            role,
             accountStatus: "active",
           },
         });
+        // Seed Zitadel grant so console/app stay aligned (ignore if PAT unset)
+        try {
+          await setUserRole(attrs.zitadelId, role);
+        } catch (err) {
+          console.warn("Zitadel setUserRole on signup skipped:", err);
+        }
       } else {
         await prisma.user.update({
           where: { id: existing.id },
@@ -119,6 +132,7 @@ export const authOptions: NextAuthConfig = {
             displayName: attrs.displayName,
             email: attrs.email,
             emailVerifiedAt: attrs.emailVerifiedAt,
+            role,
           },
         });
       }
