@@ -124,6 +124,17 @@ export default async function StickerDetailPage({
               {sticker.visibility !== "public" ? ` · ${sticker.visibility}` : ""}
             </p>
           ) : null}
+
+          {(isOwner || isAdmin) ? (
+            <p className="mt-4">
+              <Link
+                href={`/stickers/${sticker.slug}/edit`}
+                className="text-sm font-semibold text-accent-pink hover:underline"
+              >
+                Edit metadata
+              </Link>
+            </p>
+          ) : null}
         </div>
       </div>
     </section>

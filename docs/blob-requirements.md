@@ -25,7 +25,7 @@ BLOB is a **public sticker library and sticker creation/browsing website** with 
 - Jobs: separate Node workers (e.g. BullMQ / Redis, or equivalent) for media processing and print generation — **not** inside the Next.js request lifecycle
 - Auth: Auth.js configured with **Zitadel as the sole provider** (OIDC + PKCE); no other IdPs or auth methods
 - Avatars: [blobatar](https://blobatar.dev/) from `username` only (never Zitadel `picture`)
-- Search: PostgreSQL full-text search + `pg_trgm` (no Elasticsearch)
+- Search: PostgreSQL full-text search + `pg_trgm` (v1); **Meilisearch planned post-v1**
 
 Search must find what the user typed (title, aliases, tags, categories, keywords)—not unrelated results.
 
@@ -45,11 +45,13 @@ Search must find what the user typed (title, aliases, tags, categories, keywords
 | Primary category                      | One `category_id` per sticker + many tags                                                                                                     |
 | Tags                                  | First-class `tags` table + pivot; not a comma string on the sticker row                                                                       |
 | Storage                               | Postgres = metadata + GLASS UUIDs; binaries only in GLASS                                                                                     |
-| Search v1                             | PostgreSQL FTS + `pg_trgm`                                                                                                                    |
+| Search v1                             | PostgreSQL FTS + `pg_trgm` (Meilisearch planned post-v1)                                                                                      |
 | Prints                                | Separate domain: packs, layouts, generated_prints; generate on demand + cache                                                                 |
 | Video audio                           | Optional: preserve when present; not required; do not strip by default                                                                        |
 | Email verification                    | Deferred (column reserved; no v1 flow required)                                                                                               |
 | Favorites / collections / tag aliases | Tables in schema; UI deferred to Should-have unless noted                                                                                     |
+| Tag display names                     | Stored **ALL CAPS** on save (`ANGRY CAT`); slug remains lowercase                                                                             |
+| Moderation history                    | Shared polymorphic `moderation_events` (stickers now; collections / packs / layouts later)                                                    |
 
 
 ---
@@ -58,7 +60,7 @@ Search must find what the user typed (title, aliases, tags, categories, keywords
 
 ## 3. Out of scope (v1 won’t build)
 
-- Elasticsearch / OpenSearch
+- Elasticsearch / OpenSearch (Meilisearch is the planned post-v1 search engine)
 - Recommendation / AI search
 - Comments, following users, chat
 - Real-time notifications
@@ -135,7 +137,7 @@ Search must find what the user typed (title, aliases, tags, categories, keywords
 - Login / logout via **Zitadel only** (OIDC + PKCE through Auth.js). Auth.js must register a single Zitadel provider — no Credentials, Google, GitHub, Apple, magic-link, or other providers
 - No local password hash, no email/password register or login UI, no multi-account linking
 - First login upserts local `users` by `zitadel_id` (OIDC `sub`); defaults `role=user`, `account_status=active`
-- **Roles:** Zitadel project roles (`user` \| `member` \| `admin`) are source of truth. BLOB mirrors into `users.role` from OIDC claims on login. Fine-grained capabilities stay in app code (capability matrix)
+- **Roles:** Zitadel project roles (`user`  `member`  `admin`) are source of truth. BLOB mirrors into `users.role` from OIDC claims on login. Fine-grained capabilities stay in app code (capability matrix)
 - **Role / profile writes:** BLOB drives Zitadel via Management API using a service-account PAT (`ZITADEL_SERVICE_PAT` + org/project ids). Admins assign roles in-app; users edit display name / email in-app. No parallel role store for writes
 - Profile fields synced from Zitadel claims on login: display name, email, `email_verified_at` (never sync or display Zitadel `picture`). Users may also edit display name / email / local `username` from the BLOB profile UI
 - Local `username` set on first create (URL-safe handle); editable in BLOB only (blobatar)
@@ -171,7 +173,8 @@ A **sticker** is the primary content object. Required metadata fields:
 - Alternate names / keywords (for search)
 - Attribution: author_name, attribution, source_url, license, copyright_status
 - `visibility`: `public` | `unlisted` | `private`
-- `moderation_status`: `draft` | `pending_review` | `approved` | `rejected` | `hidden` | `deleted`
+- `moderation_status`: `draft` | `pending_review` | `needs_edit` | `approved` | `rejected` | `hidden` | `deleted`
+- `moderation_note`: current open edit-request reason (cleared on resubmit)
 - `processing_status`: `processing` | `ready` | `failed`
 - `fit_mode` + `pad_background` (immutable after create)
 - Aggregate counters: views, downloads, likes, shares, search_appearances
@@ -221,7 +224,7 @@ Upload derived assets to GLASS; write media_assets rows
         ↓
 processing_status = ready | failed
         ↓
-Admin reviews → approved | rejected | …
+Admin reviews → approved | needs_edit | reject (purge) | …
         ↓
 On approve + public: link assets to the app-owned public PRISM (`public_prism` row; create via Glass on first use if missing)
 ```
@@ -306,10 +309,17 @@ Keep the **original** in GLASS whenever legally/technically appropriate so proce
 Uploads are **not** immediately public library content.
 
 ```
-Member uploads → pending_review → Admin → approved | rejected
+Member uploads → pending_review → Admin → approved | needs_edit | reject (purge)
+needs_edit → owner or admin edits metadata → pending_review
 ```
 
-Admins can: approve, reject, hide, delete (soft via `moderation_status = deleted`), edit metadata, change tags/category, change ownership (`created_by` / `uploaded_by`).
+Admins can: approve, **request edit** (required note/reason), reject (hard purge), hide, soft-delete (`moderation_status = deleted`), edit metadata, change tags/category, change ownership (`created_by` / `uploaded_by`).
+
+**Reject (locked):** delete all sticker media objects from GLASS, then delete the local sticker row (cascades media + tag pivots). Record a `rejected` row in `moderation_events` before purge so history survives. Soft `rejected` status is not retained for this action.
+
+**Edit request:** set `moderation_status = needs_edit` and `moderation_note`. Owner or admin edits metadata (media immutable). On save from `needs_edit`, status returns to `pending_review` and note clears (`resubmitted` event).
+
+**Shared history:** all moderation actions write to polymorphic `moderation_events` (`subject_type` + `subject_id`, no subject FK). Stickers use it now; collections, sticker packs, and print layouts reuse the same table and admin history UI when those domains gain moderation.
 
 Public browse/search includes only stickers that are:
 
@@ -344,6 +354,12 @@ First-class feature. Index / query against:
 
 Tag alias expansion in query planning is **Should-have** (table exists in schema).
 
+
+
+### Planned: Meilisearch (post-v1)
+
+Meilisearch is the intended next search engine (replaces or augments PG FTS). Same field contract: title, aliases, tags, categories, keywords, author. Tag **display** names stay ALL CAPS in Postgres; search indexes treat them case-insensitively. Sync/index workers are out of scope for v1.
+
 ---
 
 
@@ -352,9 +368,9 @@ Tag alias expansion in query planning is **Should-have** (table exists in schema
 
 **Categories** — controlled hierarchy (admin-managed): e.g. Memes, Reactions, Animals, People, Gaming, Anime, Movies, Internet, Miscellaneous.
 
-**Tags** — free-form descriptive labels; own table; sticker↔tag pivot.
+**Tags** — free-form descriptive labels; own table; sticker↔tag pivot. On save, normalize display `name` to **ALL CAPS** (e.g. `angry cat` → `ANGRY CAT`); `slug` stays lowercase (`angry-cat`).
 
-Do not store tags as `"cat, angry, funny"` on the sticker row.
+Do not store tags as a comma string on the sticker row.
 
 ---
 
@@ -428,11 +444,11 @@ Application code shall depend on a **MediaStorage** interface (upload, download 
 ### PRISM strategy (v1 lock)
 
 
-| Content                                                        | PRISM                                                                                                                                                                                                                                                                          |
-| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Content                                                        | PRISM                                                                                                                                                                                                                                                                                               |
+| -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Approved **public** derived assets (and public downloads)      | **App-owned public PRISM** — BLOB creates one GLASS PRISM (`is_public: true`) via `glass-ts`, persists it in the disjoint `public_prism` table (singleton `key=default`), and caches the UUID in-process. **Do not** configure a public PRISM UUID via env. Anonymous `GET` / `HEAD` on that prism. |
-| Originals, pending/rejected, **private** / **unlisted** assets | **Per-user private PRISM** — created on first upload for that user; UUID on `users.glass_private_prism_id`. Service key or signed object/PRISM JWT                                                                                                                                 |
-| Generated prints                                               | Private or public per product need; default **private** with signed download for the requester, or public if the pack is public — **lock:** use private PRISM + short-lived download JWT/path token for downloads unless pack is public, in which case the app public PRISM is allowed |
+| Originals, pending/rejected, **private** / **unlisted** assets | **Per-user private PRISM** — created on first upload for that user; UUID on `users.glass_private_prism_id`. Service key or signed object/PRISM JWT                                                                                                                                                  |
+| Generated prints                                               | Private or public per product need; default **private** with signed download for the requester, or public if the pack is public — **lock:** use private PRISM + short-lived download JWT/path token for downloads unless pack is public, in which case the app public PRISM is allowed              |
 
 
 **Public PRISM lifecycle (locked):**
@@ -469,13 +485,17 @@ Intended HTTP API (JSON) for v1:
 ```
 GET    /api/stickers
 GET    /api/stickers/{id}
+PATCH  /api/stickers/{id}          # metadata only — no media body
 GET    /api/search
 GET    /api/tags
 GET    /api/categories
 
 POST   /api/stickers
-PATCH  /api/stickers/{id}          # metadata only — no media body
-DELETE /api/stickers/{id}          # soft delete / hide per policy
+POST   /api/stickers/{id}/approve
+POST   /api/stickers/{id}/reject          # purge GLASS objects then delete row
+POST   /api/stickers/{id}/request-edit    # body: { note } required
+
+GET    /api/moderation/events             # admin; cursor pagination; filters subjectType/action
 
 POST   /api/stickers/{id}/like
 DELETE /api/stickers/{id}/like
@@ -524,7 +544,9 @@ POST   /api/prints/generate
 - [ ] Media assets: original / image / gif / video / thumbnail
 - [ ] Square renditions with crop|fit|pad at **create only**
 - [ ] Video ≤10s; audio preserved when present
-- [ ] Member upload + async processing + admin moderation
+- [ ] Member upload + async processing + admin moderation (approve / request-edit / purge-reject)
+- [ ] Shared `moderation_events` history (paginated admin UI)
+- [ ] Tag names ALL CAPS on save
 - [ ] Visibility public|unlisted|private
 - [ ] Ownership / attribution fields
 - [ ] Likes (UI)
@@ -539,10 +561,12 @@ POST   /api/prints/generate
 - [ ] Favorites UI
 - [ ] Collections UI
 - [ ] Tag alias expansion in search
+- [ ] **Meilisearch** search (replace/augment PG FTS)
 - [ ] Related stickers
 - [ ] Richer download stats / share tracking
 - [ ] Presigned / path-token media URLs where private
 - [ ] Additional print page sizes beyond initial seed layouts
+- [ ] Collections / packs / layouts moderation via shared `moderation_events`
 
 
 

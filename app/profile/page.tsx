@@ -9,12 +9,18 @@ export default async function ProfileOverviewPage() {
   const { user } = await requireSessionUser();
   const caps = { role: user.role, accountStatus: user.accountStatus };
 
-  const [uploadCount, pendingCount] = await Promise.all([
+  const [uploadCount, pendingCount, needsEditCount] = await Promise.all([
     prisma.sticker.count({ where: { uploadedById: user.id } }),
     prisma.sticker.count({
       where: {
         moderationStatus: "pending_review",
         ...(canManageUsers(caps) ? {} : { uploadedById: user.id }),
+      },
+    }),
+    prisma.sticker.count({
+      where: {
+        moderationStatus: "needs_edit",
+        uploadedById: user.id,
       },
     }),
   ]);
@@ -53,6 +59,13 @@ export default async function ProfileOverviewPage() {
             >
               Pending
               {pendingCount > 0 ? ` (${pendingCount})` : ""}
+            </Link>
+            <Link
+              href="/profile/edits"
+              className="rounded-full border border-divider bg-surface px-5 py-2 text-sm font-semibold"
+            >
+              Edits
+              {needsEditCount > 0 ? ` (${needsEditCount})` : ""}
             </Link>
             <Link
               href="/profile/settings"

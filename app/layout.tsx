@@ -45,6 +45,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         pendingApprovalCount = await prisma.sticker.count({
           where: { moderationStatus: "pending_review" },
         });
+      } else {
+        pendingApprovalCount = await prisma.sticker.count({
+          where: {
+            moderationStatus: "needs_edit",
+            uploadedById: dbUser.id,
+          },
+        });
       }
     }
   }

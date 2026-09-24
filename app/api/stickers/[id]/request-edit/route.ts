@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { getSession } from "@/lib/auth";
 import { canModerate } from "@/lib/capabilities";
-import { getGlass } from "@/lib/glass";
 import {
   MODERATION_ACTION,
   MODERATION_SUBJECT,
@@ -11,7 +10,7 @@ import {
 import { prisma } from "@/lib/prisma";
 
 export async function POST(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
   const { id } = await context.params;
@@ -33,42 +32,43 @@ export async function POST(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  let body: { note?: string };
+  try {
+    body = (await request.json()) as { note?: string };
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+  const note = (body.note ?? "").trim();
+  if (!note) {
+    return NextResponse.json({ error: "Note is required" }, { status: 400 });
+  }
+
   const sticker = await prisma.sticker.findUnique({
     where: { id: BigInt(id) },
-    include: { media: true },
   });
   if (!sticker) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
+  if (sticker.moderationStatus === "rejected") {
+    return NextResponse.json({ error: "Sticker already rejected" }, { status: 409 });
+  }
 
-  // History first so purge is auditable even if GLASS/DB steps fail mid-flight.
+  await prisma.sticker.update({
+    where: { id: sticker.id },
+    data: {
+      moderationStatus: "needs_edit",
+      moderationNote: note.slice(0, 2000),
+    },
+  });
+
   await recordModerationEvent({
     subjectType: MODERATION_SUBJECT.sticker,
     subjectId: sticker.id,
     subjectTitle: sticker.title,
-    action: MODERATION_ACTION.rejected,
+    action: MODERATION_ACTION.editRequested,
     actorId: admin.id,
+    note,
   });
 
-  try {
-    const glass = getGlass();
-    for (const asset of sticker.media) {
-      try {
-        await glass.prisms.unlinkObject(asset.glassPrismId, asset.glassObjectId);
-      } catch {
-        // ponytail: unlink best-effort before delete
-      }
-      await glass.objects.delete(asset.glassObjectId);
-    }
-  } catch (err) {
-    console.error("Reject GLASS purge failed:", err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "GLASS delete failed" },
-      { status: 502 },
-    );
-  }
-
-  await prisma.sticker.delete({ where: { id: sticker.id } });
-
-  return NextResponse.json({ ok: true, status: "rejected" });
+  return NextResponse.json({ ok: true, status: "needs_edit" });
 }

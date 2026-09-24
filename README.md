@@ -48,5 +48,5 @@ npm run dev
 
 ## Glass
 
-Set `GLASS_API_URL` and `GLASS_API_KEY`. The app creates its public PRISM on first approve and stores it in `public_prism` (not env). Members upload to a per-user private prism from `/profile`; admins approve at `/admin/uploads`.
+Set `GLASS_API_URL` and `GLASS_API_KEY`. The app creates its public PRISM on first approve and stores it in `public_prism` (not env). Members upload to a per-user private prism; admins moderate at `/profile/pending` (approve / request edit / reject). Manage users lives at `/profile/users`.
 

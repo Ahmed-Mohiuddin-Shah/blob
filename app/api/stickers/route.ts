@@ -10,12 +10,18 @@ import {
   detectUpload,
   FIT_MODES,
   MAX_UPLOAD_BYTES,
+  normalizeTagName,
   slugify,
   tagSlug,
   VISIBILITIES,
   type FitMode,
   type Visibility,
 } from "@/lib/stickers";
+import {
+  MODERATION_ACTION,
+  MODERATION_SUBJECT,
+  recordModerationEvent,
+} from "@/lib/moderation";
 
 async function sessionUser() {
   const reqHeaders = await headers();
@@ -226,12 +232,13 @@ export async function POST(request: Request) {
       });
 
       for (const name of tagNames) {
-        const tSlug = tagSlug(name);
-        if (!tSlug) continue;
+        const display = normalizeTagName(name);
+        const tSlug = tagSlug(display);
+        if (!tSlug || !display) continue;
         const tag = await tx.tag.upsert({
           where: { slug: tSlug },
-          create: { slug: tSlug, name: name.slice(0, 80) },
-          update: {},
+          create: { slug: tSlug, name: display },
+          update: { name: display },
         });
         await tx.stickerTag.create({
           data: { stickerId: s.id, tagId: tag.id },
@@ -239,6 +246,14 @@ export async function POST(request: Request) {
       }
 
       return s;
+    });
+
+    await recordModerationEvent({
+      subjectType: MODERATION_SUBJECT.sticker,
+      subjectId: sticker.id,
+      subjectTitle: sticker.title,
+      action: MODERATION_ACTION.submitted,
+      actorId: user.id,
     });
 
     enqueueStickerProcessing(sticker.id);

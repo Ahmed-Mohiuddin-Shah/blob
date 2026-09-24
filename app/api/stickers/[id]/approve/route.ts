@@ -3,6 +3,11 @@ import { headers } from "next/headers";
 import { getSession } from "@/lib/auth";
 import { canModerate } from "@/lib/capabilities";
 import { getGlass, getPublicPrismId } from "@/lib/glass";
+import {
+  MODERATION_ACTION,
+  MODERATION_SUBJECT,
+  recordModerationEvent,
+} from "@/lib/moderation";
 import { prisma } from "@/lib/prisma";
 
 async function requireAdminUser() {
@@ -75,8 +80,17 @@ export async function POST(
       where: { id: sticker.id },
       data: {
         moderationStatus: "approved",
+        moderationNote: null,
         publishedAt: sticker.publishedAt ?? new Date(),
       },
+    });
+
+    await recordModerationEvent({
+      subjectType: MODERATION_SUBJECT.sticker,
+      subjectId: sticker.id,
+      subjectTitle: sticker.title,
+      action: MODERATION_ACTION.approved,
+      actorId: admin.id,
     });
 
     return NextResponse.json({ ok: true, status: "approved" });

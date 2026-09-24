@@ -4,8 +4,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Clock,
+  History,
   ImageIcon,
   LayoutDashboard,
+  Pencil,
   Settings,
   Upload,
   Users,
@@ -15,6 +17,7 @@ type Props = {
   canUpload: boolean;
   isAdmin: boolean;
   pendingCount: number;
+  needsEditCount: number;
   username: string;
 };
 
@@ -25,7 +28,13 @@ const linkClass = (active: boolean) =>
       : "text-secondary hover:bg-surface/60 hover:text-foreground"
   }`;
 
-export function ProfileNav({ canUpload, isAdmin, pendingCount, username }: Props) {
+export function ProfileNav({
+  canUpload,
+  isAdmin,
+  pendingCount,
+  needsEditCount,
+  username,
+}: Props) {
   const pathname = usePathname();
 
   return (
@@ -58,6 +67,18 @@ export function ProfileNav({ canUpload, isAdmin, pendingCount, username }: Props
           ) : null}
         </Link>
         <Link
+          href="/profile/edits"
+          className={linkClass(pathname.startsWith("/profile/edits"))}
+        >
+          <Pencil className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+          Edits
+          {needsEditCount > 0 ? (
+            <span className="ml-auto rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold text-white">
+              {needsEditCount}
+            </span>
+          ) : null}
+        </Link>
+        <Link
           href="/profile/settings"
           className={linkClass(pathname.startsWith("/profile/settings"))}
         >
@@ -65,13 +86,22 @@ export function ProfileNav({ canUpload, isAdmin, pendingCount, username }: Props
           Settings
         </Link>
         {isAdmin ? (
-          <Link
-            href="/admin/users"
-            className={linkClass(pathname.startsWith("/admin/users"))}
-          >
-            <Users className="h-4 w-4" strokeWidth={1.75} aria-hidden />
-            Manage users
-          </Link>
+          <>
+            <Link
+              href="/profile/history"
+              className={linkClass(pathname.startsWith("/profile/history"))}
+            >
+              <History className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+              History
+            </Link>
+            <Link
+              href="/profile/users"
+              className={linkClass(pathname.startsWith("/profile/users"))}
+            >
+              <Users className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+              Manage users
+            </Link>
+          </>
         ) : null}
       </nav>
 

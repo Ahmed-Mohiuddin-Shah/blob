@@ -8,7 +8,9 @@
 role: user | member | admin
 account_status: active | pending | suspended | banned
 visibility: public | unlisted | private
-moderation_status: draft | pending_review | approved | rejected | hidden | deleted
+moderation_status: draft | pending_review | needs_edit | approved | rejected | hidden | deleted
+moderation_action: submitted | approved | rejected | edit_requested | resubmitted | edited | hidden | deleted
+moderation_subject_type: sticker | collection | sticker_pack | print_layout
 processing_status: processing | ready | failed
 media_kind: original | image | gif | video | thumbnail
 media_asset_status: pending | ready | failed
@@ -84,12 +86,35 @@ Table categories {
 
 Table tags {
   id bigserial [pk]
-  slug varchar(80) [unique, not null]
-  name varchar(80) [not null]
+  slug varchar(80) [unique, not null, note: 'Lowercase slug for uniqueness / search keys']
+  name varchar(80) [not null, note: 'Display name stored ALL CAPS on save (e.g. ANGRY CAT)']
   created_at timestamptz [not null]
   updated_at timestamptz [not null]
 
-  Note: 'Free-form descriptive metadata (cat, angry, keyboard, …).'
+  Note: 'Free-form descriptive metadata. name = ALL CAPS; slug = lowercase. Meilisearch (planned) indexes case-insensitively.'
+}
+
+# ---------------------------------------------------------------------------
+# Shared moderation audit (stickers now; collections / packs / layouts later)
+# ---------------------------------------------------------------------------
+
+Table moderation_events {
+  id bigserial [pk]
+  subject_type varchar(40) [not null, note: 'sticker | collection | sticker_pack | print_layout']
+  subject_id bigint [not null, note: 'No FK — survives hard delete of subject']
+  subject_title varchar(220) [not null, note: 'Snapshot title for history after purge']
+  action varchar(40) [not null, note: 'submitted | approved | rejected | edit_requested | resubmitted | edited | hidden | deleted']
+  actor_id bigint [not null, ref: > users.id]
+  note text [null, note: 'Required at API for edit_requested']
+  created_at timestamptz [not null]
+
+  indexes {
+    (subject_type, subject_id, created_at) [name: 'idx_moderation_events_subject']
+    created_at [name: 'idx_moderation_events_created']
+    actor_id [name: 'idx_moderation_events_actor']
+  }
+
+  Note: 'Polymorphic moderation history. Reuse for collections, sticker packs, print layouts when those domains gain moderation. Reject on stickers = purge GLASS then delete row; event retained.'
 }
 
 Table tag_aliases {
@@ -126,7 +151,8 @@ Table stickers {
   keywords text [null, note: 'Extra search keywords']
 
   visibility varchar(20) [not null, default: 'public', note: 'public | unlisted | private']
-  moderation_status varchar(30) [not null, default: 'pending_review', note: 'draft | pending_review | approved | rejected | hidden | deleted']
+  moderation_status varchar(30) [not null, default: 'pending_review', note: 'draft | pending_review | needs_edit | approved | rejected | hidden | deleted']
+  moderation_note text [null, note: 'Current open edit-request reason; cleared on resubmit']
   processing_status varchar(20) [not null, default: 'processing', note: 'processing | ready | failed']
   processing_error text [null]
 
@@ -139,13 +165,13 @@ Table stickers {
   shares_count bigint [not null, default: 0]
   search_appearances_count bigint [not null, default: 0]
 
-  search_vector text [null, note: 'tsvector stored as text in DBML; use tsvector in PG']
+  search_vector text [null, note: 'v1: tsvector in PG. Planned: Meilisearch indexes same fields (title, aliases, tags, categories, keywords) post-v1']
 
   published_at timestamptz [null, note: 'Set when first approved + public']
   created_at timestamptz [not null]
   updated_at timestamptz [not null]
 
-  Note: 'Primary content object. Binaries live in media_assets → GLASS. Media/fit_mode immutable after create; metadata editable by owner/admin.'
+  Note: 'Primary content object. Binaries live in media_assets → GLASS. Media/fit_mode immutable after create; metadata editable by owner/admin. Reject = hard purge (GLASS objects then row).'
 }
 
 Table sticker_tags {

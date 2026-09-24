@@ -36,6 +36,11 @@ export function tagSlug(value: string): string {
   return slugify(value, 80);
 }
 
+/** Display name stored ALL CAPS on save (e.g. ANGRY CAT). */
+export function normalizeTagName(value: string): string {
+  return value.trim().replace(/\s+/g, " ").toUpperCase().slice(0, 80);
+}
+
 /** MIME + magic-byte sniff. Returns null if unsupported. */
 export function detectUpload(
   bytes: Uint8Array,

@@ -77,8 +77,8 @@ export function Header({
                     {pendingApprovalCount > 0 ? (
                       <span
                         className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full bg-red-500 ring-2 ring-background"
-                        title={`${pendingApprovalCount} pending approval`}
-                        aria-label={`${pendingApprovalCount} pending approval`}
+                        title={`${pendingApprovalCount} items need attention`}
+                        aria-label={`${pendingApprovalCount} items need attention`}
                       />
                     ) : null}
                   </span>

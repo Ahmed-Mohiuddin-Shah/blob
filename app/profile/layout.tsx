@@ -12,12 +12,20 @@ export default async function ProfileLayout({
   const caps = { role: user.role, accountStatus: user.accountStatus };
   const isAdmin = canManageUsers(caps);
 
-  const pendingCount = await prisma.sticker.count({
-    where: {
-      moderationStatus: "pending_review",
-      ...(isAdmin ? {} : { uploadedById: user.id }),
-    },
-  });
+  const [pendingCount, needsEditCount] = await Promise.all([
+    prisma.sticker.count({
+      where: {
+        moderationStatus: "pending_review",
+        ...(isAdmin ? {} : { uploadedById: user.id }),
+      },
+    }),
+    prisma.sticker.count({
+      where: {
+        moderationStatus: "needs_edit",
+        uploadedById: user.id,
+      },
+    }),
+  ]);
 
   return (
     <section className="mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-16">
@@ -26,6 +34,7 @@ export default async function ProfileLayout({
           canUpload={canUpload(caps)}
           isAdmin={isAdmin}
           pendingCount={pendingCount}
+          needsEditCount={needsEditCount}
           username={user.username}
         />
         <div className="min-w-0 flex-1">{children}</div>
