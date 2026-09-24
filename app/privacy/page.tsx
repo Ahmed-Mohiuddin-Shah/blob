@@ -50,8 +50,23 @@ export default function PrivacyPage() {
             How we use data
           </h2>
           <p className="mt-2">
-            We use account and content data to run BLOB: auth, library browse,
-            uploads, moderation, and prints. We do not sell your personal data.
+            We use account and content data to run BLOB: authentication, library
+            browse, uploads, moderation, and prints. We do not sell your
+            personal data.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="text-base font-semibold text-foreground">
+            Advertising
+          </h2>
+          <p className="mt-2">
+            We may serve advertisements on BLOB (including through third-party
+            ad networks). We do not sell or rent your personal data to
+            advertisers. Ad partners may receive limited technical information
+            necessary to deliver and measure ads (for example device or browser
+            signals), subject to their own policies; we do not provide them
+            with your account profile for their independent marketing use.
           </p>
         </section>
 

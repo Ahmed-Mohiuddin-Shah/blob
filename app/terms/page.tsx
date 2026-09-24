@@ -54,6 +54,44 @@ export default function TermsPage() {
         </section>
 
         <section>
+          <h2 className="text-base font-semibold text-foreground">
+            Physical prints and sticker sheets
+          </h2>
+          <p className="mt-2">
+            We may offer for sale physical sticker sheets (prints) produced from
+            stickers and collections that are publicly available on BLOB. Any
+            such sale is limited to recovery of costs associated with
+            manufacture, packaging, hosting and related infrastructure, and
+            shipping or other transport — not a claim of ownership over the
+            underlying creative works.
+          </p>
+          <p className="mt-2">
+            Except where we expressly state otherwise, we do not claim copyright
+            or other intellectual-property rights in individual stickers,
+            print layouts, or pack compositions contributed by users or third
+            parties. Rights in those materials remain with their respective
+            owners. By making a sticker public on BLOB, you grant us a
+            non-exclusive licence to reproduce it on physical sheets solely for
+            the print offerings described above (and for operating the online
+            library). Digital downloads and on-site display remain governed by
+            the visibility and attribution settings of each sticker.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="text-base font-semibold text-foreground">Advertising</h2>
+          <p className="mt-2">
+            We may display advertisements on the service. We do not sell your
+            personal data to advertisers. How advertising relates to personal
+            information is described in our{" "}
+            <Link href="/privacy" className="font-semibold text-accent-pink hover:underline">
+              Privacy policy
+            </Link>
+            .
+          </p>
+        </section>
+
+        <section>
           <h2 className="text-base font-semibold text-foreground">Accounts</h2>
           <p className="mt-2">
             We may suspend or ban accounts that break these terms or harm the
