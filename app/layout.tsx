@@ -6,6 +6,8 @@ import { Header } from "@/components/header";
 import { Providers } from "@/components/providers";
 import { ThemeScript } from "@/components/theme-script";
 import { getSession } from "@/lib/auth";
+import { canManageUsers, canUpload } from "@/lib/capabilities";
+import { prisma } from "@/lib/prisma";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -18,13 +20,34 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const session = await getSession(
     new Request("http://localhost", { headers: reqHeaders }),
   );
-  const user = session?.user
-    ? {
+
+  let user: {
+    name?: string | null;
+    username?: string | null;
+    displayName?: string | null;
+  } | null = null;
+  let canUploadFlag = false;
+  let pendingApprovalCount = 0;
+
+  if (session?.user?.id) {
+    const dbUser = await prisma.user.findUnique({
+      where: { id: BigInt(session.user.id) },
+    });
+    if (dbUser) {
+      user = {
         name: session.user.name,
-        username: session.user.username,
-        displayName: session.user.displayName,
+        username: dbUser.username,
+        displayName: dbUser.displayName,
+      };
+      const caps = { role: dbUser.role, accountStatus: dbUser.accountStatus };
+      canUploadFlag = canUpload(caps);
+      if (canManageUsers(caps)) {
+        pendingApprovalCount = await prisma.sticker.count({
+          where: { moderationStatus: "pending_review" },
+        });
       }
-    : null;
+    }
+  }
 
   return (
     <html lang="en" suppressHydrationWarning>
@@ -35,7 +58,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <Providers>
           <BlobBackground />
           <div className="min-h-screen overflow-x-clip">
-            <Header user={user} />
+            <Header
+              user={user}
+              canUpload={canUploadFlag}
+              pendingApprovalCount={pendingApprovalCount}
+            />
             <main>{children}</main>
             <Footer />
           </div>

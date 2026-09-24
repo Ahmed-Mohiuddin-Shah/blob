@@ -9,24 +9,26 @@ datasource db {
 
 /// Local app user. Zitadel is sole IdP. Roles mirrored from Zitadel. Avatars via blobatar(username).
 model User {
-  id                 BigInt    @id @default(autoincrement())
-  zitadelId          String    @unique @map("zitadel_id") @db.VarChar(64)
-  username           String    @unique @db.VarChar(50)
-  displayName        String    @map("display_name") @db.VarChar(100)
-  email              String    @unique @db.VarChar(255)
-  emailVerifiedAt    DateTime? @map("email_verified_at") @db.Timestamptz(6)
-  role               String    @default("user") @db.VarChar(20)
-  accountStatus      String    @default("active") @map("account_status") @db.VarChar(20)
-  glassPrivatePrismId String?  @map("glass_private_prism_id") @db.Uuid
-  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                  BigInt    @id @default(autoincrement())
+  zitadelId           String    @unique @map("zitadel_id") @db.VarChar(64)
+  username            String    @unique @db.VarChar(50)
+  displayName         String    @map("display_name") @db.VarChar(100)
+  email               String    @unique @db.VarChar(255)
+  emailVerifiedAt     DateTime? @map("email_verified_at") @db.Timestamptz(6)
+  role                String    @default("user") @db.VarChar(20)
+  accountStatus       String    @default("active") @map("account_status") @db.VarChar(20)
+  glassPrivatePrismId String?   @map("glass_private_prism_id") @db.Uuid
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  glassUploads GlassUpload[]
+  glassUploads      GlassUpload[]
+  stickersCreated   Sticker[]     @relation("StickerCreatedBy")
+  stickersUploaded  Sticker[]     @relation("StickerUploadedBy")
 
   @@map("users")
 }
 
-/// Temporary Glass object tracker (profile upload/view before full stickers).
+/// Temporary Glass object tracker (legacy profile upload/view). Prefer stickers.
 model GlassUpload {
   id        BigInt   @id @default(autoincrement())
   userId    BigInt   @map("user_id")
@@ -54,4 +56,112 @@ model PublicPrism {
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@map("public_prism")
+}
+
+model Category {
+  id          BigInt    @id @default(autoincrement())
+  parentId    BigInt?   @map("parent_id")
+  slug        String    @unique @db.VarChar(80)
+  name        String    @db.VarChar(100)
+  description String?
+  sortOrder   Int       @default(0) @map("sort_order")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryTree")
+  stickers Sticker[]
+
+  @@map("categories")
+}
+
+model Tag {
+  id        BigInt   @id @default(autoincrement())
+  slug      String   @unique @db.VarChar(80)
+  name      String   @db.VarChar(80)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  stickers StickerTag[]
+
+  @@map("tags")
+}
+
+model Sticker {
+  id               BigInt    @id @default(autoincrement())
+  title            String    @db.VarChar(200)
+  description      String?
+  slug             String    @unique @db.VarChar(220)
+  createdById      BigInt    @map("created_by")
+  uploadedById     BigInt    @map("uploaded_by")
+  categoryId       BigInt?   @map("category_id")
+  authorName       String?   @map("author_name") @db.VarChar(200)
+  attribution      String?
+  sourceUrl        String?   @map("source_url") @db.VarChar(2048)
+  license          String?   @db.VarChar(100)
+  copyrightStatus  String?   @map("copyright_status") @db.VarChar(50)
+  alternateNames   String?   @map("alternate_names")
+  keywords         String?
+  visibility       String    @default("public") @db.VarChar(20)
+  moderationStatus String    @default("pending_review") @map("moderation_status") @db.VarChar(30)
+  processingStatus String    @default("processing") @map("processing_status") @db.VarChar(20)
+  processingError  String?   @map("processing_error")
+  fitMode          String    @default("pad") @map("fit_mode") @db.VarChar(10)
+  padBackground    String    @default("transparent") @map("pad_background") @db.VarChar(30)
+  viewsCount       BigInt    @default(0) @map("views_count")
+  downloadsCount   BigInt    @default(0) @map("downloads_count")
+  likesCount       BigInt    @default(0) @map("likes_count")
+  sharesCount      BigInt    @default(0) @map("shares_count")
+  searchAppearancesCount BigInt @default(0) @map("search_appearances_count")
+  publishedAt      DateTime? @map("published_at") @db.Timestamptz(6)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  createdBy  User         @relation("StickerCreatedBy", fields: [createdById], references: [id])
+  uploadedBy User         @relation("StickerUploadedBy", fields: [uploadedById], references: [id])
+  category   Category?    @relation(fields: [categoryId], references: [id])
+  tags       StickerTag[]
+  media      MediaAsset[]
+
+  @@index([moderationStatus, processingStatus, visibility])
+  @@index([uploadedById])
+  @@index([categoryId])
+  @@map("stickers")
+}
+
+model StickerTag {
+  stickerId BigInt @map("sticker_id")
+  tagId     BigInt @map("tag_id")
+
+  sticker Sticker @relation(fields: [stickerId], references: [id], onDelete: Cascade)
+  tag     Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([stickerId, tagId])
+  @@map("sticker_tags")
+}
+
+model MediaAsset {
+  id              BigInt   @id @default(autoincrement())
+  stickerId       BigInt   @map("sticker_id")
+  kind            String   @db.VarChar(20)
+  mimeType        String   @map("mime_type") @db.VarChar(100)
+  fileExtension   String   @map("file_extension") @db.VarChar(20)
+  width           Int?
+  height          Int?
+  durationMs      Int?     @map("duration_ms")
+  frameCount      Int?     @map("frame_count")
+  hasAudio        Boolean  @default(false) @map("has_audio")
+  sizeBytes       BigInt   @default(0) @map("size_bytes")
+  checksumSha256  String?  @map("checksum_sha256") @db.Char(64)
+  glassObjectId   String   @map("glass_object_id") @db.Uuid
+  glassPrismId    String   @map("glass_prism_id") @db.Uuid
+  status          String   @default("pending") @db.VarChar(20)
+  sortOrder       Int      @default(0) @map("sort_order")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  sticker Sticker @relation(fields: [stickerId], references: [id], onDelete: Cascade)
+
+  @@unique([stickerId, kind])
+  @@map("media_assets")
 }

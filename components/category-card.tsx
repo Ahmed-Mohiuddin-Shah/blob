@@ -3,14 +3,20 @@ import type { LucideIcon } from "lucide-react";
 
 type Props = {
   name: string;
+  slug: string;
   icon: LucideIcon;
   color?: string;
 };
 
-export function CategoryCard({ name, icon: Icon, color = "bg-accent-gradient" }: Props) {
+export function CategoryCard({
+  name,
+  slug,
+  icon: Icon,
+  color = "bg-accent-gradient",
+}: Props) {
   return (
     <Link
-      href={`/stickers?category=${encodeURIComponent(name)}`}
+      href={`/stickers?category=${encodeURIComponent(slug)}`}
       className="group relative rounded-3xl border border-divider bg-surface p-5 transition-all duration-300 hover:-translate-y-1 hover:border-accent-pink/30 hover:shadow-xl hover:shadow-accent-pink/5"
     >
       <div
