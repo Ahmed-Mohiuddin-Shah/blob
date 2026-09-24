@@ -15,8 +15,9 @@ export default async function ProfileUsersPage() {
       <h1 className="text-2xl font-semibold tracking-tight">Manage users</h1>
       <p className="mt-1 text-sm text-secondary">
         Role changes go to Zitadel via the service account. Account status is
-        local only. Only a superadmin can promote or demote admins; you cannot
-        change your own role.
+        local only. Only a superadmin can change status (not their own). Only a
+        superadmin can promote or demote admins; you cannot change your own
+        role.
       </p>
       <div className="mt-8 max-w-3xl">
         <AdminUsersTable

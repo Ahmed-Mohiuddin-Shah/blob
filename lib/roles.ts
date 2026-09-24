@@ -7,6 +7,12 @@ export type BlobRole = (typeof BLOB_ROLES)[number];
 export const MEMBER_ROLES = ["user", "member"] as const;
 export type MemberRole = (typeof MEMBER_ROLES)[number];
 
+/**
+ * Roles the BLOB admin UI may assign. `superadmin` is Zitadel-only
+ * (bootstrap / console) — never offered in-app.
+ */
+export const APP_ASSIGNABLE_ROLES = ["user", "member", "admin"] as const;
+
 const RANK: Record<BlobRole, number> = {
   user: 1,
   member: 2,

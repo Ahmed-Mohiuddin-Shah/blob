@@ -1,5 +1,5 @@
 import {
-  BLOB_ROLES,
+  APP_ASSIGNABLE_ROLES,
   isAdminRank,
   isBlobRole,
   isMemberRole,
@@ -66,7 +66,8 @@ export function assignableRoles(
 ): readonly BlobRole[] {
   if (sameUser(actor, target)) return [];
   if (!canManageUsers(actor)) return [];
-  if (canManageAdmins(actor)) return BLOB_ROLES;
+  // superadmin is never assignable in-app (Zitadel / bootstrap only)
+  if (canManageAdmins(actor)) return APP_ASSIGNABLE_ROLES;
   if (isAdminRank(target.role)) return [];
   return MEMBER_ROLES;
 }
@@ -75,9 +76,8 @@ export function canEditAccountStatus(
   actor: RoleChangeActor,
   target: RoleChangeTarget,
 ): boolean {
-  if (!canManageUsers(actor)) return false;
-  if (isAdminRank(target.role) && !canManageAdmins(actor)) return false;
-  return true;
+  if (sameUser(actor, target)) return false;
+  return canManageAdmins(actor);
 }
 
 /**
@@ -99,6 +99,11 @@ export function roleChangeError(
 
   if (nextRole === target.role) return null;
 
+  // Promoting to superadmin is Zitadel-only — never via BLOB UI/API
+  if (nextRole === "superadmin") {
+    return "superadmin can only be assigned in Zitadel";
+  }
+
   if (!canManageAdmins(actor)) {
     if (isAdminRank(target.role) || isAdminRank(nextRole)) {
       return "Only a superadmin can change admin roles";
@@ -108,7 +113,7 @@ export function roleChangeError(
   }
 
   // Superadmin demoting someone away from superadmin
-  if (target.role === "superadmin" && nextRole !== "superadmin") {
+  if (target.role === "superadmin") {
     if (superadminCount <= 1) {
       return "Cannot demote the last superadmin";
     }

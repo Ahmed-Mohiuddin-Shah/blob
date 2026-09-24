@@ -8,6 +8,7 @@ import {
   roleChangeError,
 } from "@/lib/capabilities";
 import {
+  APP_ASSIGNABLE_ROLES,
   BLOB_ROLES,
   highestRole,
   isBlobRole,
@@ -132,6 +133,15 @@ describe("roleChangeError", () => {
       roleChangeError(superadmin, { ...superadmin, id: "9" }, "admin", 2),
     ).toBeNull();
   });
+
+  it("rejects promoting anyone to superadmin in-app", () => {
+    expect(roleChangeError(superadmin, member, "superadmin", 1)).toBe(
+      "superadmin can only be assigned in Zitadel",
+    );
+    expect(roleChangeError(superadmin, admin, "superadmin", 1)).toBe(
+      "superadmin can only be assigned in Zitadel",
+    );
+  });
 });
 
 describe("assignableRoles / canEditAccountStatus", () => {
@@ -147,15 +157,19 @@ describe("assignableRoles / canEditAccountStatus", () => {
     expect(assignableRoles(superadmin, superadmin)).toEqual([]);
   });
 
-  it("admin only gets member roles on members", () => {
+  it("admin only gets member roles on members; cannot edit status", () => {
     expect(assignableRoles(admin, member)).toEqual(["user", "member"]);
     expect(assignableRoles(admin, admin)).toEqual([]);
-    expect(canEditAccountStatus(admin, member)).toBe(true);
+    expect(canEditAccountStatus(admin, member)).toBe(false);
     expect(canEditAccountStatus(admin, { ...admin, id: "9" })).toBe(false);
   });
 
-  it("superadmin gets all roles on others", () => {
-    expect(assignableRoles(superadmin, member)).toEqual([...BLOB_ROLES]);
+  it("superadmin gets user/member/admin only — never superadmin", () => {
+    expect(assignableRoles(superadmin, member)).toEqual([
+      ...APP_ASSIGNABLE_ROLES,
+    ]);
+    expect(assignableRoles(superadmin, member)).not.toContain("superadmin");
     expect(canEditAccountStatus(superadmin, admin)).toBe(true);
+    expect(canEditAccountStatus(superadmin, superadmin)).toBe(false);
   });
 });

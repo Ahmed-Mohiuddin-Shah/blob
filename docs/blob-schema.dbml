@@ -37,7 +37,7 @@ Table users {
   created_at timestamptz [not null]
   updated_at timestamptz [not null]
 
-  Note: 'Zitadel is the sole IdP (Auth.js OIDC + PKCE). Roles SoT = Zitadel project roles; users.role is a mirror. First local signup (and one-shot lowest-id admin if none) becomes superadmin. Profile name/email SoT = Zitadel (editable via Management API from BLOB). username local (blobatar). account_status local. No password, no avatar_url. Session is Auth.js JWT — no app sessions table.'
+  Note: 'Zitadel is the sole IdP (Auth.js OIDC + PKCE). Roles SoT = Zitadel project roles; users.role is a mirror. First local signup (and one-shot lowest-id admin if none) becomes superadmin; further superadmin grants are Zitadel-only (not via BLOB UI/API). Profile name/email SoT = Zitadel (editable via Management API from BLOB). username local (blobatar). account_status local. No password, no avatar_url. Session is Auth.js JWT — no app sessions table.'
 }
 
 // ---------------------------------------------------------------------------

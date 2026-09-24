@@ -93,7 +93,7 @@ Search must find what the user typed (title, aliases, tags, categories, keywords
 
 **Bootstrap (locked):** the first local user created on signup is assigned `superadmin` (Zitadel grant + local mirror). If an existing deployment has admins but no `superadmin`, the lowest-`id` `admin` is promoted once on sign-in.
 
-**Role-change guards (locked):** nobody may change their own role. Only `superadmin` may assign or revoke `admin` / `superadmin`. Demoting the last `superadmin` is forbidden. Admins may only set `user` / `member` on targets that are already `user` / `member`, and may not change `account_status` of admin-rank users.
+**Role-change guards (locked):** nobody may change their own role or their own `account_status`. Only `superadmin` may change `account_status` (for others). Only `superadmin` may assign or revoke `admin` in-app. `superadmin` itself is never assignable via BLOB (UI or API) — only via Zitadel (or first-signup / one-shot bootstrap). Demoting the last `superadmin` is forbidden. Admins may only set `user` / `member` on targets that are already `user` / `member`.
 
 
 
@@ -123,15 +123,17 @@ Search must find what the user typed (title, aliases, tags, categories, keywords
 | Edit own sticker metadata                        | No        | No                  | Yes    | Yes   | Yes         |
 | Manage own uploads (metadata, soft-hide request) | No        | No                  | Yes    | Yes   | Yes         |
 | Approve members (`user` ↔ `member`)              | No        | No                  | No     | Yes   | Yes         |
-| Promote / demote admins                          | No        | No                  | No     | No    | Yes         |
+| Promote / demote admins (`admin` only)           | No        | No                  | No     | No    | Yes         |
+| Assign `superadmin`                              | No††      | No††                | No††   | No††  | No††        |
 | Moderate any sticker                             | No        | No                  | No     | Yes   | Yes         |
 | Manage packs / layouts                           | No        | No                  | No     | Yes   | Yes         |
 
 
  Requires `account_status = active`.  
-† Subject to sticker visibility and download policy; unlisted requires knowing the link; private only for authorized users.
+† Subject to sticker visibility and download policy; unlisted requires knowing the link; private only for authorized users.  
+†† `superadmin` is assigned only in Zitadel (or first-signup / one-shot bootstrap), never via BLOB UI/API.
 
-**Registration defaults (locked):** `role = user` (Zitadel grant + local mirror), `account_status = active` — except the first signup, which is `superadmin`. New accounts are registered spectators (browse, search, like, download). Upload requires an admin or superadmin to grant Zitadel `member` (or higher) via BLOB admin UI. Only a superadmin may grant `admin` / `superadmin`. `account_status` of `suspended` or `banned` blocks likes, uploads, and management regardless of role. Use `pending` only when an admin deliberately gates an account before activation.
+**Registration defaults (locked):** `role = user` (Zitadel grant + local mirror), `account_status = active` — except the first signup, which is `superadmin`. New accounts are registered spectators (browse, search, like, download). Upload requires an admin or superadmin to grant Zitadel `member` (or higher) via BLOB admin UI. Only a superadmin may grant `admin` in-app; additional `superadmin` grants require Zitadel. `account_status` of `suspended` or `banned` blocks likes, uploads, and management regardless of role. Use `pending` only when an admin deliberately gates an account before activation.
 
 ---
 
@@ -147,10 +149,10 @@ Search must find what the user typed (title, aliases, tags, categories, keywords
 - No local password hash, no email/password register or login UI, no multi-account linking
 - First login upserts local `users` by `zitadel_id` (OIDC `sub`); defaults `role=user`, `account_status=active` — except the first local user, who is assigned `superadmin`. If no `superadmin` exists yet, the lowest-`id` `admin` is promoted once on sign-in (Zitadel grant + local mirror)
 - **Roles:** Zitadel project roles (`user` · `member` · `admin` · `superadmin`) are source of truth. BLOB mirrors into `users.role` from OIDC claims on login. Fine-grained capabilities stay in app code (capability matrix)
-- **Role / profile writes:** BLOB drives Zitadel via Management API using a service-account PAT (`ZITADEL_SERVICE_PAT` + org/project ids). Admins assign `user`/`member` in-app; only a superadmin may assign/revoke `admin`/`superadmin`. Nobody may change their own role; demoting the last superadmin is forbidden. Users edit display name / email in-app. No parallel role store for writes
+- **Role / profile writes:** BLOB drives Zitadel via Management API using a service-account PAT (`ZITADEL_SERVICE_PAT` + org/project ids). Admins assign `user`/`member` in-app; only a superadmin may assign/revoke `admin` in-app. `superadmin` is never assignable via BLOB — only Zitadel (or bootstrap). Nobody may change their own role; demoting the last superadmin is forbidden. Users edit display name / email in-app. No parallel role store for writes
 - Profile fields synced from Zitadel claims on login: display name, email, `email_verified_at` (never sync or display Zitadel `picture`). Users may also edit display name / email / local `username` from the BLOB profile UI
 - Local `username` set on first create (URL-safe handle); editable in BLOB only (blobatar)
-- Admin / superadmin: change `role` (via Zitadel user grant, subject to role-change guards), change `account_status` (app DB only; only superadmin may change status of admin-rank users)
+- Admin / superadmin: change `role` (via Zitadel user grant, subject to role-change guards). Only superadmin may change `account_status` (app DB only), and never their own
 - Protect routes with Next.js middleware / server-side session checks; expose role + account_status on the session for capability gates
 
 

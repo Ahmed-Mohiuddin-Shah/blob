@@ -70,7 +70,7 @@ export async function updateAdminUser(
   let nextStatus = accountStatus;
   if (accountStatus !== target.accountStatus) {
     if (!canEditAccountStatus(actor, targetCaps)) {
-      return { error: "Only a superadmin can change admin account status" };
+      return { error: "Only a superadmin can change another user's status" };
     }
   } else if (!canEditAccountStatus(actor, targetCaps)) {
     // Status field locked in UI; keep existing.
