@@ -108,6 +108,7 @@
   --color-secondary: var(--secondary);
   --color-inactive: var(--inactive);
   --color-divider: var(--divider);
+  --color-badge: var(--badge);
 }
 
 :root {
@@ -118,6 +119,7 @@
   --secondary: #808080;
   --inactive: #b0b0b0;
   --divider: rgb(0 0 0 / 0.2);
+  --badge: #e8e8e8;
 }
 
 html.dark {
@@ -128,9 +130,43 @@ html.dark {
   --secondary: rgb(255 255 255 / 0.7);
   --inactive: rgb(255 255 255 / 0.38);
   --divider: rgb(255 255 255 / 0.2);
+  --badge: #383838;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
+}
+
+/* Async / API button pending — flowing pink→orange gradient (see style guide) */
+@keyframes blob-busy {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.btn-busy {
+  color: #fff !important;
+  border-color: transparent !important;
+  background-color: transparent !important;
+  background-image: linear-gradient(
+    110deg,
+    var(--color-accent-pink),
+    var(--color-accent-orange),
+    var(--color-accent-pink),
+    var(--color-accent-orange)
+  ) !important;
+  background-size: 300% 100% !important;
+  animation: blob-busy 1.1s ease-in-out infinite;
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--color-accent-pink) 28%, transparent);
+  cursor: wait !important;
+  opacity: 1 !important;
+  transform: none !important;
+  pointer-events: none;
 }

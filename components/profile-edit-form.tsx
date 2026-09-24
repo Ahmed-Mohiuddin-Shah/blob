@@ -5,6 +5,7 @@ import {
   updateProfile,
   type ProfileActionState,
 } from "@/app/actions/profile";
+import { BusyButton } from "./busy-button";
 
 const initial: ProfileActionState = {};
 
@@ -28,7 +29,7 @@ export function ProfileEditForm({
           defaultValue={displayName}
           required
           maxLength={100}
-          className="mt-1 w-full rounded-2xl border border-divider bg-surface px-4 py-2.5 outline-none focus:border-accent-pink"
+          className="mt-1 w-full rounded-2xl border border-divider bg-surface px-4 py-2.5 outline-none transition focus:border-accent-pink/50"
         />
       </label>
       <label className="block">
@@ -38,7 +39,7 @@ export function ProfileEditForm({
           type="email"
           defaultValue={email}
           required
-          className="mt-1 w-full rounded-2xl border border-divider bg-surface px-4 py-2.5 outline-none focus:border-accent-pink"
+          className="mt-1 w-full rounded-2xl border border-divider bg-surface px-4 py-2.5 outline-none transition focus:border-accent-pink/50"
         />
       </label>
       <label className="block">
@@ -49,7 +50,7 @@ export function ProfileEditForm({
           required
           pattern="[a-zA-Z0-9_]+"
           maxLength={50}
-          className="mt-1 w-full rounded-2xl border border-divider bg-surface px-4 py-2.5 outline-none focus:border-accent-pink"
+          className="mt-1 w-full rounded-2xl border border-divider bg-surface px-4 py-2.5 outline-none transition focus:border-accent-pink/50"
         />
         <span className="mt-1 block text-xs text-secondary">
           Local handle for your blobatar. Letters, numbers, underscore.
@@ -67,13 +68,13 @@ export function ProfileEditForm({
         </p>
       ) : null}
 
-      <button
+      <BusyButton
         type="submit"
-        disabled={pending}
-        className="rounded-full bg-accent-gradient px-6 py-2.5 text-sm font-semibold text-white transition-transform duration-200 hover:scale-105 disabled:opacity-60"
+        busy={pending}
+        className="rounded-full bg-accent-gradient px-6 py-2.5 text-sm font-semibold text-white transition-transform duration-200 hover:scale-105"
       >
-        {pending ? "Saving…" : "Save profile"}
-      </button>
+        Save profile
+      </BusyButton>
     </form>
   );
 }

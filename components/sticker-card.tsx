@@ -22,9 +22,10 @@ export function StickerCard({ title, author, type, color, href }: Props) {
           </div>
         </div>
 
-        <div className="absolute right-3 top-3 rounded-full bg-background/80 px-2.5 py-1 text-[10px] font-bold tracking-wide text-foreground backdrop-blur">
+        <div className="absolute right-3 top-3 rounded-full bg-badge px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-foreground">
           {type}
         </div>
+
 
         <div className="absolute inset-0 flex items-end bg-gradient-to-t from-black/30 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100">
           <span className="p-4 text-xs font-semibold text-white">View sticker →</span>

@@ -34,7 +34,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body className="bg-background font-sans text-foreground antialiased">
         <Providers>
           <BlobBackground />
-          <div className="min-h-screen overflow-hidden">
+          <div className="min-h-screen overflow-x-clip">
             <Header user={user} />
             <main>{children}</main>
             <Footer />

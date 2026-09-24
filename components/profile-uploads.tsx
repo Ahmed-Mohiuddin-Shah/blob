@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
+import { BusyButton } from "./busy-button";
 
 export type UploadRow = {
   id: string;
@@ -67,13 +68,13 @@ export function ProfileUploads({
               className="mt-1 block w-full text-sm"
             />
           </label>
-          <button
+          <BusyButton
             type="submit"
-            disabled={pending}
-            className="rounded-full bg-accent-gradient px-5 py-2.5 text-sm font-semibold text-white transition-transform hover:scale-105 disabled:opacity-60"
+            busy={pending}
+            className="rounded-full bg-accent-gradient px-5 py-2.5 text-sm font-semibold text-white transition-transform hover:scale-105"
           >
-            {pending ? "Uploading…" : "Upload"}
-          </button>
+            Upload
+          </BusyButton>
         </form>
       ) : (
         <p className="mt-4 text-sm text-secondary">

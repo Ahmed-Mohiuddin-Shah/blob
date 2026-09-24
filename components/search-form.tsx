@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Search } from "lucide-react";
 
 type Props = {
   action?: string;
@@ -16,11 +17,9 @@ export function SearchForm({
   return (
     <div className={className}>
       <form action={action} method="GET" className="mx-auto max-w-2xl">
-        <div className="group relative flex items-center rounded-[2rem] border border-divider bg-surface p-2 shadow-xl shadow-black/5 transition-all duration-300 focus-within:border-accent-pink/50 focus-within:shadow-2xl focus-within:shadow-accent-pink/10">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center text-secondary">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.8" stroke="currentColor" className="h-5 w-5" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-4.35-4.35m1.35-5.4a6.75 6.75 0 1 1-13.5 0 6.75 6.75 0 0 1 13.5 0Z" />
-            </svg>
+        <div className="group relative flex items-center rounded-full border border-divider bg-surface p-2 shadow-xl shadow-black/5 transition-all duration-300 focus-within:border-accent-pink/50 focus-within:shadow-2xl focus-within:shadow-accent-pink/10">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center text-inactive">
+            <Search className="h-5 w-5" strokeWidth={1.75} aria-hidden />
           </div>
           <input
             type="search"
@@ -45,7 +44,7 @@ export function SearchForm({
             <Link
               key={term}
               href={`${action}?q=${encodeURIComponent(term)}`}
-              className="rounded-full border border-divider px-3 py-1.5 text-secondary transition-colors hover:border-accent-pink/40 hover:text-accent-pink"
+              className="rounded-full border border-divider bg-surface px-3 py-1.5 text-secondary transition-colors hover:border-accent-pink/40 hover:text-accent-pink"
             >
               {term}
             </Link>

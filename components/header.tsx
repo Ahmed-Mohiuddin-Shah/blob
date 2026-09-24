@@ -27,13 +27,13 @@ export function Header({ user }: { user?: SessionUser | null }) {
         </Link>
 
         <div className="hidden items-center gap-8 text-sm font-semibold sm:flex">
-          <Link href="/stickers" className="text-secondary transition-colors hover:text-foreground">
+          <Link href="/stickers" className="text-inactive transition-colors hover:text-foreground">
             Stickers
           </Link>
-          <Link href="/prints" className="text-secondary transition-colors hover:text-foreground">
+          <Link href="/prints" className="text-inactive transition-colors hover:text-foreground">
             Prints
           </Link>
-          <Link href="/collections" className="text-secondary transition-colors hover:text-foreground">
+          <Link href="/collections" className="text-inactive transition-colors hover:text-foreground">
             Collections
           </Link>
         </div>

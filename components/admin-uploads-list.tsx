@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
+import { BusyButton } from "./busy-button";
 
 export type PendingUpload = {
   id: string;
@@ -63,14 +64,14 @@ export function AdminUploadsList({ uploads }: { uploads: PendingUpload[] }) {
                 View
               </a>
               {u.status === "pending" ? (
-                <button
+                <BusyButton
                   type="button"
-                  disabled={pending}
+                  busy={pending}
                   onClick={() => approve(u.id)}
-                  className="rounded-full bg-foreground px-4 py-2 text-sm font-semibold text-background transition-transform hover:scale-105 disabled:opacity-60"
+                  className="rounded-full bg-foreground px-4 py-2 text-sm font-semibold text-background transition-transform hover:scale-105"
                 >
                   Approve
-                </button>
+                </BusyButton>
               ) : null}
             </div>
           </li>

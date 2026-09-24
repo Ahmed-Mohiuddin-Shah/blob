@@ -7,6 +7,7 @@
 1. **Bloby** — pills, soft cards (24–32px), organic blob radii for brand marks. Round over sharp.
 2. **Zune overflow** — oversized light lowercase headers sit on the content margin along their **baseline**. Ascenders/descenders may hang past that margin but must stay **fully visible** (never top- or bottom-clipped; no `overflow: hidden` on heading boxes). Colored uppercase eyebrows sit tight above titles; active = solid, idle = inactive gray.
 3. **Lucide** — all UI icons from Lucide (`lucide-react`), stroke ≈ 1.75. Decorative icons sit in circular pink→orange gradient wells.
+4. **Busy feedback** — every clickable control that runs async work, hits an API, submits a form, or otherwise waits must show loading feedback. Use the flowing pink→orange gradient (`BusyButton` + `.btn-busy` in `app/globals.css`). Disable the control, set `aria-busy`, keep the label (optional “…”). Never leave the user with a dead click and no motion.
 
 ## Fonts
 
@@ -28,6 +29,7 @@ Surfaces (`:root` / `html.dark`):
 | `--secondary` | `#808080` | `white/70` |
 | `--inactive` | `#b0b0b0` | `white/38` |
 | `--divider` | `black/20` | `white/20` |
+| `--badge` | `#e8e8e8` | `#383838` |
 
 Fixed accents (both themes):
 
@@ -55,13 +57,14 @@ Theme: `html.dark` from localStorage / system (`light` | `dark` | `system`).
 
 ## Motion
 
-Hover/focus only (no noise):
+Hover/focus only (no noise), plus required busy state:
 
 - CTAs: `hover:scale-105` / `hover:scale-[1.03]`, `duration-200`
 - Logo: `group-hover:rotate-6 group-hover:scale-105`
 - Cards: `-translate-y-1`, slight rotate, pink-tinted shadow
 - Category icons: `rotate-12 scale-110`
 - Search: focus-within pink border + pink shadow
+- **Busy / pending**: `.btn-busy` — animated accent gradient sweep (`blob-busy` keyframes). Required on Log in, Save, Upload, Approve, Sign out, and any other async control. Demo: `demo/blob/components.html` → Buttons → Busy.
 
 ## Components
 
@@ -78,6 +81,7 @@ Hover/focus only (no noise):
 | Member CTA | Large surface rounded panel, logo, CTA |
 | Profile | Centered **blobatar** (never Zitadel picture), name/@, divider dl |
 | Logo | Gradient organic square with “B” (+ optional orange dot) |
+| Busy button | `BusyButton` / `.btn-busy` — flowing pink→orange while pending |
 
 ## Icons
 
@@ -96,3 +100,4 @@ Always [blobatar](https://blobatar.dev/) from `username` (`animate="hover"`). Ne
 - Non-Lucide icon packs for UI
 - Ignore Zune eyebrow + baseline-overflow hierarchy on section headers
 - Clip heading ascenders/descenders (`overflow: hidden` on title boxes)
+- Async / API buttons without `.btn-busy` (or equivalent gradient loading feedback)

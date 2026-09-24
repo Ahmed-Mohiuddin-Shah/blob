@@ -1,4 +1,5 @@
 import { headers } from "next/headers";
+import { Cat, Dices, Gamepad2, Laugh, Smile, Sparkles } from "lucide-react";
 import { Categories } from "@/components/home/categories";
 import { Featured } from "@/components/home/featured";
 import { Hero } from "@/components/home/hero";
@@ -9,12 +10,12 @@ import { getSession } from "@/lib/auth";
 const popular = ["cat", "angry", "happy", "bruh"];
 
 const categories = [
-  { name: "Reactions", symbol: "!", className: "bg-accent-pink" },
-  { name: "Animals", symbol: "◉", className: "bg-accent-orange" },
-  { name: "Memes", symbol: "⌁", className: "bg-metro-pink" },
-  { name: "Gaming", symbol: "✦", className: "bg-metro-orange" },
-  { name: "Anime", symbol: "✧", className: "bg-accent-pink" },
-  { name: "Random", symbol: "⊙", className: "bg-accent-orange" },
+  { name: "Reactions", icon: Smile, className: "bg-accent-gradient" },
+  { name: "Animals", icon: Cat, className: "bg-accent-orange" },
+  { name: "Memes", icon: Laugh, className: "bg-metro-pink" },
+  { name: "Gaming", icon: Gamepad2, className: "bg-metro-orange" },
+  { name: "Anime", icon: Sparkles, className: "bg-accent-pink" },
+  { name: "Random", icon: Dices, className: "bg-accent-orange" },
 ];
 
 const stickers = [

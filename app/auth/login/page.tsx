@@ -8,6 +8,7 @@ import {
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
+import { BusyButton } from "@/components/busy-button";
 
 function SignInContent() {
   const searchParams = useSearchParams();
@@ -54,12 +55,12 @@ function SignInContent() {
         >
           <input type="hidden" name="csrfToken" value={csrfToken} />
           <input type="hidden" name="callbackUrl" value={callbackUrl} />
-          <button
+          <BusyButton
             type="submit"
             className="w-full rounded-full bg-foreground px-5 py-2.5 text-sm font-semibold text-background transition-transform duration-200 hover:scale-105"
           >
             Sign in with {provider.name}
-          </button>
+          </BusyButton>
         </form>
       )}
 

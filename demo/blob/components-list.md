@@ -16,6 +16,7 @@
 | # | 类别 | 变体 | 来源 | CSS 类名 | 状态覆盖 | 依赖 token |
 |---|------|------|------|----------|----------|------------|
 | 1 | Button | primary | screenshot | `.ds-button--primary` | default, hover, active, disabled | `--button-primary-*`, `--gradient-accent` |
+| 2 | Button | busy / pending | inferred | `.ds-button--busy` / `.btn-busy` | pending | `--gradient-accent`, `blob-busy` |
 | 2 | Button | secondary | inferred | `.ds-button--secondary` | default, hover, disabled | `--color-accent-pink` |
 | 3 | Button | ghost | inferred | `.ds-button--ghost` | default, hover, disabled | `--button-ghost-text` |
 | 4 | Button | icon | inferred | `.ds-button--icon` | default, hover, disabled | `--button-primary-*`, Lucide |

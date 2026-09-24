@@ -1,7 +1,8 @@
+import type { LucideIcon } from "lucide-react";
 import { CategoryCard } from "../category-card";
 import { SectionHeading } from "../section-heading";
 
-export type CategoryItem = { name: string; symbol: string; className: string };
+export type CategoryItem = { name: string; icon: LucideIcon; className: string };
 
 export function Categories({ categories }: { categories: CategoryItem[] }) {
   return (
@@ -9,7 +10,7 @@ export function Categories({ categories }: { categories: CategoryItem[] }) {
       <SectionHeading eyebrow="Explore" title="Browse the blob" href="/categories" link="All categories →" linkClassName="hidden sm:block" />
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
         {categories.map((c) => (
-          <CategoryCard key={c.name} name={c.name} symbol={c.symbol} color={c.className} />
+          <CategoryCard key={c.name} name={c.name} icon={c.icon} color={c.className} />
         ))}
       </div>
     </section>

@@ -6,6 +6,7 @@ import {
   type AdminUserActionState,
 } from "@/app/actions/admin-users";
 import { BLOB_ROLES } from "@/lib/roles";
+import { BusyButton } from "./busy-button";
 
 const STATUSES = ["active", "pending", "suspended", "banned"] as const;
 const initial: AdminUserActionState = {};
@@ -63,13 +64,13 @@ function UserRowForm({ user }: { user: AdminUserRow }) {
             ))}
           </select>
         </label>
-        <button
+        <BusyButton
           type="submit"
-          disabled={pending}
-          className="rounded-full bg-foreground px-4 py-2 text-sm font-semibold text-background transition-transform hover:scale-105 disabled:opacity-60"
+          busy={pending}
+          className="rounded-full bg-foreground px-4 py-2 text-sm font-semibold text-background transition-transform hover:scale-105"
         >
-          {pending ? "…" : "Save"}
-        </button>
+          Save
+        </BusyButton>
       </div>
       {state.error ? (
         <p className="w-full text-sm text-accent-orange" role="alert">
