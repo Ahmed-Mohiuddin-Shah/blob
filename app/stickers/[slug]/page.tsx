@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
+import { AttributionClaimForm } from "@/components/attribution-claim-form";
+import { AttributionCredit } from "@/components/attribution-credit";
 import { StickerMedia } from "@/components/sticker-media";
-import { getSession } from "@/lib/auth";
+import { getSession, signInUrl } from "@/lib/auth";
 import { canModerate } from "@/lib/capabilities";
 import { prisma } from "@/lib/prisma";
 import { canAccessSticker, isPublicBrowseable } from "@/lib/stickers";
@@ -36,6 +38,7 @@ export default async function StickerDetailPage({
   );
   let viewerId: bigint | null = null;
   let isAdmin = false;
+  let contactDefaults: { contactName: string; contactEmail: string } | undefined;
   if (session?.user?.id) {
     const u = await prisma.user.findUnique({
       where: { id: BigInt(session.user.id) },
@@ -46,6 +49,10 @@ export default async function StickerDetailPage({
         role: u.role,
         accountStatus: u.accountStatus,
       });
+      contactDefaults = {
+        contactName: u.displayName,
+        contactEmail: u.email,
+      };
     }
   }
 
@@ -56,6 +63,18 @@ export default async function StickerDetailPage({
     notFound();
   }
 
+  const pendingClaim =
+    viewerId != null
+      ? await prisma.attributionClaim.findFirst({
+          where: {
+            stickerId: sticker.id,
+            claimantId: viewerId,
+            status: "pending",
+          },
+          select: { id: true },
+        })
+      : null;
+
   const type = typeFromMedia(sticker.media.map((m) => m.kind));
   const mediaKind =
     type === "VIDEO" ? "video" : type === "GIF" ? "gif" : "image";
@@ -63,6 +82,11 @@ export default async function StickerDetailPage({
     (m) => m.kind === mediaKind && m.status === "ready",
   );
   const displayKind = hasKind ? mediaKind : "thumbnail";
+
+  const creditLabel =
+    sticker.authorName ||
+    sticker.createdBy.displayName ||
+    sticker.createdBy.username;
 
   return (
     <section className="mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-16">
@@ -90,9 +114,14 @@ export default async function StickerDetailPage({
           <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">
             {sticker.title}
           </h1>
-          <p className="mt-2 text-sm text-secondary">
-            by {sticker.createdBy.displayName || sticker.createdBy.username}
-          </p>
+          <div className="mt-2">
+            <AttributionCredit
+              label={creditLabel}
+              sourceUrl={sticker.sourceUrl}
+              showInfo={!!sticker.sourceUrl}
+              className="text-sm [&_span]:text-sm"
+            />
+          </div>
 
           {sticker.description ? (
             <p className="mt-6 text-sm leading-relaxed text-secondary">
@@ -131,6 +160,14 @@ export default async function StickerDetailPage({
               </Link>
             </p>
           ) : null}
+
+          <AttributionClaimForm
+            stickerId={sticker.id.toString()}
+            signedIn={viewerId != null}
+            signInHref={signInUrl({ redirectTo: `/stickers/${sticker.slug}` })}
+            defaults={contactDefaults}
+            alreadyPending={!!pendingClaim}
+          />
         </div>
       </div>
     </section>

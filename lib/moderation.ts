@@ -5,6 +5,7 @@ export const MODERATION_SUBJECT = {
   collection: "collection",
   stickerPack: "sticker_pack",
   printLayout: "print_layout",
+  attributionClaim: "attribution_claim",
 } as const;
 
 export type ModerationSubjectType =
@@ -19,6 +20,9 @@ export const MODERATION_ACTION = {
   edited: "edited",
   hidden: "hidden",
   deleted: "deleted",
+  claimSubmitted: "claim_submitted",
+  claimApproved: "claim_approved",
+  claimRejected: "claim_rejected",
 } as const;
 
 export type ModerationAction =

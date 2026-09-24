@@ -21,10 +21,12 @@ model User {
   createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  glassUploads      GlassUpload[]
-  stickersCreated   Sticker[]           @relation("StickerCreatedBy")
-  stickersUploaded  Sticker[]           @relation("StickerUploadedBy")
-  moderationEvents  ModerationEvent[]
+  glassUploads              GlassUpload[]
+  stickersCreated           Sticker[]           @relation("StickerCreatedBy")
+  stickersUploaded          Sticker[]           @relation("StickerUploadedBy")
+  moderationEvents          ModerationEvent[]
+  attributionClaims         AttributionClaim[]  @relation("AttributionClaimant")
+  attributionClaimsReviewed AttributionClaim[]  @relation("AttributionClaimReviewer")
 
   @@map("users")
 }
@@ -115,8 +117,10 @@ model Sticker {
   createdById      BigInt    @map("created_by")
   uploadedById     BigInt    @map("uploaded_by")
   categoryId       BigInt?   @map("category_id")
+  /// Credit label when attribution is present (upload/claim). Null = no attribution.
   authorName       String?   @map("author_name") @db.VarChar(200)
   attribution      String?
+  /// Source link when attribution is present. Null = no attribution.
   sourceUrl        String?   @map("source_url") @db.VarChar(2048)
   license          String?   @db.VarChar(100)
   copyrightStatus  String?   @map("copyright_status") @db.VarChar(50)
@@ -138,16 +142,45 @@ model Sticker {
   createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  createdBy  User         @relation("StickerCreatedBy", fields: [createdById], references: [id])
-  uploadedBy User         @relation("StickerUploadedBy", fields: [uploadedById], references: [id])
-  category   Category?    @relation(fields: [categoryId], references: [id])
-  tags       StickerTag[]
-  media      MediaAsset[]
+  createdBy          User               @relation("StickerCreatedBy", fields: [createdById], references: [id])
+  uploadedBy         User               @relation("StickerUploadedBy", fields: [uploadedById], references: [id])
+  category           Category?          @relation(fields: [categoryId], references: [id])
+  tags               StickerTag[]
+  media              MediaAsset[]
+  attributionClaims  AttributionClaim[]
 
   @@index([moderationStatus, processingStatus, visibility])
   @@index([uploadedById])
   @@index([categoryId])
   @@map("stickers")
+}
+
+/// Signed-in user claim that attribution is missing or mislabeled.
+model AttributionClaim {
+  id                  BigInt    @id @default(autoincrement())
+  stickerId           BigInt    @map("sticker_id")
+  claimantId          BigInt    @map("claimant_id")
+  reason              String    @db.VarChar(20)
+  contactName         String    @map("contact_name") @db.VarChar(200)
+  contactEmail        String    @map("contact_email") @db.VarChar(255)
+  message             String?
+  proposedAuthorName  String    @map("proposed_author_name") @db.VarChar(200)
+  proposedSourceUrl   String    @map("proposed_source_url") @db.VarChar(2048)
+  status              String    @default("pending") @db.VarChar(20)
+  adminNote           String?   @map("admin_note")
+  reviewedById        BigInt?   @map("reviewed_by")
+  reviewedAt          DateTime? @map("reviewed_at") @db.Timestamptz(6)
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  sticker    Sticker @relation(fields: [stickerId], references: [id], onDelete: Cascade)
+  claimant   User    @relation("AttributionClaimant", fields: [claimantId], references: [id])
+  reviewedBy User?   @relation("AttributionClaimReviewer", fields: [reviewedById], references: [id])
+
+  @@index([status, createdAt(sort: Desc)])
+  @@index([stickerId])
+  @@index([claimantId, stickerId, status])
+  @@map("attribution_claims")
 }
 
 model StickerTag {

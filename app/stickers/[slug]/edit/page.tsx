@@ -80,6 +80,9 @@ export default async function StickerEditPage({
             visibility: sticker.visibility,
             categoryId: sticker.categoryId?.toString() ?? "",
             tags: sticker.tags.map((t) => t.tag.name).join(", "),
+            hasAttribution: sticker.authorName && sticker.sourceUrl ? "yes" : "no",
+            authorName: sticker.authorName ?? "",
+            sourceUrl: sticker.sourceUrl ?? "",
             moderationNote: sticker.moderationNote,
             moderationStatus: sticker.moderationStatus,
           }}

@@ -67,8 +67,8 @@ export async function GET(
     const glass = getGlass();
     const res = await glass.objects.download(asset.glassObjectId);
     const buf = Buffer.from(await res.arrayBuffer());
-    const contentType =
-      res.headers.get("content-type") || asset.mimeType || "application/octet-stream";
+    // Prefer DB mime — Glass may guess Content-Type from object title.
+    const contentType = asset.mimeType || "application/octet-stream";
     const cache = isPublicBrowseable(sticker)
       ? "public, max-age=300"
       : "private, max-age=60";

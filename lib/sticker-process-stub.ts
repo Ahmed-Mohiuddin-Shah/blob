@@ -1,3 +1,4 @@
+import { createHash } from "crypto";
 import sharp from "sharp";
 import { getGlass } from "@/lib/glass";
 import { prisma } from "@/lib/prisma";
@@ -35,6 +36,12 @@ async function processStickerStub(stickerId: bigint): Promise<void> {
     const glass = getGlass();
     const res = await glass.objects.download(original.glassObjectId);
     const bytes = Buffer.from(await res.arrayBuffer());
+    const declared = res.headers.get("content-length");
+    if (declared && Number(declared) > 0 && bytes.length !== Number(declared)) {
+      throw new Error(
+        `Download truncated (${bytes.length} vs Content-Length ${declared})`,
+      );
+    }
     const fitMode = sticker.fitMode as FitMode;
     const padBg = sticker.padBackground;
 
@@ -46,13 +53,15 @@ async function processStickerStub(stickerId: bigint): Promise<void> {
         prismId: original.glassPrismId,
         file: new Uint8Array(square),
         title: `${sticker.slug}-image`,
-        filename: `${sticker.slug}.webp`,
+        filename: `${sticker.slug}.png`,
+        fileExtension: "png",
       });
       const thumbUp = await glass.objects.upload({
         prismId: original.glassPrismId,
         file: new Uint8Array(thumb),
         title: `${sticker.slug}-thumb`,
-        filename: `${sticker.slug}-thumb.webp`,
+        filename: `${sticker.slug}-thumb.png`,
+        fileExtension: "png",
       });
 
       await prisma.mediaAsset.upsert({
@@ -60,19 +69,25 @@ async function processStickerStub(stickerId: bigint): Promise<void> {
         create: {
           stickerId,
           kind: "image",
-          mimeType: "image/webp",
-          fileExtension: "webp",
+          mimeType: "image/png",
+          fileExtension: "png",
           width: SQUARE_SIZE,
           height: SQUARE_SIZE,
           sizeBytes: BigInt(square.length),
+          checksumSha256: sha256Hex(square),
           glassObjectId: imageUp.object_id,
           glassPrismId: original.glassPrismId,
           status: "ready",
         },
         update: {
+          mimeType: "image/png",
+          fileExtension: "png",
+          width: SQUARE_SIZE,
+          height: SQUARE_SIZE,
           glassObjectId: imageUp.object_id,
           glassPrismId: original.glassPrismId,
           sizeBytes: BigInt(square.length),
+          checksumSha256: sha256Hex(square),
           status: "ready",
         },
       });
@@ -81,19 +96,25 @@ async function processStickerStub(stickerId: bigint): Promise<void> {
         create: {
           stickerId,
           kind: "thumbnail",
-          mimeType: "image/webp",
-          fileExtension: "webp",
+          mimeType: "image/png",
+          fileExtension: "png",
           width: THUMB_SIZE,
           height: THUMB_SIZE,
           sizeBytes: BigInt(thumb.length),
+          checksumSha256: sha256Hex(thumb),
           glassObjectId: thumbUp.object_id,
           glassPrismId: original.glassPrismId,
           status: "ready",
         },
         update: {
+          mimeType: "image/png",
+          fileExtension: "png",
+          width: THUMB_SIZE,
+          height: THUMB_SIZE,
           glassObjectId: thumbUp.object_id,
           glassPrismId: original.glassPrismId,
           sizeBytes: BigInt(thumb.length),
+          checksumSha256: sha256Hex(thumb),
           status: "ready",
         },
       });
@@ -167,13 +188,15 @@ async function processStickerStub(stickerId: bigint): Promise<void> {
   }
 }
 
-async function renderSquare(
+/** Exported for tests / reprocess. */
+export async function renderSquare(
   bytes: Buffer,
   fitMode: FitMode,
   padBackground: string,
   size: number,
 ): Promise<Buffer> {
-  let pipeline = sharp(bytes).rotate();
+  // failOn truncated rejects partial JPEG/PNG decodes that otherwise bake garbage.
+  let pipeline = sharp(bytes, { failOn: "truncated" }).rotate().toColourspace("srgb");
 
   if (fitMode === "crop") {
     pipeline = pipeline.resize(size, size, { fit: "cover", position: "centre" });
@@ -188,7 +211,20 @@ async function renderSquare(
     });
   }
 
-  return pipeline.webp({ quality: 85 }).toBuffer();
+  // ponytail: PNG not WebP — nearLossless WebP injected top-half chroma banding on JPEG line art
+  const out = await pipeline.png({ compressionLevel: 9 }).toBuffer();
+
+  const meta = await sharp(out, { failOn: "error" }).metadata();
+  if (meta.width !== size || meta.height !== size || meta.format !== "png") {
+    throw new Error(
+      `Derived PNG mismatch (${meta.format} ${meta.width}x${meta.height}, expected png ${size})`,
+    );
+  }
+  return out;
+}
+
+function sha256Hex(buf: Buffer): string {
+  return createHash("sha256").update(buf).digest("hex");
 }
 
 function hexToRgba(hex: string): { r: number; g: number; b: number; alpha: number } {

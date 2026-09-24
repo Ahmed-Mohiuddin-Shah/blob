@@ -15,6 +15,7 @@ import {
   VISIBILITIES,
   type Visibility,
 } from "@/lib/stickers";
+import { parseAttributionInput } from "@/lib/attribution";
 
 async function sessionUser() {
   const reqHeaders = await headers();
@@ -112,6 +113,21 @@ export async function PATCH(
           .slice(0, 20)
       : undefined;
 
+  let authorName: string | null | undefined;
+  let sourceUrl: string | null | undefined;
+  if (typeof body.hasAttribution === "string") {
+    const attribution = parseAttributionInput({
+      hasAttribution: body.hasAttribution,
+      authorName: typeof body.authorName === "string" ? body.authorName : "",
+      sourceUrl: typeof body.sourceUrl === "string" ? body.sourceUrl : "",
+    });
+    if ("error" in attribution) {
+      return NextResponse.json({ error: attribution.error }, { status: 400 });
+    }
+    authorName = attribution.authorName;
+    sourceUrl = attribution.sourceUrl;
+  }
+
   const wasNeedsEdit = sticker.moderationStatus === "needs_edit";
   const nextTitle = title ?? sticker.title;
 
@@ -123,6 +139,7 @@ export async function PATCH(
         ...(description !== undefined ? { description } : {}),
         ...(visibility !== undefined ? { visibility } : {}),
         ...(categoryId !== undefined ? { categoryId } : {}),
+        ...(authorName !== undefined ? { authorName, sourceUrl } : {}),
         ...(wasNeedsEdit
           ? { moderationStatus: "pending_review", moderationNote: null }
           : {}),

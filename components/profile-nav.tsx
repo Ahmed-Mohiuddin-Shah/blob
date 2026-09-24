@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Clock,
+  Flag,
   History,
   ImageIcon,
   LayoutDashboard,
@@ -18,6 +19,7 @@ type Props = {
   isAdmin: boolean;
   pendingCount: number;
   needsEditCount: number;
+  claimsCount: number;
   username: string;
 };
 
@@ -33,6 +35,7 @@ export function ProfileNav({
   isAdmin,
   pendingCount,
   needsEditCount,
+  claimsCount,
   username,
 }: Props) {
   const pathname = usePathname();
@@ -87,6 +90,18 @@ export function ProfileNav({
         </Link>
         {isAdmin ? (
           <>
+            <Link
+              href="/profile/claims"
+              className={linkClass(pathname.startsWith("/profile/claims"))}
+            >
+              <Flag className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+              Claims
+              {claimsCount > 0 ? (
+                <span className="ml-auto rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold text-white">
+                  {claimsCount}
+                </span>
+              ) : null}
+            </Link>
             <Link
               href="/profile/history"
               className={linkClass(pathname.startsWith("/profile/history"))}

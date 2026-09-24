@@ -9,12 +9,14 @@ role: user | member | admin
 account_status: active | pending | suspended | banned
 visibility: public | unlisted | private
 moderation_status: draft | pending_review | needs_edit | approved | rejected | hidden | deleted
-moderation_action: submitted | approved | rejected | edit_requested | resubmitted | edited | hidden | deleted
-moderation_subject_type: sticker | collection | sticker_pack | print_layout
+moderation_action: submitted | approved | rejected | edit_requested | resubmitted | edited | hidden | deleted | claim_submitted | claim_approved | claim_rejected
+moderation_subject_type: sticker | collection | sticker_pack | print_layout | attribution_claim
 processing_status: processing | ready | failed
 media_kind: original | image | gif | video | thumbnail
 media_asset_status: pending | ready | failed
 fit_mode: crop | fit | pad
+attribution_claim_reason: missing | mislabeled
+attribution_claim_status: pending | approved | rejected
 print_format: pdf | png
 print_status: pending | ready | failed
 
@@ -100,12 +102,12 @@ Table tags {
 
 Table moderation_events {
   id bigserial [pk]
-  subject_type varchar(40) [not null, note: 'sticker | collection | sticker_pack | print_layout']
+  subject_type varchar(40) [not null, note: 'sticker | collection | sticker_pack | print_layout | attribution_claim']
   subject_id bigint [not null, note: 'No FK — survives hard delete of subject']
   subject_title varchar(220) [not null, note: 'Snapshot title for history after purge']
-  action varchar(40) [not null, note: 'submitted | approved | rejected | edit_requested | resubmitted | edited | hidden | deleted']
+  action varchar(40) [not null, note: 'submitted | approved | rejected | edit_requested | resubmitted | edited | hidden | deleted | claim_submitted | claim_approved | claim_rejected']
   actor_id bigint [not null, ref: > users.id]
-  note text [null, note: 'Required at API for edit_requested']
+  note text [null, note: 'Required for edit_requested and claim approve/reject']
   created_at timestamptz [not null]
 
   indexes {
@@ -141,9 +143,9 @@ Table stickers {
 
   category_id bigint [null, ref: > categories.id, note: 'Single primary category']
 
-  author_name varchar(200) [null, note: 'Display attribution if different from created_by']
-  attribution text [null]
-  source_url varchar(2048) [null]
+  author_name varchar(200) [null, note: 'Credit label when Has attribution = Yes; null when No']
+  attribution text [null, note: 'Optional freeform credit text; v1 UI uses author_name + source_url']
+  source_url varchar(2048) [null, note: 'Source link when Has attribution = Yes; null when No']
   license varchar(100) [null]
   copyright_status varchar(50) [null]
 
@@ -171,7 +173,33 @@ Table stickers {
   created_at timestamptz [not null]
   updated_at timestamptz [not null]
 
-  Note: 'Primary content object. Binaries live in media_assets → GLASS. Media/fit_mode immutable after create; metadata editable by owner/admin. Reject = hard purge (GLASS objects then row).'
+  Note: 'Primary content object. Binaries live in media_assets → GLASS. Media/fit_mode immutable after create; metadata editable by owner/admin. Reject = hard purge (GLASS objects then row). Upload requires Has attribution Yes/No; Yes needs author_name + source_url.'
+}
+
+Table attribution_claims {
+  id bigserial [pk]
+  sticker_id bigint [not null, ref: > stickers.id]
+  claimant_id bigint [not null, ref: > users.id, note: 'Signed-in user only']
+  reason varchar(20) [not null, note: 'missing | mislabeled']
+  contact_name varchar(200) [not null]
+  contact_email varchar(255) [not null]
+  message text [null]
+  proposed_author_name varchar(200) [not null]
+  proposed_source_url varchar(2048) [not null]
+  status varchar(20) [not null, default: 'pending', note: 'pending | approved | rejected']
+  admin_note text [null, note: 'Required on approve/reject']
+  reviewed_by bigint [null, ref: > users.id]
+  reviewed_at timestamptz [null]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  indexes {
+    (status, created_at) [name: 'idx_attribution_claims_queue']
+    sticker_id [name: 'idx_attribution_claims_sticker']
+    (claimant_id, sticker_id, status) [name: 'idx_attribution_claims_claimant']
+  }
+
+  Note: 'Signed-in claim that source is missing or mislabeled. Approve auto-applies proposed_author_name + proposed_source_url onto the sticker. Events also land in moderation_events (subject_type=attribution_claim).'
 }
 
 Table sticker_tags {

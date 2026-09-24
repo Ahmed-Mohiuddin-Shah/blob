@@ -12,7 +12,7 @@ export default async function ProfileLayout({
   const caps = { role: user.role, accountStatus: user.accountStatus };
   const isAdmin = canManageUsers(caps);
 
-  const [pendingCount, needsEditCount] = await Promise.all([
+  const [pendingCount, needsEditCount, claimsCount] = await Promise.all([
     prisma.sticker.count({
       where: {
         moderationStatus: "pending_review",
@@ -25,6 +25,9 @@ export default async function ProfileLayout({
         uploadedById: user.id,
       },
     }),
+    isAdmin
+      ? prisma.attributionClaim.count({ where: { status: "pending" } })
+      : Promise.resolve(0),
   ]);
 
   return (
@@ -35,6 +38,7 @@ export default async function ProfileLayout({
           isAdmin={isAdmin}
           pendingCount={pendingCount}
           needsEditCount={needsEditCount}
+          claimsCount={claimsCount}
           username={user.username}
         />
         <div className="min-w-0 flex-1">{children}</div>

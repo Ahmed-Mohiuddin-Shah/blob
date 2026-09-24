@@ -17,6 +17,7 @@ import {
   type FitMode,
   type Visibility,
 } from "@/lib/stickers";
+import { parseAttributionInput } from "@/lib/attribution";
 import {
   MODERATION_ACTION,
   MODERATION_SUBJECT,
@@ -66,6 +67,7 @@ export async function GET(request: Request) {
       { category: { name: { contains: q, mode: "insensitive" } } },
       { createdBy: { username: { contains: q, mode: "insensitive" } } },
       { createdBy: { displayName: { contains: q, mode: "insensitive" } } },
+      { authorName: { contains: q, mode: "insensitive" } },
     ];
   }
 
@@ -93,7 +95,9 @@ export async function GET(request: Request) {
       id: s.id.toString(),
       title: s.title,
       slug: s.slug,
-      author: s.createdBy.displayName || s.createdBy.username,
+      author: s.authorName || s.createdBy.displayName || s.createdBy.username,
+      authorName: s.authorName,
+      sourceUrl: s.sourceUrl,
       username: s.createdBy.username,
       category: s.category?.name ?? null,
       categorySlug: s.category?.slug ?? null,
@@ -174,6 +178,15 @@ export async function POST(request: Request) {
     .filter(Boolean)
     .slice(0, 20);
 
+  const attribution = parseAttributionInput({
+    hasAttribution: String(form.get("hasAttribution") ?? ""),
+    authorName: String(form.get("authorName") ?? ""),
+    sourceUrl: String(form.get("sourceUrl") ?? ""),
+  });
+  if ("error" in attribution) {
+    return NextResponse.json({ error: attribution.error }, { status: 400 });
+  }
+
   const bytes = new Uint8Array(await file.arrayBuffer());
   const detected = detectUpload(bytes, file.type || "application/octet-stream");
   if (!detected) {
@@ -210,6 +223,8 @@ export async function POST(request: Request) {
           createdById: user.id,
           uploadedById: user.id,
           categoryId,
+          authorName: attribution.authorName,
+          sourceUrl: attribution.sourceUrl,
           visibility,
           moderationStatus: "pending_review",
           processingStatus: "processing",

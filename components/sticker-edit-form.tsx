@@ -12,6 +12,9 @@ export type StickerEditInitial = {
   visibility: string;
   categoryId: string;
   tags: string;
+  hasAttribution: "yes" | "no";
+  authorName: string;
+  sourceUrl: string;
   moderationNote?: string | null;
   moderationStatus: string;
 };
@@ -26,6 +29,7 @@ export function StickerEditForm({
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hasAttribution, setHasAttribution] = useState(initial.hasAttribution);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -39,6 +43,9 @@ export function StickerEditForm({
       visibility: String(fd.get("visibility") ?? "public"),
       categoryId: String(fd.get("categoryId") ?? ""),
       tags: String(fd.get("tags") ?? ""),
+      hasAttribution: String(fd.get("hasAttribution") ?? ""),
+      authorName: String(fd.get("authorName") ?? ""),
+      sourceUrl: String(fd.get("sourceUrl") ?? ""),
     };
     try {
       const res = await fetch(`/api/stickers/${initial.id}`, {
@@ -95,6 +102,48 @@ export function StickerEditForm({
           className="mt-1 w-full rounded-2xl border border-divider bg-surface px-4 py-2.5 outline-none transition focus:border-accent-pink/50"
         />
       </label>
+
+      <label className="block">
+        <span className="text-secondary">Has attribution?</span>
+        <select
+          name="hasAttribution"
+          required
+          value={hasAttribution}
+          onChange={(e) => setHasAttribution(e.target.value as "yes" | "no")}
+          className="mt-1 w-full rounded-2xl border border-divider bg-surface px-4 py-2.5 outline-none"
+        >
+          <option value="yes">Yes — credit a source</option>
+          <option value="no">No attribution</option>
+        </select>
+      </label>
+
+      {hasAttribution === "yes" ? (
+        <>
+          <label className="block">
+            <span className="text-secondary">Attribution label</span>
+            <input
+              name="authorName"
+              required
+              maxLength={200}
+              defaultValue={initial.authorName}
+              placeholder="Artist or source name"
+              className="mt-1 w-full rounded-2xl border border-divider bg-surface px-4 py-2.5 outline-none transition focus:border-accent-pink/50"
+            />
+          </label>
+          <label className="block">
+            <span className="text-secondary">Source link</span>
+            <input
+              name="sourceUrl"
+              type="url"
+              required
+              maxLength={2048}
+              defaultValue={initial.sourceUrl}
+              placeholder="https://"
+              className="mt-1 w-full rounded-2xl border border-divider bg-surface px-4 py-2.5 outline-none transition focus:border-accent-pink/50"
+            />
+          </label>
+        </>
+      ) : null}
 
       <label className="block">
         <span className="text-secondary">Visibility</span>

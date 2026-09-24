@@ -91,7 +91,8 @@ export default async function HomePage() {
       <Featured
         stickers={stickers.map((s) => ({
           title: s.title,
-          author: s.createdBy.displayName || s.createdBy.username,
+          author: s.authorName || s.createdBy.displayName || s.createdBy.username,
+          sourceUrl: s.sourceUrl,
           type: typeFromMedia(s.media.map((m) => m.kind)),
           href: `/stickers/${s.slug}`,
           thumbUrl: `/api/stickers/${s.id}/media/thumbnail`,

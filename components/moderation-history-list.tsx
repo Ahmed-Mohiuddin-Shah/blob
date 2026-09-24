@@ -17,6 +17,7 @@ type EventItem = {
 const SUBJECT_FILTERS = [
   { value: "", label: "All" },
   { value: "sticker", label: "Stickers" },
+  { value: "attribution_claim", label: "Claims" },
   { value: "collection", label: "Collections" },
   { value: "sticker_pack", label: "Packs" },
   { value: "print_layout", label: "Layouts" },

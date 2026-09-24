@@ -51,7 +51,9 @@ Search must find what the user typed (title, aliases, tags, categories, keywords
 | Email verification                    | Deferred (column reserved; no v1 flow required)                                                                                               |
 | Favorites / collections / tag aliases | Tables in schema; UI deferred to Should-have unless noted                                                                                     |
 | Tag display names                     | Stored **ALL CAPS** on save (`ANGRY CAT`); slug remains lowercase                                                                             |
-| Moderation history                    | Shared polymorphic `moderation_events` (stickers now; collections / packs / layouts later)                                                    |
+| Moderation history                    | Shared polymorphic `moderation_events` (stickers + attribution claims now; collections / packs / layouts later) |
+| Attribution on upload                 | Required Yes/No; Yes requires `author_name` (label) + `source_url` (http/https)                                 |
+| Attribution claims                    | Signed-in only; admin approve auto-applies proposed label+URL; approve/reject require admin note               |
 
 
 ---
@@ -171,7 +173,11 @@ A **sticker** is the primary content object. Required metadata fields:
 - Primary `category_id` (nullable until set; admins/members should set before approve)
 - Tags (many)
 - Alternate names / keywords (for search)
-- Attribution: author_name, attribution, source_url, license, copyright_status
+- Attribution (required on create):
+  - Upload asks **Has attribution?** Yes / No
+  - Yes → required `author_name` (credit label) + `source_url` (http/https)
+  - No → both null
+  - Optional later: `attribution` freeform, `license`, `copyright_status`
 - `visibility`: `public` | `unlisted` | `private`
 - `moderation_status`: `draft` | `pending_review` | `needs_edit` | `approved` | `rejected` | `hidden` | `deleted`
 - `moderation_note`: current open edit-request reason (cleared on resubmit)
@@ -298,7 +304,7 @@ Any **new** sticker binary (create upload): browser → Next.js Route Handler �
 
 ### 8.4 Original retention
 
-Keep the **original** in GLASS whenever legally/technically appropriate so processing settings can be revisited in a future version without re-upload. v1 still does **not** expose post-create reprocess UI.
+Keep the **original** in GLASS whenever legally/technically appropriate so processing settings can be revisited in a future version without re-upload. Admins may **reprocess** derived `image`/`thumbnail` from the original when a rendering bug is fixed (`POST /api/stickers/{id}/reprocess`).
 
 ---
 
@@ -319,7 +325,21 @@ Admins can: approve, **request edit** (required note/reason), reject (hard purge
 
 **Edit request:** set `moderation_status = needs_edit` and `moderation_note`. Owner or admin edits metadata (media immutable). On save from `needs_edit`, status returns to `pending_review` and note clears (`resubmitted` event).
 
-**Shared history:** all moderation actions write to polymorphic `moderation_events` (`subject_type` + `subject_id`, no subject FK). Stickers use it now; collections, sticker packs, and print layouts reuse the same table and admin history UI when those domains gain moderation.
+**Shared history:** all moderation actions write to polymorphic `moderation_events` (`subject_type` + `subject_id`, no subject FK). Stickers and attribution claims use it now; collections, sticker packs, and print layouts reuse the same table and admin history UI when those domains gain moderation.
+
+### 9.1 Attribution claims
+
+Signed-in users may **claim attribution** on any sticker they can view:
+
+- Reason: `missing` | `mislabeled`
+- Required: contact name/email, proposed credit label (`proposed_author_name`), proposed source URL, short message that this is theirs
+- One **pending** claim per user per sticker
+- Admin queue at profile **Claims** (facets: reason, status)
+- Approve / reject both require an admin note
+- **Approve auto-applies** `proposed_author_name` → `author_name` and `proposed_source_url` → `source_url` on the sticker
+- Events: `claim_submitted` / `claim_approved` / `claim_rejected` with `subject_type = attribution_claim`
+
+Cards and detail show credit label (linked to `source_url` when set) plus an info popover.
 
 Public browse/search includes only stickers that are:
 
@@ -494,6 +514,10 @@ POST   /api/stickers
 POST   /api/stickers/{id}/approve
 POST   /api/stickers/{id}/reject          # purge GLASS objects then delete row
 POST   /api/stickers/{id}/request-edit    # body: { note } required
+POST   /api/stickers/{id}/reprocess       # admin; regenerate derived image/thumbnail from original
+POST   /api/stickers/{id}/attribution-claims  # signed-in; body: reason, contact, proposed label+URL, message
+POST   /api/attribution-claims/{id}/approve   # admin; body: { note } required; auto-applies credit
+POST   /api/attribution-claims/{id}/reject    # admin; body: { note } required
 
 GET    /api/moderation/events             # admin; cursor pagination; filters subjectType/action
 
@@ -548,7 +572,8 @@ POST   /api/prints/generate
 - [ ] Shared `moderation_events` history (paginated admin UI)
 - [ ] Tag names ALL CAPS on save
 - [ ] Visibility public|unlisted|private
-- [ ] Ownership / attribution fields
+- [ ] Ownership / attribution fields (required Yes/No on upload; label + source URL)
+- [ ] Attribution claims (signed-in) + admin Claims queue + history
 - [ ] Likes (UI)
 - [ ] Sticker packs + print layouts + PDF/PNG generation with cache
 - [ ] GLASS-backed storage via MediaStorage
