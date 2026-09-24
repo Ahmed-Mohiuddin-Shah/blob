@@ -3,7 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { getSession } from "@/lib/auth";
-import { canManageUsers } from "@/lib/capabilities";
+import {
+  canEditAccountStatus,
+  canManageUsers,
+  roleChangeError,
+} from "@/lib/capabilities";
 import { isBlobRole, type BlobRole } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import { setUserRole, ZitadelMgmtError } from "@/lib/zitadel-mgmt";
@@ -46,6 +50,33 @@ export async function updateAdminUser(
   });
   if (!target) return { error: "User not found" };
 
+  const actor = {
+    id: admin.id,
+    role: admin.role,
+    accountStatus: admin.accountStatus,
+  };
+  const targetCaps = {
+    id: target.id,
+    role: target.role,
+    accountStatus: target.accountStatus,
+  };
+
+  const superadminCount = await prisma.user.count({
+    where: { role: "superadmin" },
+  });
+  const roleErr = roleChangeError(actor, targetCaps, role, superadminCount);
+  if (roleErr) return { error: roleErr };
+
+  let nextStatus = accountStatus;
+  if (accountStatus !== target.accountStatus) {
+    if (!canEditAccountStatus(actor, targetCaps)) {
+      return { error: "Only a superadmin can change admin account status" };
+    }
+  } else if (!canEditAccountStatus(actor, targetCaps)) {
+    // Status field locked in UI; keep existing.
+    nextStatus = target.accountStatus;
+  }
+
   try {
     if (role !== target.role) {
       await setUserRole(target.zitadelId, role as BlobRole);
@@ -61,9 +92,10 @@ export async function updateAdminUser(
 
   await prisma.user.update({
     where: { id: target.id },
-    data: { role, accountStatus },
+    data: { role, accountStatus: nextStatus },
   });
 
+  revalidatePath("/profile/users");
   revalidatePath("/admin/users");
   return { ok: true };
 }

@@ -5,7 +5,7 @@
 # Enums are documented as notes; store as text/varchar + app validation
 # (or PostgreSQL ENUM / CHECK in migrations).
 #
-role: user | member | admin
+role: user | member | admin | superadmin
 account_status: active | pending | suspended | banned
 visibility: public | unlisted | private
 moderation_status: draft | pending_review | needs_edit | approved | rejected | hidden | deleted
@@ -31,13 +31,13 @@ Table users {
   display_name varchar(100) [not null]
   email varchar(255) [unique, not null]
   email_verified_at timestamptz [null, note: 'From Zitadel email_verified claim']
-  role varchar(20) [not null, default: 'user', note: 'Mirror of Zitadel project role: user | member | admin']
+  role varchar(20) [not null, default: 'user', note: 'Mirror of Zitadel project role: user | member | admin | superadmin']
   account_status varchar(20) [not null, default: 'active', note: 'Local only: active | pending | suspended | banned']
   glass_private_prism_id uuid [null, note: 'Per-user private GLASS PRISM for pending uploads']
   created_at timestamptz [not null]
   updated_at timestamptz [not null]
 
-  Note: 'Zitadel is the sole IdP (Auth.js OIDC + PKCE). Roles SoT = Zitadel project roles; users.role is a mirror. Profile name/email SoT = Zitadel (editable via Management API from BLOB). username local (blobatar). account_status local. No password, no avatar_url. Session is Auth.js JWT — no app sessions table.'
+  Note: 'Zitadel is the sole IdP (Auth.js OIDC + PKCE). Roles SoT = Zitadel project roles; users.role is a mirror. First local signup (and one-shot lowest-id admin if none) becomes superadmin. Profile name/email SoT = Zitadel (editable via Management API from BLOB). username local (blobatar). account_status local. No password, no avatar_url. Session is Auth.js JWT — no app sessions table.'
 }
 
 // ---------------------------------------------------------------------------

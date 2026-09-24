@@ -4,13 +4,46 @@ import { randomUUID } from "crypto";
 import * as oidc from "openid-client";
 import type { JWT } from "@auth/core/jwt";
 import { attributesFromClaims } from "@/lib/zitadel-user-mapper";
-import { rolesFromClaims } from "@/lib/roles";
+import { rolesFromClaims, type BlobRole } from "@/lib/roles";
 import { zitadelScopes } from "@/lib/scopes";
 import { setUserRole, zitadelProjectId } from "@/lib/zitadel-mgmt";
 
 async function getPrisma() {
   const { prisma } = await import("@/lib/prisma");
   return prisma;
+}
+
+type PrismaClient = Awaited<ReturnType<typeof getPrisma>>;
+
+/**
+ * One-shot: if no local superadmin exists, promote the lowest-id admin
+ * via Zitadel + local mirror. Returns that user's id when promoted.
+ */
+async function ensureBootstrapSuperadmin(
+  prisma: PrismaClient,
+): Promise<bigint | null> {
+  const has = await prisma.user.findFirst({
+    where: { role: "superadmin" },
+    select: { id: true },
+  });
+  if (has) return null;
+
+  const firstAdmin = await prisma.user.findFirst({
+    where: { role: "admin" },
+    orderBy: { id: "asc" },
+  });
+  if (!firstAdmin) return null;
+
+  try {
+    await setUserRole(firstAdmin.zitadelId, "superadmin");
+  } catch (err) {
+    console.warn("Zitadel bootstrap superadmin skipped:", err);
+  }
+  await prisma.user.update({
+    where: { id: firstAdmin.id },
+    data: { role: "superadmin" },
+  });
+  return firstAdmin.id;
 }
 
 async function refreshAccessToken(token: JWT): Promise<JWT> {
@@ -98,7 +131,7 @@ export const authOptions: NextAuthConfig = {
           .preferred_username,
       });
 
-      const role = rolesFromClaims(
+      const claimedRole = rolesFromClaims(
         profile as Record<string, unknown>,
         zitadelProjectId(),
       );
@@ -108,6 +141,10 @@ export const authOptions: NextAuthConfig = {
       });
 
       if (!existing) {
+        const userCount = await prisma.user.count();
+        // First signup owns the platform — forces superadmin even if claims say user.
+        const role: BlobRole =
+          userCount === 0 ? "superadmin" : claimedRole;
         await prisma.user.create({
           data: {
             zitadelId: attrs.zitadelId,
@@ -126,6 +163,21 @@ export const authOptions: NextAuthConfig = {
           console.warn("Zitadel setUserRole on signup skipped:", err);
         }
       } else {
+        const promotedId = await ensureBootstrapSuperadmin(prisma);
+        // Claims lag after Management API grant until re-auth; keep local superadmin.
+        let role: BlobRole = claimedRole;
+        if (promotedId !== null && existing.id === promotedId) {
+          role = "superadmin";
+        } else if (existing.role === "superadmin") {
+          role = "superadmin";
+          if (claimedRole !== "superadmin") {
+            try {
+              await setUserRole(attrs.zitadelId, "superadmin");
+            } catch (err) {
+              console.warn("Zitadel re-assert superadmin skipped:", err);
+            }
+          }
+        }
         await prisma.user.update({
           where: { id: existing.id },
           data: {

@@ -1,12 +1,30 @@
 /** Coarse BLOB roles — Zitadel project role keys + local mirror. */
 
-export const BLOB_ROLES = ["user", "member", "admin"] as const;
+export const BLOB_ROLES = ["user", "member", "admin", "superadmin"] as const;
 export type BlobRole = (typeof BLOB_ROLES)[number];
 
-const RANK: Record<BlobRole, number> = { user: 1, member: 2, admin: 3 };
+/** Roles an admin (non-superadmin) may assign. */
+export const MEMBER_ROLES = ["user", "member"] as const;
+export type MemberRole = (typeof MEMBER_ROLES)[number];
+
+const RANK: Record<BlobRole, number> = {
+  user: 1,
+  member: 2,
+  admin: 3,
+  superadmin: 4,
+};
 
 export function isBlobRole(value: string): value is BlobRole {
   return (BLOB_ROLES as readonly string[]).includes(value);
+}
+
+export function isMemberRole(value: string): value is MemberRole {
+  return (MEMBER_ROLES as readonly string[]).includes(value);
+}
+
+/** Admin or superadmin — elevated management ranks. */
+export function isAdminRank(role: string): boolean {
+  return role === "admin" || role === "superadmin";
 }
 
 /** Highest of known BLOB roles; default `user`. */

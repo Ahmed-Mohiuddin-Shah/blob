@@ -83,11 +83,17 @@ Search must find what the user typed (title, aliases, tags, categories, keywords
 ### 4.1 User role
 
 
-| Value    | Meaning                                       |
-| -------- | --------------------------------------------- |
-| `user`   | Registered spectator (default after register) |
-| `member` | Approved contributor; may upload              |
-| `admin`  | Full management                               |
+| Value         | Meaning                                                                 |
+| ------------- | ----------------------------------------------------------------------- |
+| `user`        | Registered spectator (default after register)                           |
+| `member`      | Approved contributor; may upload                                        |
+| `admin`       | Moderate content and manage member-level users                          |
+| `superadmin`  | Full management; sole role that may promote/demote admins               |
+
+
+**Bootstrap (locked):** the first local user created on signup is assigned `superadmin` (Zitadel grant + local mirror). If an existing deployment has admins but no `superadmin`, the lowest-`id` `admin` is promoted once on sign-in.
+
+**Role-change guards (locked):** nobody may change their own role. Only `superadmin` may assign or revoke `admin` / `superadmin`. Demoting the last `superadmin` is forbidden. Admins may only set `user` / `member` on targets that are already `user` / `member`, and may not change `account_status` of admin-rank users.
 
 
 
@@ -103,28 +109,29 @@ Search must find what the user typed (title, aliases, tags, categories, keywords
 | `banned`    | Permanently blocked                         |
 
 
-**Upload and management require** `account_status = active` **and** an appropriate `role`. Suspended/banned users must not upload or manage content even if role remains `member`/`admin` until status is restored.
+**Upload and management require** `account_status = active` **and** an appropriate `role`. Suspended/banned users must not upload or manage content even if role remains `member`/`admin`/`superadmin` until status is restored.
 
 ### 4.3 Capability matrix
 
 
-| Capability                                       | Anonymous | Registered (`user`) | Member | Admin |
-| ------------------------------------------------ | --------- | ------------------- | ------ | ----- |
-| Browse / search public                           | Yes       | Yes                 | Yes    | Yes   |
-| Like                                             | No        | Yes*                | Yes*   | Yes*  |
-| Download                                         | Yes†      | Yes†                | Yes†   | Yes†  |
-| Upload stickers                                  | No        | No                  | Yes    | Yes   |
-| Edit own sticker metadata                        | No        | No                  | Yes    | Yes   |
-| Manage own uploads (metadata, soft-hide request) | No        | No                  | Yes    | Yes   |
-| Approve members                                  | No        | No                  | No     | Yes   |
-| Moderate any sticker                             | No        | No                  | No     | Yes   |
-| Manage packs / layouts                           | No        | No                  | No     | Yes   |
+| Capability                                       | Anonymous | Registered (`user`) | Member | Admin | Super Admin |
+| ------------------------------------------------ | --------- | ------------------- | ------ | ----- | ----------- |
+| Browse / search public                           | Yes       | Yes                 | Yes    | Yes   | Yes         |
+| Like                                             | No        | Yes*                | Yes*   | Yes*  | Yes*        |
+| Download                                         | Yes†      | Yes†                | Yes†   | Yes†  | Yes†        |
+| Upload stickers                                  | No        | No                  | Yes    | Yes   | Yes         |
+| Edit own sticker metadata                        | No        | No                  | Yes    | Yes   | Yes         |
+| Manage own uploads (metadata, soft-hide request) | No        | No                  | Yes    | Yes   | Yes         |
+| Approve members (`user` ↔ `member`)              | No        | No                  | No     | Yes   | Yes         |
+| Promote / demote admins                          | No        | No                  | No     | No    | Yes         |
+| Moderate any sticker                             | No        | No                  | No     | Yes   | Yes         |
+| Manage packs / layouts                           | No        | No                  | No     | Yes   | Yes         |
 
 
  Requires `account_status = active`.  
 † Subject to sticker visibility and download policy; unlisted requires knowing the link; private only for authorized users.
 
-**Registration defaults (locked):** `role = user` (Zitadel grant + local mirror), `account_status = active`. New accounts are registered spectators (browse, search, like, download). Upload requires an admin to grant Zitadel `member` (or `admin`) via BLOB admin UI. `account_status` of `suspended` or `banned` blocks likes, uploads, and management regardless of role. Use `pending` only when an admin deliberately gates an account before activation.
+**Registration defaults (locked):** `role = user` (Zitadel grant + local mirror), `account_status = active` — except the first signup, which is `superadmin`. New accounts are registered spectators (browse, search, like, download). Upload requires an admin or superadmin to grant Zitadel `member` (or higher) via BLOB admin UI. Only a superadmin may grant `admin` / `superadmin`. `account_status` of `suspended` or `banned` blocks likes, uploads, and management regardless of role. Use `pending` only when an admin deliberately gates an account before activation.
 
 ---
 
@@ -138,12 +145,12 @@ Search must find what the user typed (title, aliases, tags, categories, keywords
 
 - Login / logout via **Zitadel only** (OIDC + PKCE through Auth.js). Auth.js must register a single Zitadel provider — no Credentials, Google, GitHub, Apple, magic-link, or other providers
 - No local password hash, no email/password register or login UI, no multi-account linking
-- First login upserts local `users` by `zitadel_id` (OIDC `sub`); defaults `role=user`, `account_status=active`
-- **Roles:** Zitadel project roles (`user`  `member`  `admin`) are source of truth. BLOB mirrors into `users.role` from OIDC claims on login. Fine-grained capabilities stay in app code (capability matrix)
-- **Role / profile writes:** BLOB drives Zitadel via Management API using a service-account PAT (`ZITADEL_SERVICE_PAT` + org/project ids). Admins assign roles in-app; users edit display name / email in-app. No parallel role store for writes
+- First login upserts local `users` by `zitadel_id` (OIDC `sub`); defaults `role=user`, `account_status=active` — except the first local user, who is assigned `superadmin`. If no `superadmin` exists yet, the lowest-`id` `admin` is promoted once on sign-in (Zitadel grant + local mirror)
+- **Roles:** Zitadel project roles (`user` · `member` · `admin` · `superadmin`) are source of truth. BLOB mirrors into `users.role` from OIDC claims on login. Fine-grained capabilities stay in app code (capability matrix)
+- **Role / profile writes:** BLOB drives Zitadel via Management API using a service-account PAT (`ZITADEL_SERVICE_PAT` + org/project ids). Admins assign `user`/`member` in-app; only a superadmin may assign/revoke `admin`/`superadmin`. Nobody may change their own role; demoting the last superadmin is forbidden. Users edit display name / email in-app. No parallel role store for writes
 - Profile fields synced from Zitadel claims on login: display name, email, `email_verified_at` (never sync or display Zitadel `picture`). Users may also edit display name / email / local `username` from the BLOB profile UI
 - Local `username` set on first create (URL-safe handle); editable in BLOB only (blobatar)
-- Admin: change `role` (via Zitadel user grant), change `account_status` (app DB only)
+- Admin / superadmin: change `role` (via Zitadel user grant, subject to role-change guards), change `account_status` (app DB only; only superadmin may change status of admin-rank users)
 - Protect routes with Next.js middleware / server-side session checks; expose role + account_status on the session for capability gates
 
 

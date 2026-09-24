@@ -66,7 +66,7 @@ async function mgmtJson<T>(
 
 let rolesEnsured = false;
 
-/** Ensure project roles user/member/admin exist (idempotent). */
+/** Ensure project roles user/member/admin/superadmin exist (idempotent). */
 export async function ensureProjectRoles(): Promise<void> {
   if (rolesEnsured) return;
   const { projectId } = config();
