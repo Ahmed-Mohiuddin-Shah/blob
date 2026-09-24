@@ -5,7 +5,7 @@ import { StickerMedia } from "@/components/sticker-media";
 import { getSession } from "@/lib/auth";
 import { canModerate } from "@/lib/capabilities";
 import { prisma } from "@/lib/prisma";
-import { isPublicBrowseable } from "@/lib/stickers";
+import { canAccessSticker, isPublicBrowseable } from "@/lib/stickers";
 
 function typeFromMedia(kinds: string[]): string {
   if (kinds.includes("video")) return "VIDEO";
@@ -51,12 +51,8 @@ export default async function StickerDetailPage({
 
   const isOwner =
     viewerId === sticker.uploadedById || viewerId === sticker.createdById;
-  const unlistedOk =
-    sticker.visibility === "unlisted" &&
-    sticker.moderationStatus === "approved" &&
-    sticker.processingStatus === "ready";
 
-  if (!isPublicBrowseable(sticker) && !unlistedOk && !isOwner && !isAdmin) {
+  if (!canAccessSticker(sticker, { viewerId, isAdmin })) {
     notFound();
   }
 

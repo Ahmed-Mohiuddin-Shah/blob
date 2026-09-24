@@ -23,6 +23,9 @@ export function Footer() {
           <Link href="/terms" className="transition-colors hover:text-foreground">
             Terms
           </Link>
+          <Link href="/privacy" className="transition-colors hover:text-foreground">
+            Privacy
+          </Link>
         </div>
 
         <p className="text-xs text-inactive">Made of pixels and questionable decisions.</p>

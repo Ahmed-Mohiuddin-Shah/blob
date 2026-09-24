@@ -328,7 +328,7 @@ Public browse/search includes only stickers that are:
 - `visibility = public`
 
 Unlisted: reachable by direct link when approved+ready; excluded from search/browse listings.  
-Private: only owner and admins.
+Private: only owner after approve; admins may view only while pending review or needs edit (not after approve).
 
 ---
 

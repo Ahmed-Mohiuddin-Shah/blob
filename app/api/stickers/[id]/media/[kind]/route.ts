@@ -4,7 +4,7 @@ import { getSession } from "@/lib/auth";
 import { canModerate } from "@/lib/capabilities";
 import { getGlass } from "@/lib/glass";
 import { prisma } from "@/lib/prisma";
-import { isPublicBrowseable } from "@/lib/stickers";
+import { canAccessSticker, isPublicBrowseable } from "@/lib/stickers";
 
 async function sessionUser() {
   const reqHeaders = await headers();
@@ -36,17 +36,18 @@ export async function GET(
   }
 
   const user = await sessionUser();
-  const isOwner = user?.id === sticker.uploadedById || user?.id === sticker.createdById;
-  const isAdmin =
+  const isAdmin = !!(
     user &&
-    canModerate({ role: user.role, accountStatus: user.accountStatus });
+    canModerate({ role: user.role, accountStatus: user.accountStatus })
+  );
 
-  if (!isPublicBrowseable(sticker)) {
-    if (sticker.visibility === "unlisted" && sticker.moderationStatus === "approved" && sticker.processingStatus === "ready") {
-      // unlisted: anyone with link
-    } else if (!isOwner && !isAdmin) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+  if (
+    !canAccessSticker(sticker, {
+      viewerId: user?.id ?? null,
+      isAdmin,
+    })
+  ) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   let asset = sticker.media.find((m) => m.kind === kind && m.status === "ready");

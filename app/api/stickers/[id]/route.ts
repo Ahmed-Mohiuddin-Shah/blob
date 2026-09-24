@@ -9,6 +9,7 @@ import {
 } from "@/lib/moderation";
 import { prisma } from "@/lib/prisma";
 import {
+  canAccessSticker,
   normalizeTagName,
   tagSlug,
   VISIBILITIES,
@@ -49,7 +50,13 @@ export async function PATCH(
 
   const isOwner =
     sticker.uploadedById === user.id || sticker.createdById === user.id;
-  if (!isOwner && !isAdmin) {
+  if (
+    !isOwner &&
+    !(
+      isAdmin &&
+      canAccessSticker(sticker, { viewerId: user.id, isAdmin: true })
+    )
+  ) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

@@ -134,3 +134,31 @@ export function isPublicBrowseable(s: {
     s.processingStatus === "ready"
   );
 }
+
+/** View/media gate: approved private is owner-only (admins lose access after approve). */
+export function canAccessSticker(
+  s: {
+    visibility: string;
+    moderationStatus: string;
+    processingStatus: string;
+    uploadedById: bigint;
+    createdById: bigint;
+  },
+  viewer: { viewerId: bigint | null; isAdmin: boolean },
+): boolean {
+  if (isPublicBrowseable(s)) return true;
+  if (
+    s.visibility === "unlisted" &&
+    s.moderationStatus === "approved" &&
+    s.processingStatus === "ready"
+  ) {
+    return true;
+  }
+  const isOwner =
+    viewer.viewerId !== null &&
+    (viewer.viewerId === s.uploadedById || viewer.viewerId === s.createdById);
+  if (isOwner) return true;
+  // Admins may view while moderating; not after approve when private.
+  if (viewer.isAdmin && s.moderationStatus !== "approved") return true;
+  return false;
+}
