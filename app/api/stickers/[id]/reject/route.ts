@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { headers } from "next/headers";
+import { GlassError } from "glass-ts";
 import { getSession } from "@/lib/auth";
 import { canModerate } from "@/lib/capabilities";
 import { getGlass } from "@/lib/glass";
@@ -50,15 +51,27 @@ export async function POST(
     actorId: admin.id,
   });
 
+  // GIF/video stub may point several kinds at the same object_id.
+  const objects = new Map<string, string>();
+  for (const asset of sticker.media) {
+    objects.set(asset.glassObjectId, asset.glassPrismId);
+  }
+
   try {
     const glass = getGlass();
-    for (const asset of sticker.media) {
+    for (const [objectId, prismId] of objects) {
       try {
-        await glass.prisms.unlinkObject(asset.glassPrismId, asset.glassObjectId);
+        await glass.prisms.unlinkObject(prismId, objectId);
       } catch {
         // ponytail: unlink best-effort before delete
       }
-      await glass.objects.delete(asset.glassObjectId);
+      try {
+        await glass.objects.delete(objectId);
+      } catch (err) {
+        // Already gone (prior partial reject, or shared id deleted earlier) — fine.
+        if (err instanceof GlassError && err.status === 404) continue;
+        throw err;
+      }
     }
   } catch (err) {
     console.error("Reject GLASS purge failed:", err);
