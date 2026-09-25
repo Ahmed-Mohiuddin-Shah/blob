@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { Blender } from "lucide-react";
 import { AttributionCredit } from "./attribution-credit";
+import { AddToCollectionButton } from "./add-to-collection-button";
+import { FavouriteButton } from "./favourite-button";
+import { RemoveFromCollectionButton } from "./remove-from-collection-button";
 import { StickerMedia } from "./sticker-media";
 
 export type StickerCardProps = {
@@ -13,6 +16,15 @@ export type StickerCardProps = {
   status?: string | null;
   /** When set, show Remix icon button (member+). */
   remixHref?: string | null;
+  /** Sticker id for favourite / collection actions. */
+  stickerId?: string | null;
+  favourited?: boolean;
+  signedIn?: boolean;
+  signInHref?: string;
+  showActions?: boolean;
+  /** Owner remove from this collection (min 1 sticker enforced by API). */
+  collectionSlug?: string | null;
+  canRemoveFromCollection?: boolean;
 };
 
 export function StickerCard({
@@ -24,7 +36,16 @@ export function StickerCard({
   thumbUrl,
   status,
   remixHref,
+  stickerId,
+  favourited = false,
+  signedIn = false,
+  signInHref,
+  showActions = false,
+  collectionSlug,
+  canRemoveFromCollection = false,
 }: StickerCardProps) {
+  const actions = showActions && stickerId;
+
   return (
     <div className="group">
       <div className="relative aspect-square overflow-hidden rounded-[2rem] border border-divider bg-surface transition-all duration-300 group-hover:-translate-y-1 group-hover:rotate-[1deg] group-hover:shadow-2xl group-hover:shadow-accent-pink/10">
@@ -47,16 +68,44 @@ export function StickerCard({
           </div>
         ) : null}
 
-        {remixHref ? (
-          <Link
-            href={remixHref}
-            title="Remix"
-            aria-label="Remix"
-            className="absolute bottom-3 right-3 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-accent-gradient text-white shadow-lg transition hover:scale-105"
-          >
-            <Blender className="h-5 w-5" strokeWidth={1.75} />
-          </Link>
+        {collectionSlug && stickerId ? (
+          <RemoveFromCollectionButton
+            collectionSlug={collectionSlug}
+            stickerId={stickerId}
+            canRemove={canRemoveFromCollection}
+          />
         ) : null}
+
+        <div className="absolute bottom-3 right-3 z-10 flex flex-col gap-2">
+          {actions ? (
+            <>
+              <FavouriteButton
+                subjectType="sticker"
+                subjectId={stickerId}
+                initialFavourited={favourited}
+                signedIn={signedIn}
+                signInHref={signInHref}
+                variant="icon"
+              />
+              <AddToCollectionButton
+                stickerId={stickerId}
+                signedIn={signedIn}
+                signInHref={signInHref}
+                variant="icon"
+              />
+            </>
+          ) : null}
+          {remixHref ? (
+            <Link
+              href={remixHref}
+              title="Remix"
+              aria-label="Remix"
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-accent-gradient text-white shadow-lg transition hover:scale-105"
+            >
+              <Blender className="h-5 w-5" strokeWidth={1.75} />
+            </Link>
+          ) : null}
+        </div>
 
         <Link
           href={href}

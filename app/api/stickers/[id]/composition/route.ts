@@ -57,7 +57,7 @@ export async function POST(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  if (!isAdmin && !canOwnerEditSticker(sticker.moderationStatus)) {
+  if (!canOwnerEditSticker(sticker.moderationStatus)) {
     return NextResponse.json(
       { error: "Sticker is awaiting review and cannot be edited" },
       { status: 409 },
@@ -198,7 +198,7 @@ export async function GET(
   if (!isOwner && !isAdmin) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
-  if (!isAdmin && !canOwnerEditSticker(sticker.moderationStatus)) {
+  if (!canOwnerEditSticker(sticker.moderationStatus)) {
     return NextResponse.json(
       { error: "Sticker is awaiting review and cannot be edited" },
       { status: 409 },

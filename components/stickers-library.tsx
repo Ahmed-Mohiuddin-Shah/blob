@@ -10,16 +10,20 @@ import {
 } from "./library-search";
 import type { CategoryPill } from "./category-pills";
 
-type ApiItem = StickerCardProps & { id: string };
+type ApiItem = StickerCardProps & { id: string; favourited?: boolean };
 
 export function StickersLibrary({
   categories,
   initialQ,
   initialCategory,
+  signedIn = false,
+  signInHref,
 }: {
   categories: CategoryPill[];
   initialQ: string;
   initialCategory: string;
+  signedIn?: boolean;
+  signInHref?: string;
 }) {
   const sentinelRef = useRef<HTMLDivElement>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
@@ -44,10 +48,18 @@ export function StickersLibrary({
         items: ApiItem[];
         nextCursor: string | null;
       };
-      setItems((prev) => (replace ? json.items : [...prev, ...json.items]));
+      const mapped: StickerCardProps[] = json.items.map((item) => ({
+        ...item,
+        stickerId: item.id,
+        favourited: !!item.favourited,
+        signedIn,
+        signInHref,
+        showActions: true,
+      }));
+      setItems((prev) => (replace ? mapped : [...prev, ...mapped]));
       setCursor(json.nextCursor);
     },
-    [initialQ, initialCategory],
+    [initialQ, initialCategory, signedIn, signInHref],
   );
 
   useEffect(() => {

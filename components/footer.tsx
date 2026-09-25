@@ -20,6 +20,9 @@ export function Footer() {
           <Link href="/prints" className="transition-colors hover:text-foreground">
             Prints
           </Link>
+          <Link href="/collections" className="transition-colors hover:text-foreground">
+            Collections
+          </Link>
           <Link href="/terms" className="transition-colors hover:text-foreground">
             Terms
           </Link>

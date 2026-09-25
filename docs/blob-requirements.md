@@ -16,7 +16,7 @@ This document freezes v1. Implement against this file and the DBML. Do not reope
 BLOB is a **public sticker library and sticker creation/browsing website** with two major areas:
 
 1. **Library** — browse, search, filter, view, download/share stickers; members create/remix via the composition editor; admins moderate.
-2. **Prints** — premade sticker packs and printable layouts; users select pack + layout and download a generated sheet (PDF/PNG).
+2. **Prints** — premade **sticker packs** (bundles of sheets) and printable layouts; users compose or download **sticker sheets** (single PDF page or sheet image). Product UI deferred; see §14.
 
 **Stack (v1):**
 
@@ -61,7 +61,8 @@ Search must find what the user typed (title, aliases, tags, categories, keywords
 | Prints                                | Separate domain: packs, layouts, generated_prints; generate on demand + cache                                                                 |
 | Video audio                           | Optional: preserve when present; not required; do not strip by default                                                                        |
 | Email verification                    | Deferred (column reserved; no v1 flow required)                                                                                               |
-| Favorites / collections / tag aliases | Tables in schema; UI deferred to Should-have unless noted                                                                                     |
+| Favorites / collections               | Tables + UI **Must** this pass. Collections always public; favourites private (profile). Tag aliases still deferred.                           |
+| Sticker Sheet vs Pack                 | **Sheet** = single printable page (one PDF page or one sheet image/PNG). **Pack** = bundle of multiple sheets/PDFs. Layout = geometry template. |
 | Tag display names                     | Stored **ALL CAPS** on save (`ANGRY CAT`); slug remains lowercase                                                                             |
 | Moderation history                    | Shared polymorphic `moderation_events` (stickers + attribution claims now; collections / packs / layouts later) |
 | Attribution on upload                 | Required Yes/No; Yes requires `author_name` (label) + `source_url` (http/https)                                 |
@@ -488,11 +489,11 @@ Member saves composition → pending_review → Admin → approved | needs_edit 
 needs_edit → owner or admin edits metadata and/or composition (new revision) → pending_review
 ```
 
-Admins can: approve, **request edit** (required note/reason), reject (hard purge), hide, soft-delete (`moderation_status = deleted`), edit metadata, change tags/category, change ownership (`created_by` / `uploaded_by`).
+Admins can: approve, **request edit** (required note/reason), reject (hard purge), hide, soft-delete (`moderation_status = deleted`), change tags/category, change ownership (`created_by` / `uploaded_by`). **Metadata and composition edits** (owner or admin) require `moderation_status` of `approved` or `needs_edit` — no role bypasses this gate (including admins). Pending / draft / rejected stickers cannot be edited until unlocked.
 
 **Reject (locked):** delete sticker-linked media objects from GLASS as required, then delete the local sticker row (cascades composition, media, tag pivots). Shared `assets` retained if still referenced by other compositions; otherwise eligible for GC. Record a `rejected` row in `moderation_events` before purge so history survives. Soft `rejected` status is not retained for this action.
 
-**Edit request:** set `moderation_status = needs_edit` and `moderation_note`. Owner or admin may edit metadata and/or composition (new revision). On save from `needs_edit`, status returns to `pending_review` and note clears (`resubmitted` event).
+**Edit request:** set `moderation_status = needs_edit` and `moderation_note`. Owner or admin may then edit metadata and/or composition (new revision). On save from `needs_edit`, status returns to `pending_review` and note clears (`resubmitted` event).
 
 **Still previews in open queues:** pending / needs_edit / approval UIs show current stills; when a newer revision exists, may show previous vs current side-by-side (stills only — no JSON diff). **On approve:** delete derivative `media_assets` (and GLASS objects) whose `composition_revision_id` is not the current revision so prior-edit previews are not retained.
 
@@ -570,14 +571,33 @@ Do not store tags as a comma string on the sticker row.
 ## 13. Likes, favorites, collections
 
 
-| Feature     | Semantics              | v1                                              |
-| ----------- | ---------------------- | ----------------------------------------------- |
-| Like        | “I like this”          | **Must** — UI + `sticker_likes` + `likes_count` |
-| Favorite    | “Save to find again”   | Schema **Must**; UI **Should**                  |
-| Collections | User lists of stickers | Schema **Must**; UI **Should**                  |
+| Feature     | Semantics                         | v1                                                              |
+| ----------- | --------------------------------- | --------------------------------------------------------------- |
+| Like        | “I like this”                     | **Must** — UI + `sticker_likes` + `likes_count` (likes UI still open) |
+| Favorite    | Private bookmark “find again”     | **Must** — polymorphic `favorites` + Favourites UI at `/profile/favourites` |
+| Collections | Public named lists of stickers    | **Must** — always public; unique name + slug; tags; **1–60** stickers; not deletable; `/collections` |
 
 
-Likes and favorites are distinct tables.
+Likes and favorites are distinct. Favourites do **not** use a sticker-only join: `favorites` is polymorphic (`subject_type` + `subject_id`).
+
+### Collections
+
+- Always **public** (no visibility column).
+- **Globally unique** `name` and `slug` across all users.
+- Tags via `collection_tags` (reuse `tags` table; ALL CAPS names).
+- Members: stickers only for now (`collection_stickers`), **1–60** stickers (cannot delete the collection; cannot remove the last sticker).
+- Future: collections may also hold sticker sheets / packs (not in this pass).
+- Browse `/collections` with search + infinite-scroll cursor pagination.
+- Search matches collection **name** and titles of **stickers inside** the collection.
+- Card/detail: `PlayingCardsFan` adds a sticker to a collection (modal: pick own / create). Owner can remove stickers down to one remaining.
+
+### Favourites
+
+- Private to the signed-in user; page at **`/profile/favourites`** (profile sub-nav only; not main header).
+- `subject_type`: `sticker` \| `collection` \| `sticker_sheet` \| `sticker_pack`.
+- This pass UI: favourite **stickers** and **collections** only (`sticker_sheet` / `sticker_pack` reserved).
+- Searchable (by subject title) + infinite-scroll cursor pagination.
+- Card/detail: `Heart` toggles favourite on stickers; collection detail also has Heart.
 
 ---
 
@@ -585,19 +605,27 @@ Likes and favorites are distinct tables.
 
 ## 14. Prints domain
 
-**Deferred for product UI** (schema may exist; do not ship PrintLayout / encodePrint host flows in this pass). Treat as separate from the core sticker row when built:
+**Deferred for product UI** (schema may exist; do not ship PrintLayout / encodePrint host flows in this pass).
+
+### Glossary (locked)
+
+| Term | Meaning |
+| ---- | ------- |
+| **Sticker Sheet** | A single printable page — one PDF page **or** one sheet image/PNG |
+| **Sticker Pack** | A bundle of multiple sheets and/or PDFs (combined multi-page PDF or multiple sheet PNGs) |
+| **Print Layout** | Geometry template (page mm, grid, gaps, cut marks) — implementation detail for composing sheets |
 
 ```
-Sticker Pack → stickers (ordered)
+Sticker Pack → ordered stickers / sheets
 Print Layout → geometry template
-Pack + Layout → Generated sheet (PDF | PNG) cached in GLASS
+Pack + Layout → Sticker Sheet (PDF | PNG) cached in GLASS
 ```
 
 
 
 ### Pack
 
-Name, description, cover image (GLASS), author, ordered stickers, published flag, visibility.
+Name, description, cover image (GLASS), author, ordered stickers, published flag, visibility. Product entity for bundles (see glossary).
 
 ### Layout
 
@@ -605,7 +633,7 @@ Reusable template: page size (mm), orientation, margins, rows, columns, sticker 
 
 ### Generation
 
-- Formats: **PDF** and **PNG**
+- Formats: **PDF** and **PNG** (output = sticker sheet)
 - Generate **on demand**; cache by `cache_key` (hash of pack + layout + format + content revision)
 - Store result in GLASS; record in `generated_prints`
 - Do not pre-generate every pack×layout combination
@@ -701,6 +729,17 @@ GET    /api/moderation/events             # admin; cursor pagination; filters su
 POST   /api/stickers/{id}/like
 DELETE /api/stickers/{id}/like
 
+GET    /api/collections
+POST   /api/collections
+GET    /api/collections/{slug}
+PATCH  /api/collections/{slug}
+POST   /api/collections/{slug}/stickers
+DELETE /api/collections/{slug}/stickers/{stickerId}  # owner; refuse if would leave 0
+
+GET    /api/favourites
+PUT    /api/favourites
+DELETE /api/favourites
+
 GET    /api/packs
 GET    /api/packs/{id}
 
@@ -764,7 +803,9 @@ POST   /api/prints/generate
 - [ ] Attribution claims (signed-in) + admin Claims queue + history
 - [ ] Likes (UI)
 - [ ] GLASS-backed storage via MediaStorage
-- [ ] Favorites, collections, tag_aliases **tables** present
+- [ ] Favorites + collections **tables** present
+- [ ] Favourites UI (`/profile/favourites`; polymorphic; stickers + collections)
+- [ ] Collections UI (`/collections`; public; unique name/slug; tags; 1–60 stickers; not deletable; search)
 
 
 
@@ -776,9 +817,9 @@ POST   /api/prints/generate
 - [ ] Keyframe animation on objects
 - [ ] Filters beyond cutout; richer masks
 - [ ] Server composer parity hardening / golden-image tests across platforms
-- [ ] Favorites UI
-- [ ] Collections UI
-- [ ] Tag alias expansion in search
+- [ ] Favourite sticker sheets / packs (types reserved on `favorites`)
+- [ ] Collections may contain sheets / packs
+- [ ] Tag aliases table + expansion in search
 - [ ] **Meilisearch** search (replace/augment PG FTS)
 - [ ] Related stickers
 - [ ] Richer download stats / share tracking
@@ -831,11 +872,12 @@ USER (role, account_status, glass_private_prism_id)
   │      ├── MEDIA_ASSETS → GLASS (derivatives: image/chat/thumbnail/mask/gif/video)
   │      ├── TAGS (+ aliases)
   │      ├── CATEGORY
-  │      ├── LIKES / FAVORITES
-  │      └── COLLECTIONS
-  └── PACKS
+  │      ├── LIKES
+  │      ├── FAVORITES (polymorphic: sticker | collection | sheet | pack)
+  │      └── COLLECTIONS (public; tags; stickers ≤60)
+  └── PACKS / SHEETS (prints domain; UI deferred)
          ├── PACK_STICKERS → STICKERS
-         └── GENERATED_PRINTS (layout + GLASS cache)
+         └── GENERATED_PRINTS (layout + GLASS cache = sticker sheet)
 
 PUBLIC_PRISM (singleton) → GLASS public PRISM UUID
 ```

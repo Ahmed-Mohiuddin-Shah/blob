@@ -2,6 +2,8 @@
 
 How BLOB should use the portable packages for **interactive sticker sheets**. Composition (`BlobEditor`) stays the 1024² sticker editor; print is a sibling surface.
 
+**Glossary:** a **Sticker Sheet** is a single printable page (one PDF page or one sheet image/PNG). A **Sticker Pack** is a bundle of multiple sheets/PDFs. `PrintLayout` is the geometry UI used to compose sheets.
+
 ## When to use which
 
 | Goal | Package UI | Document |

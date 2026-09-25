@@ -2,12 +2,15 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { Blender } from "lucide-react";
+import { AddToCollectionButton } from "@/components/add-to-collection-button";
 import { AttributionClaimForm } from "@/components/attribution-claim-form";
 import { AttributionCredit } from "@/components/attribution-credit";
+import { FavouriteButton } from "@/components/favourite-button";
 import { StickerDownloadButtons } from "@/components/sticker-download-buttons";
 import { StickerMedia } from "@/components/sticker-media";
 import { getSession, signInUrl } from "@/lib/auth";
 import { canModerate, canUpload } from "@/lib/capabilities";
+import { isFavourited } from "@/lib/favorites";
 import { prisma } from "@/lib/prisma";
 import { canAccessSticker, canOwnerEditSticker, isPublicBrowseable } from "@/lib/stickers";
 
@@ -82,6 +85,11 @@ export default async function StickerDetailPage({
         select: { id: true },
       })
       : null;
+
+  let favourited = false;
+  if (viewerId) {
+    favourited = await isFavourited(viewerId, "sticker", sticker.id);
+  }
 
   const type = typeFromMedia(sticker.media.map((m) => m.kind));
   const mediaKind =
@@ -185,6 +193,20 @@ export default async function StickerDetailPage({
           ) : null}
 
           <div className="mt-6 flex flex-wrap gap-3">
+            <FavouriteButton
+              subjectType="sticker"
+              subjectId={sticker.id.toString()}
+              initialFavourited={favourited}
+              signedIn={!!viewerId}
+              signInHref={signInUrl({ redirectTo: `/stickers/${sticker.slug}` })}
+              variant="pill"
+            />
+            <AddToCollectionButton
+              stickerId={sticker.id.toString()}
+              signedIn={!!viewerId}
+              signInHref={signInUrl({ redirectTo: `/stickers/${sticker.slug}` })}
+              variant="pill"
+            />
             {canRemix ? (
               <Link
                 href={`/stickers/${sticker.slug}/remix`}
@@ -195,7 +217,7 @@ export default async function StickerDetailPage({
               </Link>
             ) : null}
             {(isOwner || isAdmin) &&
-            (isAdmin || canOwnerEditSticker(sticker.moderationStatus)) ? (
+            canOwnerEditSticker(sticker.moderationStatus) ? (
               <>
                 <Link
                   href={`/stickers/${sticker.slug}/compose`}
@@ -211,8 +233,7 @@ export default async function StickerDetailPage({
                 </Link>
               </>
             ) : null}
-            {isOwner &&
-            !isAdmin &&
+            {(isOwner || isAdmin) &&
             !canOwnerEditSticker(sticker.moderationStatus) ? (
               <p className="w-full text-xs text-secondary">
                 Waiting for review — editing unlocks after approval or when an

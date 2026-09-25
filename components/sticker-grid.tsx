@@ -10,7 +10,10 @@ export function StickerGrid({ items }: { items: StickerCardProps[] }) {
   return (
     <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 sm:gap-5">
       {items.map((item) => (
-        <StickerCard key={item.href + item.title} {...item} />
+        <StickerCard
+          key={(item.stickerId ?? item.href) + item.title}
+          {...item}
+        />
       ))}
     </div>
   );

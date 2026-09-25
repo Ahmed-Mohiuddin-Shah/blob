@@ -30,6 +30,8 @@ model User {
   moderationEvents          ModerationEvent[]
   attributionClaims         AttributionClaim[]  @relation("AttributionClaimant")
   attributionClaimsReviewed AttributionClaim[]  @relation("AttributionClaimReviewer")
+  collections               Collection[]
+  favorites                 Favorite[]
 
   @@map("users")
 }
@@ -107,7 +109,8 @@ model Tag {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  stickers StickerTag[]
+  stickers    StickerTag[]
+  collections CollectionTag[]
 
   @@map("tags")
 }
@@ -179,6 +182,7 @@ model Sticker {
   media              MediaAsset[]
   composition        Composition?
   attributionClaims  AttributionClaim[]
+  collectionStickers CollectionSticker[]
 
   @@index([moderationStatus, processingStatus, visibility])
   @@index([uploadedById])
@@ -269,6 +273,64 @@ model StickerTag {
 
   @@id([stickerId, tagId])
   @@map("sticker_tags")
+}
+
+/// Always-public named list. Globally unique name + slug. Stickers only for now (max 60 in app).
+model Collection {
+  id          BigInt   @id @default(autoincrement())
+  userId      BigInt   @map("user_id")
+  name        String   @unique @db.VarChar(120)
+  slug        String   @unique @db.VarChar(140)
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user     User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stickers CollectionSticker[]
+  tags     CollectionTag[]
+
+  @@index([userId])
+  @@map("collections")
+}
+
+model CollectionSticker {
+  collectionId BigInt   @map("collection_id")
+  stickerId    BigInt   @map("sticker_id")
+  sortOrder    Int      @default(0) @map("sort_order")
+  addedAt      DateTime @default(now()) @map("added_at") @db.Timestamptz(6)
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  sticker    Sticker    @relation(fields: [stickerId], references: [id], onDelete: Cascade)
+
+  @@id([collectionId, stickerId])
+  @@index([stickerId])
+  @@map("collection_stickers")
+}
+
+model CollectionTag {
+  collectionId BigInt @map("collection_id")
+  tagId        BigInt @map("tag_id")
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  tag        Tag        @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([collectionId, tagId])
+  @@map("collection_tags")
+}
+
+/// Private polymorphic bookmark. No subject FK. Types: sticker | collection | sticker_sheet | sticker_pack.
+model Favorite {
+  id          BigInt   @id @default(autoincrement())
+  userId      BigInt   @map("user_id")
+  subjectType String   @map("subject_type") @db.VarChar(40)
+  subjectId   BigInt   @map("subject_id")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, subjectType, subjectId])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("favorites")
 }
 
 /// Derivatives / cache only. Originals live in assets. Regenerated from current composition revision.

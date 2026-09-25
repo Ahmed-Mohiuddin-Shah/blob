@@ -324,35 +324,35 @@ Table sticker_likes {
   Note: 'Like = "I like this." Distinct from favorites.'
 }
 
-Table sticker_favorites {
+Table favorites {
+  id bigserial [pk]
   user_id bigint [not null, ref: > users.id]
-  sticker_id bigint [not null, ref: > stickers.id]
+  subject_type varchar(40) [not null, note: 'sticker | collection | sticker_sheet | sticker_pack']
+  subject_id bigint [not null]
   created_at timestamptz [not null]
 
   indexes {
-    (user_id, sticker_id) [pk]
+    (user_id, subject_type, subject_id) [unique]
+    (user_id, created_at)
   }
 
-  Note: 'Favorite/save = "I want to find this again." Schema in v1; UI Should-have.'
+  Note: 'Private polymorphic bookmark. No subject FK. UI: sticker + collection now; sheet/pack reserved.'
 }
 
 # ---------------------------------------------------------------------------
-# Collections (schema ready; UI Should-have)
+# Collections (always public; unique name+slug globally)
 # ---------------------------------------------------------------------------
 
 Table collections {
   id bigserial [pk]
   user_id bigint [not null, ref: > users.id]
-  name varchar(120) [not null]
-  slug varchar(140) [not null]
+  name varchar(120) [unique, not null]
+  slug varchar(140) [unique, not null]
   description text [null]
-  visibility varchar(20) [not null, default: 'private', note: 'public | unlisted | private']
   created_at timestamptz [not null]
   updated_at timestamptz [not null]
 
-  indexes {
-    (user_id, slug) [unique]
-  }
+  Note: 'Always public. Globally unique name and slug. Not deletable by users. Stickers only for now (1–60); sheets/packs later.'
 }
 
 Table collection_stickers {
@@ -363,6 +363,17 @@ Table collection_stickers {
 
   indexes {
     (collection_id, sticker_id) [pk]
+  }
+
+  Note: '1–60 stickers per collection enforced in app. Cannot remove the last sticker.'
+}
+
+Table collection_tags {
+  collection_id bigint [not null, ref: > collections.id]
+  tag_id bigint [not null, ref: > tags.id]
+
+  indexes {
+    (collection_id, tag_id) [pk]
   }
 }
 
@@ -383,7 +394,7 @@ Table sticker_packs {
   created_at timestamptz [not null]
   updated_at timestamptz [not null]
 
-  Note: 'Premade pack of stickers for print generation.'
+  Note: 'Sticker Pack = bundle of multiple sheets/PDFs. Distinct from Sticker Sheet (single page/image).'
 }
 
 Table pack_stickers {

@@ -51,7 +51,7 @@ export default async function StickerEditPage({
     notFound();
   }
 
-  if (!isAdmin && !canOwnerEditSticker(sticker.moderationStatus)) {
+  if (!canOwnerEditSticker(sticker.moderationStatus)) {
     redirect(`/stickers/${sticker.slug}`);
   }
 

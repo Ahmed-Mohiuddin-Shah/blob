@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Upload } from "lucide-react";
+import { HeaderNavLinks } from "./header-nav-links";
 import { Logo } from "./logo";
 import { ThemeToggle } from "./theme-toggle";
 import { UserBlobatar } from "./user-blobatar";
@@ -25,7 +26,7 @@ export function Header({
 
   return (
     <header className="sticky top-0 z-40 border-b border-transparent bg-background/80 backdrop-blur-md">
-      <div className="mx-auto w-full max-w-7xl px-5 sm:px-8">
+      <div className="relative mx-auto w-full max-w-7xl px-5 sm:px-8">
         <nav className="flex h-20 items-center justify-between gap-3">
           <Link href="/" className="group flex items-center gap-3" aria-label="BLOB home">
             <Logo
@@ -36,17 +37,7 @@ export function Header({
             <span className="text-xl font-semibold tracking-tight">BLOB</span>
           </Link>
 
-          <div className="hidden items-center gap-8 text-sm font-semibold sm:flex">
-            <Link href="/stickers" className="text-inactive transition-colors hover:text-foreground">
-              Stickers
-            </Link>
-            <Link href="/prints" className="text-inactive transition-colors hover:text-foreground">
-              Prints
-            </Link>
-            <Link href="/collections" className="text-inactive transition-colors hover:text-foreground">
-              Collections
-            </Link>
-          </div>
+          <HeaderNavLinks />
 
           <div className="flex items-center gap-2 sm:gap-3">
             <ThemeToggle />

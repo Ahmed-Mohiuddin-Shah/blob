@@ -1,6 +1,4 @@
 import { NextResponse } from "next/server";
-import { headers } from "next/headers";
-import { getSession } from "@/lib/auth";
 import { canUpload } from "@/lib/capabilities";
 import {
   parseAttributionInput,
@@ -19,15 +17,7 @@ import {
 } from "@/lib/moderation";
 import { prisma } from "@/lib/prisma";
 import { ensurePrivatePrism } from "@/lib/private-prism";
-
-async function sessionUser() {
-  const reqHeaders = await headers();
-  const session = await getSession(
-    new Request("http://localhost", { headers: reqHeaders }),
-  );
-  if (!session?.user?.id) return null;
-  return prisma.user.findUnique({ where: { id: BigInt(session.user.id) } });
-}
+import { sessionUser } from "@/lib/session-user";
 
 const PAGE = 24;
 
@@ -86,6 +76,20 @@ export async function GET(request: Request) {
   const page = hasMore ? rows.slice(0, PAGE) : rows;
   const nextCursor = hasMore ? page[page.length - 1]!.id.toString() : null;
 
+  const user = await sessionUser();
+  let favouritedIds = new Set<string>();
+  if (user && page.length) {
+    const favs = await prisma.favorite.findMany({
+      where: {
+        userId: user.id,
+        subjectType: "sticker",
+        subjectId: { in: page.map((s) => s.id) },
+      },
+      select: { subjectId: true },
+    });
+    favouritedIds = new Set(favs.map((f) => f.subjectId.toString()));
+  }
+
   return NextResponse.json({
     items: page.map((s) => ({
       id: s.id.toString(),
@@ -101,6 +105,7 @@ export async function GET(request: Request) {
       href: `/stickers/${s.slug}`,
       thumbUrl: `/api/stickers/${s.id}/media/thumbnail`,
       remixHref: `/stickers/${s.slug}/remix`,
+      favourited: favouritedIds.has(s.id.toString()),
     })),
     nextCursor,
   });

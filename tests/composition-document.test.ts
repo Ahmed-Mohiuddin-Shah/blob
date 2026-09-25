@@ -21,10 +21,11 @@ describe("blob-editor document contract", () => {
 });
 
 describe("canOwnerEditSticker", () => {
-  it("allows approved and needs_edit only", () => {
+  it("allows approved and needs_edit only (no role bypass — status gate for everyone)", () => {
     expect(canOwnerEditSticker("approved")).toBe(true);
     expect(canOwnerEditSticker("needs_edit")).toBe(true);
     expect(canOwnerEditSticker("pending_review")).toBe(false);
     expect(canOwnerEditSticker("draft")).toBe(false);
+    expect(canOwnerEditSticker("rejected")).toBe(false);
   });
 });

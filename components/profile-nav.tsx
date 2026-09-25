@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   Clock,
   Flag,
+  Heart,
   History,
   ImageIcon,
   LayoutDashboard,
@@ -56,6 +57,13 @@ export function ProfileNav({
         >
           <ImageIcon className="h-4 w-4" strokeWidth={1.75} aria-hidden />
           Uploads
+        </Link>
+        <Link
+          href="/profile/favourites"
+          className={linkClass(pathname.startsWith("/profile/favourites"))}
+        >
+          <Heart className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+          Favourites
         </Link>
         <Link
           href="/profile/pending"

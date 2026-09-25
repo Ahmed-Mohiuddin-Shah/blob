@@ -32,7 +32,7 @@ export default async function ComposePage({
   });
   if (!isOwner && !isAdmin) notFound();
 
-  if (!isAdmin && !canOwnerEditSticker(sticker.moderationStatus)) {
+  if (!canOwnerEditSticker(sticker.moderationStatus)) {
     redirect(`/stickers/${sticker.slug}`);
   }
 
