@@ -1,7 +1,16 @@
 import { NextResponse } from "next/server";
-import { parseFavoriteUiType } from "@/lib/favorites";
+import {
+  FAVORITE_SUBJECT,
+  FAVORITE_UI_TYPES,
+  parseFavoriteUiType,
+} from "@/lib/favorites";
 import { sessionUser } from "@/lib/session-user";
 import { prisma } from "@/lib/prisma";
+import {
+  CARD_MEDIA_KINDS,
+  MEDIA_ASSET_STATUS,
+  MEDIA_KIND,
+} from "@/lib/stickers";
 
 const PAGE = 24;
 
@@ -22,7 +31,7 @@ export async function GET(request: Request) {
     OR?: object[];
   } = {
     userId: user.id,
-    subjectType: { in: ["sticker", "collection"] },
+    subjectType: { in: [...FAVORITE_UI_TYPES] },
   };
 
   if (q) {
@@ -40,11 +49,11 @@ export async function GET(request: Request) {
     ]);
     where.OR = [
       {
-        subjectType: "sticker",
+        subjectType: FAVORITE_SUBJECT.sticker,
         subjectId: { in: matchingStickers.map((s) => s.id) },
       },
       {
-        subjectType: "collection",
+        subjectType: FAVORITE_SUBJECT.collection,
         subjectId: { in: matchingCollections.map((c) => c.id) },
       },
     ];
@@ -61,10 +70,10 @@ export async function GET(request: Request) {
   const page = hasMore ? rows.slice(0, PAGE) : rows;
 
   const stickerIds = page
-    .filter((f) => f.subjectType === "sticker")
+    .filter((f) => f.subjectType === FAVORITE_SUBJECT.sticker)
     .map((f) => f.subjectId);
   const collectionIds = page
-    .filter((f) => f.subjectType === "collection")
+    .filter((f) => f.subjectType === FAVORITE_SUBJECT.collection)
     .map((f) => f.subjectId);
 
   const [stickers, collections] = await Promise.all([
@@ -75,8 +84,8 @@ export async function GET(request: Request) {
             createdBy: { select: { username: true, displayName: true } },
             media: {
               where: {
-                kind: { in: ["thumbnail", "image", "gif", "video"] },
-                status: "ready",
+                kind: { in: [...CARD_MEDIA_KINDS] },
+                status: MEDIA_ASSET_STATUS.ready,
               },
               select: { kind: true },
             },
@@ -98,23 +107,23 @@ export async function GET(request: Request) {
   const collectionMap = new Map(collections.map((c) => [c.id.toString(), c]));
 
   function mediaLabel(kinds: string[]): string {
-    if (kinds.includes("video")) return "VIDEO";
-    if (kinds.includes("gif")) return "GIF";
+    if (kinds.includes(MEDIA_KIND.video)) return "VIDEO";
+    if (kinds.includes(MEDIA_KIND.gif)) return "GIF";
     return "IMAGE";
   }
 
   const items = page
     .map((f) => {
-      if (f.subjectType === "sticker") {
+      if (f.subjectType === FAVORITE_SUBJECT.sticker) {
         const s = stickerMap.get(f.subjectId.toString());
         if (!s) return null;
         return {
           id: f.id.toString(),
-          subjectType: "sticker" as const,
+          subjectType: FAVORITE_SUBJECT.sticker,
           subjectId: f.subjectId.toString(),
           title: s.title,
           href: `/stickers/${s.slug}`,
-          thumbUrl: `/api/stickers/${s.id}/media/thumbnail`,
+          thumbUrl: `/api/stickers/${s.id}/media/${MEDIA_KIND.thumbnail}`,
           type: mediaLabel(s.media.map((m) => m.kind)),
           author: s.authorName || s.createdBy.displayName || s.createdBy.username,
           createdAt: f.createdAt.toISOString(),
@@ -124,7 +133,7 @@ export async function GET(request: Request) {
       if (!c) return null;
       return {
         id: f.id.toString(),
-        subjectType: "collection" as const,
+        subjectType: FAVORITE_SUBJECT.collection,
         subjectId: f.subjectId.toString(),
         title: c.name,
         href: `/collections/${c.slug}`,
@@ -170,7 +179,7 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: "subjectId required" }, { status: 400 });
   }
 
-  if (subjectType === "sticker") {
+  if (subjectType === FAVORITE_SUBJECT.sticker) {
     const s = await prisma.sticker.findUnique({ where: { id: subjectId } });
     if (!s) {
       return NextResponse.json({ error: "Sticker not found" }, { status: 404 });

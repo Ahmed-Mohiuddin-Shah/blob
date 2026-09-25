@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import { canModerate } from "@/lib/capabilities";
 import { prisma } from "@/lib/prisma";
 import { enqueueCompositionEncode } from "@/lib/composition-encode";
+import { PROCESSING_STATUS } from "@/lib/stickers";
 
 async function sessionUser() {
   const reqHeaders = await headers();
@@ -38,7 +39,7 @@ export async function POST(
 
   await prisma.sticker.update({
     where: { id: sticker.id },
-    data: { processingStatus: "processing", processingError: null },
+    data: { processingStatus: PROCESSING_STATUS.processing, processingError: null },
   });
   enqueueCompositionEncode(sticker.id);
 

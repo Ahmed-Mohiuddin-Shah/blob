@@ -9,14 +9,24 @@ import { FavouriteButton } from "@/components/favourite-button";
 import { StickerDownloadButtons } from "@/components/sticker-download-buttons";
 import { StickerMedia } from "@/components/sticker-media";
 import { getSession, signInUrl } from "@/lib/auth";
+import { CLAIM_STATUS } from "@/lib/attribution";
 import { canModerate, canUpload } from "@/lib/capabilities";
-import { isFavourited } from "@/lib/favorites";
+import { FAVORITE_SUBJECT, isFavourited } from "@/lib/favorites";
+import { MODERATION_STATUS } from "@/lib/moderation";
 import { prisma } from "@/lib/prisma";
-import { canAccessSticker, canOwnerEditSticker, isPublicBrowseable } from "@/lib/stickers";
+import {
+  MEDIA_ASSET_STATUS,
+  MEDIA_KIND,
+  PROCESSING_STATUS,
+  VISIBILITY,
+  canAccessSticker,
+  canOwnerEditSticker,
+  isPublicBrowseable,
+} from "@/lib/stickers";
 
 function typeFromMedia(kinds: string[]): string {
-  if (kinds.includes("video")) return "VIDEO";
-  if (kinds.includes("gif")) return "GIF";
+  if (kinds.includes(MEDIA_KIND.video)) return "VIDEO";
+  if (kinds.includes(MEDIA_KIND.gif)) return "GIF";
   return "IMAGE";
 }
 
@@ -80,7 +90,7 @@ export default async function StickerDetailPage({
         where: {
           stickerId: sticker.id,
           claimantId: viewerId,
-          status: "pending",
+          status: CLAIM_STATUS.pending,
         },
         select: { id: true },
       })
@@ -88,16 +98,24 @@ export default async function StickerDetailPage({
 
   let favourited = false;
   if (viewerId) {
-    favourited = await isFavourited(viewerId, "sticker", sticker.id);
+    favourited = await isFavourited(
+      viewerId,
+      FAVORITE_SUBJECT.sticker,
+      sticker.id,
+    );
   }
 
   const type = typeFromMedia(sticker.media.map((m) => m.kind));
   const mediaKind =
-    type === "VIDEO" ? "video" : type === "GIF" ? "gif" : "image";
+    type === "VIDEO"
+      ? MEDIA_KIND.video
+      : type === "GIF"
+        ? MEDIA_KIND.gif
+        : MEDIA_KIND.image;
   const hasKind = sticker.media.some(
-    (m) => m.kind === mediaKind && m.status === "ready",
+    (m) => m.kind === mediaKind && m.status === MEDIA_ASSET_STATUS.ready,
   );
-  const displayKind = hasKind ? mediaKind : "thumbnail";
+  const displayKind = hasKind ? mediaKind : MEDIA_KIND.thumbnail;
 
   const creditLabel =
     sticker.authorName ||
@@ -173,9 +191,9 @@ export default async function StickerDetailPage({
           <StickerDownloadButtons
             stickerId={sticker.id.toString()}
             useGlassDirect={
-              sticker.visibility === "public" &&
-              sticker.moderationStatus === "approved" &&
-              sticker.processingStatus === "ready"
+              sticker.visibility === VISIBILITY.public &&
+              sticker.moderationStatus === MODERATION_STATUS.approved &&
+              sticker.processingStatus === PROCESSING_STATUS.ready
             }
             media={sticker.media.map((m) => ({
               kind: m.kind,
@@ -188,13 +206,15 @@ export default async function StickerDetailPage({
             <p className="mt-6 text-xs text-inactive">
               Status: {sticker.moderationStatus.replaceAll("_", " ")} ·{" "}
               {sticker.processingStatus}
-              {sticker.visibility !== "public" ? ` · ${sticker.visibility}` : ""}
+              {sticker.visibility !== VISIBILITY.public
+                ? ` · ${sticker.visibility}`
+                : ""}
             </p>
           ) : null}
 
           <div className="mt-6 flex flex-wrap gap-3">
             <FavouriteButton
-              subjectType="sticker"
+              subjectType={FAVORITE_SUBJECT.sticker}
               subjectId={sticker.id.toString()}
               initialFavourited={favourited}
               signedIn={!!viewerId}

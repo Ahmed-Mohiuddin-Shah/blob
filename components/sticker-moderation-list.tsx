@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { BusyButton } from "./busy-button";
 import { StickerMedia } from "./sticker-media";
+import { PROCESSING_STATUS } from "@/lib/stickers";
 
 export type ModerationItem = {
   id: string;
@@ -131,7 +132,7 @@ export function StickerModerationList({
             <p className="truncate font-semibold">{item.title}</p>
             <p className="mt-0.5 text-xs text-secondary">
               by {item.author} · {item.type} · {item.status.replaceAll("_", " ")}
-              {item.processingStatus !== "ready"
+              {item.processingStatus !== PROCESSING_STATUS.ready
                 ? ` · ${item.processingStatus}`
                 : ""}
             </p>
@@ -180,7 +181,7 @@ export function StickerModerationList({
               <BusyButton
                 type="button"
                 busy={busyId === item.id}
-                disabled={item.processingStatus !== "ready"}
+                disabled={item.processingStatus !== PROCESSING_STATUS.ready}
                 onClick={() => act(item.id, "approve")}
                 className="rounded-full bg-accent-gradient px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
               >

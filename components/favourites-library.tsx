@@ -4,12 +4,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Search } from "lucide-react";
+import type { FavoriteUiType } from "@/lib/favorites";
 import { FavouriteButton } from "./favourite-button";
 import { StickerMedia } from "./sticker-media";
 
 type FavItem = {
   id: string;
-  subjectType: "sticker" | "collection";
+  subjectType: FavoriteUiType;
   subjectId: string;
   title: string;
   href: string;

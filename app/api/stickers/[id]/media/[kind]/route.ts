@@ -4,7 +4,7 @@ import { getSession } from "@/lib/auth";
 import { canModerate } from "@/lib/capabilities";
 import { getGlass } from "@/lib/glass";
 import { prisma } from "@/lib/prisma";
-import { canAccessSticker, isPublicBrowseable } from "@/lib/stickers";
+import { canAccessSticker, isPublicBrowseable, MEDIA_ASSET_STATUS, MEDIA_KIND } from "@/lib/stickers";
 
 async function sessionUser() {
   const reqHeaders = await headers();
@@ -15,13 +15,14 @@ async function sessionUser() {
   return prisma.user.findUnique({ where: { id: BigInt(session.user.id) } });
 }
 
+const ALLOWED_KINDS = new Set<string>(Object.values(MEDIA_KIND));
+
 export async function GET(
   _request: Request,
   context: { params: Promise<{ id: string; kind: string }> },
 ) {
   const { id, kind } = await context.params;
-  const allowed = ["thumbnail", "image", "chat", "gif", "video", "mask", "prev_thumbnail"];
-  if (!allowed.includes(kind)) {
+  if (!ALLOWED_KINDS.has(kind)) {
     return NextResponse.json({ error: "Invalid kind" }, { status: 400 });
   }
 
@@ -50,14 +51,29 @@ export async function GET(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  let asset = sticker.media.find((m) => m.kind === kind && m.status === "ready");
-  if (!asset && kind === "thumbnail") {
+  let asset = sticker.media.find(
+    (m) => m.kind === kind && m.status === MEDIA_ASSET_STATUS.ready,
+  );
+  if (!asset && kind === MEDIA_KIND.thumbnail) {
     asset =
-      sticker.media.find((m) => m.kind === "image" && m.status === "ready") ??
-      sticker.media.find((m) => m.kind === "chat" && m.status === "ready");
+      sticker.media.find(
+        (m) =>
+          m.kind === MEDIA_KIND.image && m.status === MEDIA_ASSET_STATUS.ready,
+      ) ??
+      sticker.media.find(
+        (m) =>
+          m.kind === MEDIA_KIND.chat && m.status === MEDIA_ASSET_STATUS.ready,
+      );
   }
-  if (!asset && (kind === "image" || kind === "chat")) {
-    asset = sticker.media.find((m) => m.kind === "thumbnail" && m.status === "ready");
+  if (
+    !asset &&
+    (kind === MEDIA_KIND.image || kind === MEDIA_KIND.chat)
+  ) {
+    asset = sticker.media.find(
+      (m) =>
+        m.kind === MEDIA_KIND.thumbnail &&
+        m.status === MEDIA_ASSET_STATUS.ready,
+    );
   }
   if (!asset) {
     return NextResponse.json({ error: "No media" }, { status: 404 });

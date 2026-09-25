@@ -9,9 +9,9 @@ import {
   assignableRoles,
   canEditAccountStatus,
 } from "@/lib/capabilities";
+import { ACCOUNT_STATUSES } from "@/lib/roles";
 import { BusyButton } from "./busy-button";
 
-const STATUSES = ["active", "pending", "suspended", "banned"] as const;
 const initial: AdminUserActionState = {};
 
 export type AdminUserRow = {
@@ -88,7 +88,7 @@ function UserRowForm({
               defaultValue={user.accountStatus}
               className="mt-1 block rounded-xl border border-divider bg-surface px-3 py-2 text-sm"
             >
-              {STATUSES.map((s) => (
+              {ACCOUNT_STATUSES.map((s) => (
                 <option key={s} value={s}>
                   {s}
                 </option>

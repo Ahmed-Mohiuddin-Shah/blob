@@ -1,5 +1,6 @@
 import { Logo } from "../logo";
 import { SignInButton } from "../auth-buttons";
+import { BLOB_ROLE } from "@/lib/roles";
 
 type Props = {
   user?: { displayName?: string | null; name?: string | null; role?: string | null } | null;
@@ -17,7 +18,7 @@ export function MemberCta({ user }: Props) {
           <>
             <h2 className="mt-6 text-2xl font-semibold tracking-tight sm:text-3xl">You’re in, {displayName}.</h2>
             <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-secondary">
-              {user.role === "user"
+              {user.role === BLOB_ROLE.user
                 ? "Browse, search, and save stickers. An admin can promote you to member when you’re ready to upload."
                 : "Contribute stickers, build packs, and keep the library sticky."}
             </p>

@@ -7,6 +7,7 @@ import { Providers } from "@/components/providers";
 import { ThemeScript } from "@/components/theme-script";
 import { getSession } from "@/lib/auth";
 import { canManageUsers, canUpload } from "@/lib/capabilities";
+import { MODERATION_STATUS } from "@/lib/moderation";
 import { prisma } from "@/lib/prisma";
 import "./globals.css";
 
@@ -43,12 +44,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       canUploadFlag = canUpload(caps);
       if (canManageUsers(caps)) {
         pendingApprovalCount = await prisma.sticker.count({
-          where: { moderationStatus: "pending_review" },
+          where: { moderationStatus: MODERATION_STATUS.pendingReview },
         });
       } else {
         pendingApprovalCount = await prisma.sticker.count({
           where: {
-            moderationStatus: "needs_edit",
+            moderationStatus: MODERATION_STATUS.needsEdit,
             uploadedById: dbUser.id,
           },
         });

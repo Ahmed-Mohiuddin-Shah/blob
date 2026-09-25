@@ -11,6 +11,19 @@ export const MODERATION_SUBJECT = {
 export type ModerationSubjectType =
   (typeof MODERATION_SUBJECT)[keyof typeof MODERATION_SUBJECT];
 
+export const MODERATION_STATUS = {
+  draft: "draft",
+  pendingReview: "pending_review",
+  needsEdit: "needs_edit",
+  approved: "approved",
+  rejected: "rejected",
+  hidden: "hidden",
+  deleted: "deleted",
+} as const;
+
+export type ModerationStatus =
+  (typeof MODERATION_STATUS)[keyof typeof MODERATION_STATUS];
+
 export const MODERATION_ACTION = {
   submitted: "submitted",
   approved: "approved",

@@ -12,12 +12,21 @@ import {
 import { enqueueCompositionEncode } from "@/lib/composition-encode";
 import {
   MODERATION_ACTION,
+  MODERATION_STATUS,
   MODERATION_SUBJECT,
   recordModerationEvent,
 } from "@/lib/moderation";
 import { prisma } from "@/lib/prisma";
 import { ensurePrivatePrism } from "@/lib/private-prism";
 import { sessionUser } from "@/lib/session-user";
+import { FAVORITE_SUBJECT } from "@/lib/favorites";
+import {
+  CARD_MEDIA_KINDS,
+  MEDIA_ASSET_STATUS,
+  MEDIA_KIND,
+  PROCESSING_STATUS,
+  VISIBILITY,
+} from "@/lib/stickers";
 
 const PAGE = 24;
 
@@ -35,9 +44,9 @@ export async function GET(request: Request) {
     OR?: object[];
     category?: { slug: string };
   } = {
-    visibility: "public",
-    moderationStatus: "approved",
-    processingStatus: "ready",
+    visibility: VISIBILITY.public,
+    moderationStatus: MODERATION_STATUS.approved,
+    processingStatus: PROCESSING_STATUS.ready,
   };
 
   if (category) {
@@ -66,7 +75,7 @@ export async function GET(request: Request) {
       createdBy: { select: { username: true, displayName: true } },
       category: { select: { slug: true, name: true } },
       media: {
-        where: { kind: { in: ["thumbnail", "image", "gif", "video"] }, status: "ready" },
+        where: { kind: { in: [...CARD_MEDIA_KINDS] }, status: MEDIA_ASSET_STATUS.ready },
         select: { kind: true },
       },
     },
@@ -82,7 +91,7 @@ export async function GET(request: Request) {
     const favs = await prisma.favorite.findMany({
       where: {
         userId: user.id,
-        subjectType: "sticker",
+        subjectType: FAVORITE_SUBJECT.sticker,
         subjectId: { in: page.map((s) => s.id) },
       },
       select: { subjectId: true },
@@ -112,8 +121,8 @@ export async function GET(request: Request) {
 }
 
 function mediaLabel(kinds: string[]): string {
-  if (kinds.includes("video")) return "VIDEO";
-  if (kinds.includes("gif")) return "GIF";
+  if (kinds.includes(MEDIA_KIND.video)) return "VIDEO";
+  if (kinds.includes(MEDIA_KIND.gif)) return "GIF";
   return "IMAGE";
 }
 
@@ -165,7 +174,7 @@ export async function POST(request: Request) {
   }
 
   const description = String(form.get("description") ?? "").trim() || null;
-  const visibility = parseVisibility(String(form.get("visibility") ?? "public"));
+  const visibility = parseVisibility(String(form.get("visibility") ?? VISIBILITY.public));
   const categoryIdRaw = String(form.get("categoryId") ?? "").trim();
   let categoryId: bigint | null = null;
   if (categoryIdRaw) {
@@ -213,8 +222,8 @@ export async function POST(request: Request) {
           authorName: attribution.authorName,
           sourceUrl: attribution.sourceUrl,
           visibility,
-          moderationStatus: "pending_review",
-          processingStatus: "processing",
+          moderationStatus: MODERATION_STATUS.pendingReview,
+          processingStatus: PROCESSING_STATUS.processing,
         },
       });
 

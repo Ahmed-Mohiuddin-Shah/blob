@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Blender } from "lucide-react";
+import { FAVORITE_SUBJECT } from "@/lib/favorites";
 import { AttributionCredit } from "./attribution-credit";
 import { AddToCollectionButton } from "./add-to-collection-button";
 import { FavouriteButton } from "./favourite-button";
@@ -80,7 +81,7 @@ export function StickerCard({
           {actions ? (
             <>
               <FavouriteButton
-                subjectType="sticker"
+                subjectType={FAVORITE_SUBJECT.sticker}
                 subjectId={stickerId}
                 initialFavourited={favourited}
                 signedIn={signedIn}

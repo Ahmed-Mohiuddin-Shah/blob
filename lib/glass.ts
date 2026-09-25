@@ -1,6 +1,15 @@
 import { Glass } from "glass-ts";
 import { prisma } from "@/lib/prisma";
 
+export const GLASS_UPLOAD_STATUS = {
+  pending: "pending",
+  approved: "approved",
+  rejected: "rejected",
+} as const;
+
+export type GlassUploadStatus =
+  (typeof GLASS_UPLOAD_STATUS)[keyof typeof GLASS_UPLOAD_STATUS];
+
 export function getGlass(): Glass {
   const baseUrl = process.env.GLASS_API_URL?.replace(/\/$/, "");
   const apiKey = process.env.GLASS_API_KEY;

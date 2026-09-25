@@ -10,10 +10,14 @@ import { ensurePrivatePrism } from "@/lib/private-prism";
 import {
   detectUpload,
   MAX_UPLOAD_BYTES,
+  MEDIA_ASSET_STATUS,
+  MEDIA_KIND,
   normalizeTagName,
   slugify,
   tagSlug,
   VISIBILITIES,
+  VISIBILITY,
+  type DetectedKind,
   type Visibility,
 } from "@/lib/stickers";
 import { parseAttributionInput } from "@/lib/attribution";
@@ -62,7 +66,7 @@ export function parseTagNames(raw: string): string[] {
 
 export function parseVisibility(raw: string): Visibility {
   return (
-    VISIBILITIES.includes(raw as Visibility) ? raw : "public"
+    VISIBILITIES.includes(raw as Visibility) ? raw : VISIBILITY.public
   ) as Visibility;
 }
 
@@ -78,7 +82,7 @@ export async function createAssetFromBytes(opts: {
   width?: number | null;
   height?: number | null;
   durationMs?: number | null;
-}): Promise<{ id: string; mime: string; kind: "image" | "gif" | "video" }> {
+}): Promise<{ id: string; mime: string; kind: DetectedKind }> {
   if (opts.bytes.length === 0 || opts.bytes.length > MAX_UPLOAD_BYTES) {
     throw new Error("File empty or too large (max 20 MiB)");
   }
@@ -130,12 +134,12 @@ export async function upsertStillExports(opts: {
   await preservePreviousThumbnail(opts.stickerId, opts.revisionId);
 
   const items: { kind: string; bytes: Uint8Array; w: number; h: number }[] = [
-    { kind: "chat", bytes: opts.chat, w: 128, h: 128 },
-    { kind: "thumbnail", bytes: opts.thumbnail, w: 256, h: 256 },
-    { kind: "image", bytes: opts.full, w: 1024, h: 1024 },
+    { kind: MEDIA_KIND.chat, bytes: opts.chat, w: 128, h: 128 },
+    { kind: MEDIA_KIND.thumbnail, bytes: opts.thumbnail, w: 256, h: 256 },
+    { kind: MEDIA_KIND.image, bytes: opts.full, w: 1024, h: 1024 },
   ];
   if (opts.mask) {
-    items.push({ kind: "mask", bytes: opts.mask, w: 1024, h: 1024 });
+    items.push({ kind: MEDIA_KIND.mask, bytes: opts.mask, w: 1024, h: 1024 });
   }
   for (const item of items) {
     const up = await glass.objects.upload({
@@ -161,7 +165,7 @@ export async function upsertStillExports(opts: {
         checksumSha256: createHash("sha256").update(item.bytes).digest("hex"),
         glassObjectId: up.object_id,
         glassPrismId: opts.prismId,
-        status: "ready",
+        status: MEDIA_ASSET_STATUS.ready,
       },
       update: {
         compositionRevisionId: opts.revisionId,
@@ -169,7 +173,7 @@ export async function upsertStillExports(opts: {
         checksumSha256: createHash("sha256").update(item.bytes).digest("hex"),
         glassObjectId: up.object_id,
         glassPrismId: opts.prismId,
-        status: "ready",
+        status: MEDIA_ASSET_STATUS.ready,
         width: item.w,
         height: item.h,
       },
@@ -183,7 +187,7 @@ async function preservePreviousThumbnail(
   newRevisionId: bigint,
 ) {
   const existing = await prisma.mediaAsset.findUnique({
-    where: { stickerId_kind: { stickerId, kind: "thumbnail" } },
+    where: { stickerId_kind: { stickerId, kind: MEDIA_KIND.thumbnail } },
   });
   if (
     !existing ||
@@ -193,14 +197,14 @@ async function preservePreviousThumbnail(
     return;
   }
   const oldPrev = await prisma.mediaAsset.findUnique({
-    where: { stickerId_kind: { stickerId, kind: "prev_thumbnail" } },
+    where: { stickerId_kind: { stickerId, kind: MEDIA_KIND.prevThumbnail } },
   });
   if (oldPrev) {
     await prisma.mediaAsset.delete({ where: { id: oldPrev.id } });
   }
   await prisma.mediaAsset.update({
     where: { id: existing.id },
-    data: { kind: "prev_thumbnail" },
+    data: { kind: MEDIA_KIND.prevThumbnail },
   });
 }
 

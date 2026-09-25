@@ -8,11 +8,14 @@ import {
   canManageUsers,
   roleChangeError,
 } from "@/lib/capabilities";
-import { isBlobRole, type BlobRole } from "@/lib/roles";
+import {
+  isBlobRole,
+  ACCOUNT_STATUSES,
+  BLOB_ROLE,
+  type BlobRole,
+} from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import { setUserRole, ZitadelMgmtError } from "@/lib/zitadel-mgmt";
-
-const STATUSES = ["active", "pending", "suspended", "banned"] as const;
 
 export type AdminUserActionState = { ok?: boolean; error?: string };
 
@@ -41,7 +44,7 @@ export async function updateAdminUser(
   const accountStatus = String(formData.get("accountStatus") ?? "");
 
   if (!userId || !isBlobRole(role)) return { error: "Invalid role" };
-  if (!(STATUSES as readonly string[]).includes(accountStatus)) {
+  if (!(ACCOUNT_STATUSES as readonly string[]).includes(accountStatus)) {
     return { error: "Invalid status" };
   }
 
@@ -62,7 +65,7 @@ export async function updateAdminUser(
   };
 
   const superadminCount = await prisma.user.count({
-    where: { role: "superadmin" },
+    where: { role: BLOB_ROLE.superadmin },
   });
   const roleErr = roleChangeError(actor, targetCaps, role, superadminCount);
   if (roleErr) return { error: roleErr };

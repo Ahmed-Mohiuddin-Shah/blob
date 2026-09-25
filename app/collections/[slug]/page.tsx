@@ -5,7 +5,13 @@ import { FavouriteButton } from "@/components/favourite-button";
 import { CollectionDetailActions } from "@/components/collection-detail-actions";
 import { StickerGrid } from "@/components/sticker-grid";
 import { getSession, signInUrl } from "@/lib/auth";
+import { FAVORITE_SUBJECT } from "@/lib/favorites";
 import { prisma } from "@/lib/prisma";
+import {
+  CARD_MEDIA_KINDS,
+  MEDIA_ASSET_STATUS,
+  MEDIA_KIND,
+} from "@/lib/stickers";
 
 export default async function CollectionDetailPage({
   params,
@@ -26,8 +32,8 @@ export default async function CollectionDetailPage({
               createdBy: { select: { username: true, displayName: true } },
               media: {
                 where: {
-                  kind: { in: ["thumbnail", "image", "gif", "video"] },
-                  status: "ready",
+                  kind: { in: [...CARD_MEDIA_KINDS] },
+                  status: MEDIA_ASSET_STATUS.ready,
                 },
                 select: { kind: true },
               },
@@ -58,7 +64,7 @@ export default async function CollectionDetailPage({
         where: {
           userId_subjectType_subjectId: {
             userId: viewerId,
-            subjectType: "collection",
+            subjectType: FAVORITE_SUBJECT.collection,
             subjectId: collection.id,
           },
         },
@@ -66,7 +72,7 @@ export default async function CollectionDetailPage({
       prisma.favorite.findMany({
         where: {
           userId: viewerId,
-          subjectType: "sticker",
+          subjectType: FAVORITE_SUBJECT.sticker,
           subjectId: { in: collection.stickers.map((cs) => cs.stickerId) },
         },
         select: { subjectId: true },
@@ -81,8 +87,8 @@ export default async function CollectionDetailPage({
   });
 
   function mediaLabel(kinds: string[]): string {
-    if (kinds.includes("video")) return "VIDEO";
-    if (kinds.includes("gif")) return "GIF";
+    if (kinds.includes(MEDIA_KIND.video)) return "VIDEO";
+    if (kinds.includes(MEDIA_KIND.gif)) return "GIF";
     return "IMAGE";
   }
 
@@ -125,7 +131,7 @@ export default async function CollectionDetailPage({
 
       <div className="mt-6 flex flex-wrap gap-3">
         <FavouriteButton
-          subjectType="collection"
+          subjectType={FAVORITE_SUBJECT.collection}
           subjectId={collection.id.toString()}
           initialFavourited={favourited}
           signedIn={signedIn}

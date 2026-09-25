@@ -9,7 +9,15 @@ import { LibrarySearchSentinel, useSearchDock } from "./library-search";
 
 type ApiItem = CollectionCardProps & { id: string; slug: string };
 
-export function CollectionsLibrary({ initialQ }: { initialQ: string }) {
+export function CollectionsLibrary({
+  initialQ,
+  signedIn = false,
+  signInHref,
+}: {
+  initialQ: string;
+  signedIn?: boolean;
+  signInHref?: string;
+}) {
   const router = useRouter();
   const sentinelRef = useRef<HTMLDivElement>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
@@ -33,10 +41,17 @@ export function CollectionsLibrary({ initialQ }: { initialQ: string }) {
         items: ApiItem[];
         nextCursor: string | null;
       };
-      setItems((prev) => (replace ? json.items : [...prev, ...json.items]));
+      const mapped = json.items.map((item) => ({
+        ...item,
+        favourited: !!item.favourited,
+        signedIn,
+        signInHref,
+        showActions: true,
+      }));
+      setItems((prev) => (replace ? mapped : [...prev, ...mapped]));
       setCursor(json.nextCursor);
     },
-    [],
+    [signedIn, signInHref],
   );
 
   useEffect(() => {
@@ -162,7 +177,7 @@ export function CollectionsLibrary({ initialQ }: { initialQ: string }) {
             No collections yet.
           </p>
         ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 sm:gap-5">
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 sm:gap-5">
             {items.map((item) => (
               <CollectionCard key={item.id} {...item} />
             ))}

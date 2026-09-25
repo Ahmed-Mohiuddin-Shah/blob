@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { BusyButton } from "@/components/busy-button";
+import { MODERATION_SUBJECT } from "@/lib/moderation";
 
 type EventItem = {
   id: string;
@@ -16,11 +17,11 @@ type EventItem = {
 
 const SUBJECT_FILTERS = [
   { value: "", label: "All" },
-  { value: "sticker", label: "Stickers" },
-  { value: "attribution_claim", label: "Claims" },
-  { value: "collection", label: "Collections" },
-  { value: "sticker_pack", label: "Packs" },
-  { value: "print_layout", label: "Layouts" },
+  { value: MODERATION_SUBJECT.sticker, label: "Stickers" },
+  { value: MODERATION_SUBJECT.attributionClaim, label: "Claims" },
+  { value: MODERATION_SUBJECT.collection, label: "Collections" },
+  { value: MODERATION_SUBJECT.stickerPack, label: "Packs" },
+  { value: MODERATION_SUBJECT.printLayout, label: "Layouts" },
 ] as const;
 
 export function ModerationHistoryList() {

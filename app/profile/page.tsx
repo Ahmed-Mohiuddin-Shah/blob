@@ -2,6 +2,7 @@ import Link from "next/link";
 import { SignOutTextButton } from "@/components/auth-buttons";
 import { UserBlobatar } from "@/components/user-blobatar";
 import { canManageUsers, canUpload } from "@/lib/capabilities";
+import { MODERATION_STATUS } from "@/lib/moderation";
 import { prisma } from "@/lib/prisma";
 import { requireSessionUser } from "@/lib/require-user";
 
@@ -13,13 +14,13 @@ export default async function ProfileOverviewPage() {
     prisma.sticker.count({ where: { uploadedById: user.id } }),
     prisma.sticker.count({
       where: {
-        moderationStatus: "pending_review",
+        moderationStatus: MODERATION_STATUS.pendingReview,
         ...(canManageUsers(caps) ? {} : { uploadedById: user.id }),
       },
     }),
     prisma.sticker.count({
       where: {
-        moderationStatus: "needs_edit",
+        moderationStatus: MODERATION_STATUS.needsEdit,
         uploadedById: user.id,
       },
     }),

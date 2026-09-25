@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { getSession } from "@/lib/auth";
 import { canApproveUploads } from "@/lib/capabilities";
-import { getGlass, getPublicPrismId } from "@/lib/glass";
+import { getGlass, getPublicPrismId, GLASS_UPLOAD_STATUS } from "@/lib/glass";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(
@@ -37,8 +37,8 @@ export async function POST(
   if (!upload) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
-  if (upload.status === "approved") {
-    return NextResponse.json({ ok: true, status: "approved" });
+  if (upload.status === GLASS_UPLOAD_STATUS.approved) {
+    return NextResponse.json({ ok: true, status: GLASS_UPLOAD_STATUS.approved });
   }
 
   try {
@@ -50,9 +50,9 @@ export async function POST(
     }
     await prisma.glassUpload.update({
       where: { id: upload.id },
-      data: { status: "approved", prismId: publicId },
+      data: { status: GLASS_UPLOAD_STATUS.approved, prismId: publicId },
     });
-    return NextResponse.json({ ok: true, status: "approved" });
+    return NextResponse.json({ ok: true, status: GLASS_UPLOAD_STATUS.approved });
   } catch (err) {
     console.error("Approve upload failed:", err);
     return NextResponse.json(

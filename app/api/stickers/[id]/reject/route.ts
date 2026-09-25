@@ -6,6 +6,7 @@ import { canModerate } from "@/lib/capabilities";
 import { getGlass } from "@/lib/glass";
 import {
   MODERATION_ACTION,
+  MODERATION_STATUS,
   MODERATION_SUBJECT,
   recordModerationEvent,
 } from "@/lib/moderation";
@@ -83,5 +84,5 @@ export async function POST(
 
   await prisma.sticker.delete({ where: { id: sticker.id } });
 
-  return NextResponse.json({ ok: true, status: "rejected" });
+  return NextResponse.json({ ok: true, status: MODERATION_STATUS.rejected });
 }

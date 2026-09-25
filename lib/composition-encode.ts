@@ -10,6 +10,11 @@ import { encodeGifFromComposition } from "@/lib/encode-gif";
 import { getGlass } from "@/lib/glass";
 import { ensureNodeCanvas } from "@/lib/node-canvas";
 import { prisma } from "@/lib/prisma";
+import {
+  MEDIA_ASSET_STATUS,
+  MEDIA_KIND,
+  PROCESSING_STATUS,
+} from "@/lib/stickers";
 
 // napi Image is CanvasImageSource-compatible at runtime; DOM typings disagree.
 type FrameResolver = (
@@ -137,9 +142,9 @@ async function processComposition(stickerId: bigint): Promise<void> {
       w?: number;
       h?: number;
     }[] = [
-      { kind: "chat", bytes: encoded.exports.chat, mime: "image/png", ext: "png", w: 128, h: 128 },
+      { kind: MEDIA_KIND.chat, bytes: encoded.exports.chat, mime: "image/png", ext: "png", w: 128, h: 128 },
       {
-        kind: "thumbnail",
+        kind: MEDIA_KIND.thumbnail,
         bytes: encoded.exports.thumbnail,
         mime: "image/png",
         ext: "png",
@@ -147,7 +152,7 @@ async function processComposition(stickerId: bigint): Promise<void> {
         h: 256,
       },
       {
-        kind: "image",
+        kind: MEDIA_KIND.image,
         bytes: encoded.exports.full,
         mime: "image/png",
         ext: "png",
@@ -157,7 +162,7 @@ async function processComposition(stickerId: bigint): Promise<void> {
     ];
     if (encoded.exports.mask) {
       kinds.push({
-        kind: "mask",
+        kind: MEDIA_KIND.mask,
         bytes: encoded.exports.mask,
         mime: "image/png",
         ext: "png",
@@ -167,7 +172,7 @@ async function processComposition(stickerId: bigint): Promise<void> {
     }
     if (encoded.exports.gif) {
       kinds.push({
-        kind: "gif",
+        kind: MEDIA_KIND.gif,
         bytes: encoded.exports.gif,
         mime: "image/gif",
         ext: "gif",
@@ -175,7 +180,7 @@ async function processComposition(stickerId: bigint): Promise<void> {
     }
     if (encoded.exports.video) {
       kinds.push({
-        kind: "video",
+        kind: MEDIA_KIND.video,
         bytes: encoded.exports.video,
         mime: "video/mp4",
         ext: "mp4",
@@ -184,20 +189,20 @@ async function processComposition(stickerId: bigint): Promise<void> {
 
     for (const item of kinds) {
       // Preserve previous thumbnail once before first overwrite in this encode pass
-      if (item.kind === "thumbnail") {
+      if (item.kind === MEDIA_KIND.thumbnail) {
         const existing = await prisma.mediaAsset.findUnique({
-          where: { stickerId_kind: { stickerId, kind: "thumbnail" } },
+          where: { stickerId_kind: { stickerId, kind: MEDIA_KIND.thumbnail } },
         });
         if (
           existing?.compositionRevisionId &&
           existing.compositionRevisionId !== revision.id
         ) {
           await prisma.mediaAsset.deleteMany({
-            where: { stickerId, kind: "prev_thumbnail" },
+            where: { stickerId, kind: MEDIA_KIND.prevThumbnail },
           });
           await prisma.mediaAsset.update({
             where: { id: existing.id },
-            data: { kind: "prev_thumbnail" },
+            data: { kind: MEDIA_KIND.prevThumbnail },
           });
         }
       }
@@ -225,7 +230,7 @@ async function processComposition(stickerId: bigint): Promise<void> {
           checksumSha256: sha256Hex(item.bytes),
           glassObjectId: up.object_id,
           glassPrismId: prismId,
-          status: "ready",
+          status: MEDIA_ASSET_STATUS.ready,
         },
         update: {
           compositionRevisionId: revision.id,
@@ -239,7 +244,7 @@ async function processComposition(stickerId: bigint): Promise<void> {
           checksumSha256: sha256Hex(item.bytes),
           glassObjectId: up.object_id,
           glassPrismId: prismId,
-          status: "ready",
+          status: MEDIA_ASSET_STATUS.ready,
         },
       });
     }
@@ -259,7 +264,7 @@ async function processComposition(stickerId: bigint): Promise<void> {
 
     await prisma.sticker.update({
       where: { id: stickerId },
-      data: { processingStatus: "ready", processingError: null },
+      data: { processingStatus: PROCESSING_STATUS.ready, processingError: null },
     });
   } catch (err) {
     await fail(
@@ -288,7 +293,7 @@ async function fail(stickerId: bigint, message: string) {
   await prisma.sticker.update({
     where: { id: stickerId },
     data: {
-      processingStatus: "failed",
+      processingStatus: PROCESSING_STATUS.failed,
       processingError: message.slice(0, 2000),
     },
   });
@@ -309,7 +314,7 @@ export async function discardNonCurrentRevisionMedia(
       OR: [
         { compositionRevisionId: null },
         { compositionRevisionId: { not: composition.currentRevisionId } },
-        { kind: "prev_thumbnail" },
+        { kind: MEDIA_KIND.prevThumbnail },
       ],
     },
   });

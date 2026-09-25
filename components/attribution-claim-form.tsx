@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { CLAIM_REASON, CLAIM_REASONS } from "@/lib/attribution";
 import { BusyButton } from "./busy-button";
 
 type Props = {
@@ -117,11 +118,16 @@ export function AttributionClaimForm({
         <select
           name="reason"
           required
-          defaultValue="missing"
+          defaultValue={CLAIM_REASON.missing}
           className="mt-1 w-full rounded-2xl border border-divider bg-background px-4 py-2.5 outline-none"
         >
-          <option value="missing">Attribution missing</option>
-          <option value="mislabeled">Attribution mislabeled</option>
+          {CLAIM_REASONS.map((r) => (
+            <option key={r} value={r}>
+              {r === CLAIM_REASON.missing
+                ? "Attribution missing"
+                : "Attribution mislabeled"}
+            </option>
+          ))}
         </select>
       </label>
 

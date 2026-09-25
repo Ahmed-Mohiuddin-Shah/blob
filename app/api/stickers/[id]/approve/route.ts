@@ -6,10 +6,12 @@ import { discardNonCurrentRevisionMedia } from "@/lib/composition-encode";
 import { getGlass, getPublicPrismId } from "@/lib/glass";
 import {
   MODERATION_ACTION,
+  MODERATION_STATUS,
   MODERATION_SUBJECT,
   recordModerationEvent,
 } from "@/lib/moderation";
 import { prisma } from "@/lib/prisma";
+import { PROCESSING_STATUS, VISIBILITY } from "@/lib/stickers";
 
 async function requireAdminUser() {
   const reqHeaders = await headers();
@@ -46,10 +48,10 @@ export async function POST(
   if (!sticker) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
-  if (sticker.moderationStatus === "approved") {
-    return NextResponse.json({ ok: true, status: "approved" });
+  if (sticker.moderationStatus === MODERATION_STATUS.approved) {
+    return NextResponse.json({ ok: true, status: MODERATION_STATUS.approved });
   }
-  if (sticker.processingStatus !== "ready") {
+  if (sticker.processingStatus !== PROCESSING_STATUS.ready) {
     return NextResponse.json(
       { error: "Still processing — wait until ready" },
       { status: 409 },
@@ -57,7 +59,7 @@ export async function POST(
   }
 
   try {
-    if (sticker.visibility === "public") {
+    if (sticker.visibility === VISIBILITY.public) {
       const glass = getGlass();
       const publicId = await getPublicPrismId();
       for (const asset of sticker.media) {
@@ -80,7 +82,7 @@ export async function POST(
     await prisma.sticker.update({
       where: { id: sticker.id },
       data: {
-        moderationStatus: "approved",
+        moderationStatus: MODERATION_STATUS.approved,
         moderationNote: null,
         publishedAt: sticker.publishedAt ?? new Date(),
       },
@@ -97,7 +99,7 @@ export async function POST(
       actorId: admin.id,
     });
 
-    return NextResponse.json({ ok: true, status: "approved" });
+    return NextResponse.json({ ok: true, status: MODERATION_STATUS.approved });
   } catch (err) {
     console.error("Approve sticker failed:", err);
     return NextResponse.json(

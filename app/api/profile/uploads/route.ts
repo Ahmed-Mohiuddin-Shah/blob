@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { getSession } from "@/lib/auth";
 import { canUpload } from "@/lib/capabilities";
-import { getGlass } from "@/lib/glass";
+import { getGlass, GLASS_UPLOAD_STATUS } from "@/lib/glass";
 import { prisma } from "@/lib/prisma";
 
 async function sessionUser() {
@@ -75,7 +75,7 @@ export async function POST(request: Request) {
         prismId,
         title: file.name.slice(0, 200),
         size: uploaded.size,
-        status: "pending",
+        status: GLASS_UPLOAD_STATUS.pending,
       },
     });
 

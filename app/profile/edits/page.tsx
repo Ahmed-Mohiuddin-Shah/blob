@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { StickerMedia } from "@/components/sticker-media";
+import { MODERATION_STATUS } from "@/lib/moderation";
 import { prisma } from "@/lib/prisma";
 import { requireSessionUser } from "@/lib/require-user";
+import { MEDIA_KIND } from "@/lib/stickers";
 
 function typeFromMedia(kinds: string[]): string {
-  if (kinds.includes("video")) return "VIDEO";
-  if (kinds.includes("gif")) return "GIF";
+  if (kinds.includes(MEDIA_KIND.video)) return "VIDEO";
+  if (kinds.includes(MEDIA_KIND.gif)) return "GIF";
   return "IMAGE";
 }
 
@@ -14,7 +16,7 @@ export default async function ProfileEditsPage() {
 
   const stickers = await prisma.sticker.findMany({
     where: {
-      moderationStatus: "needs_edit",
+      moderationStatus: MODERATION_STATUS.needsEdit,
       uploadedById: user.id,
     },
     orderBy: { updatedAt: "desc" },
@@ -41,7 +43,7 @@ export default async function ProfileEditsPage() {
           {stickers.map((s) => {
             const kinds = s.media.map((m) => m.kind);
             const type = typeFromMedia(kinds);
-            const prev = kinds.includes("prev_thumbnail");
+            const prev = kinds.includes(MEDIA_KIND.prevThumbnail);
             return (
               <li
                 key={s.id.toString()}
@@ -54,7 +56,7 @@ export default async function ProfileEditsPage() {
                       title="Previous"
                     >
                       <StickerMedia
-                        src={`/api/stickers/${s.id}/media/prev_thumbnail`}
+                        src={`/api/stickers/${s.id}/media/${MEDIA_KIND.prevThumbnail}`}
                         seed={`${s.title}-prev`}
                         alt={`${s.title} previous`}
                       />
@@ -65,7 +67,7 @@ export default async function ProfileEditsPage() {
                     className="h-24 w-24 overflow-hidden rounded-2xl"
                   >
                     <StickerMedia
-                      src={`/api/stickers/${s.id}/media/thumbnail`}
+                      src={`/api/stickers/${s.id}/media/${MEDIA_KIND.thumbnail}`}
                       seed={s.title}
                       alt={s.title}
                       video={type === "VIDEO"}

@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import { canModerate } from "@/lib/capabilities";
 import {
   MODERATION_ACTION,
+  MODERATION_STATUS,
   MODERATION_SUBJECT,
   recordModerationEvent,
 } from "@/lib/moderation";
@@ -137,8 +138,8 @@ export async function PATCH(
   }
 
   const requeueReview =
-    sticker.moderationStatus === "needs_edit" ||
-    sticker.moderationStatus === "approved";
+    sticker.moderationStatus === MODERATION_STATUS.needsEdit ||
+    sticker.moderationStatus === MODERATION_STATUS.approved;
   const nextTitle = title ?? sticker.title;
 
   await prisma.$transaction(async (tx) => {
@@ -151,7 +152,7 @@ export async function PATCH(
         ...(categoryId !== undefined ? { categoryId } : {}),
         ...(authorName !== undefined ? { authorName, sourceUrl } : {}),
         ...(requeueReview
-          ? { moderationStatus: "pending_review", moderationNote: null }
+          ? { moderationStatus: MODERATION_STATUS.pendingReview, moderationNote: null }
           : {}),
       },
     });
@@ -186,6 +187,6 @@ export async function PATCH(
 
   return NextResponse.json({
     ok: true,
-    status: requeueReview ? "pending_review" : sticker.moderationStatus,
+    status: requeueReview ? MODERATION_STATUS.pendingReview : sticker.moderationStatus,
   });
 }

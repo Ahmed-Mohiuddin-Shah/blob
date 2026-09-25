@@ -67,6 +67,7 @@ Search must find what the user typed (title, aliases, tags, categories, keywords
 | Moderation history                    | Shared polymorphic `moderation_events` (stickers + attribution claims now; collections / packs / layouts later) |
 | Attribution on upload                 | Required Yes/No; Yes requires `author_name` (label) + `source_url` (http/https)                                 |
 | Attribution claims                    | Signed-in only; admin approve auto-applies proposed label+URL; approve/reject require admin note               |
+| Domain enums                          | Closed vocabularies (`role`, `account_status`, `visibility`, `moderation_status`, `processing_status`, media kinds/statuses, claim reason/status, favourite/moderation subject types, moderation actions) live as shared `as const` enums in `lib/`. Call sites must import them — raw string literals for those fields are forbidden. |
 
 
 ---
@@ -770,6 +771,7 @@ POST   /api/prints/generate
 13. Ownership is explicit (`created_by` / `uploaded_by` + attribution fields).
 14. Couple to GLASS only through `MediaStorage`.
 15. Print sheets: on-demand + cache; no combinatorial pre-generation.
+16. **Enums are mandatory for maintainability:** every closed domain set must have a single `lib/` `as const` enum source; forms and APIs consume it (`.map()` options, comparisons, writes). Do not scatter hardcoded string literals for domain fields.
 
 ---
 

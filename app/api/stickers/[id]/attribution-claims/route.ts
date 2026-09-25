@@ -3,17 +3,19 @@ import { headers } from "next/headers";
 import { getSession } from "@/lib/auth";
 import {
   CLAIM_REASONS,
+  CLAIM_STATUS,
   isHttpUrl,
   type ClaimReason,
 } from "@/lib/attribution";
+import { canModerate } from "@/lib/capabilities";
 import {
   MODERATION_ACTION,
   MODERATION_SUBJECT,
   recordModerationEvent,
 } from "@/lib/moderation";
 import { prisma } from "@/lib/prisma";
+import { ACCOUNT_STATUS } from "@/lib/roles";
 import { canAccessSticker } from "@/lib/stickers";
-import { canModerate } from "@/lib/capabilities";
 
 async function sessionUser() {
   const reqHeaders = await headers();
@@ -33,7 +35,7 @@ export async function POST(
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (user.accountStatus !== "active") {
+  if (user.accountStatus !== ACCOUNT_STATUS.active) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -104,7 +106,7 @@ export async function POST(
     where: {
       stickerId: sticker.id,
       claimantId: user.id,
-      status: "pending",
+      status: CLAIM_STATUS.pending,
     },
   });
   if (existing) {
@@ -124,7 +126,7 @@ export async function POST(
       message,
       proposedAuthorName,
       proposedSourceUrl,
-      status: "pending",
+      status: CLAIM_STATUS.pending,
     },
   });
 

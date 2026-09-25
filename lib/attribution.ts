@@ -38,8 +38,26 @@ export function isHttpUrl(value: string): boolean {
   }
 }
 
-export const CLAIM_REASONS = ["missing", "mislabeled"] as const;
-export type ClaimReason = (typeof CLAIM_REASONS)[number];
+export const CLAIM_REASON = {
+  missing: "missing",
+  mislabeled: "mislabeled",
+} as const;
 
-export const CLAIM_STATUSES = ["pending", "approved", "rejected"] as const;
-export type ClaimStatus = (typeof CLAIM_STATUSES)[number];
+export const CLAIM_REASONS = [
+  CLAIM_REASON.missing,
+  CLAIM_REASON.mislabeled,
+] as const;
+export type ClaimReason = (typeof CLAIM_REASON)[keyof typeof CLAIM_REASON];
+
+export const CLAIM_STATUS = {
+  pending: "pending",
+  approved: "approved",
+  rejected: "rejected",
+} as const;
+
+export const CLAIM_STATUSES = [
+  CLAIM_STATUS.pending,
+  CLAIM_STATUS.approved,
+  CLAIM_STATUS.rejected,
+] as const;
+export type ClaimStatus = (typeof CLAIM_STATUS)[keyof typeof CLAIM_STATUS];

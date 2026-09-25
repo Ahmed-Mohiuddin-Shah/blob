@@ -1,17 +1,23 @@
 import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { getSession } from "@/lib/auth";
-import { canUpload } from "@/lib/capabilities";
+import { canModerate, canUpload } from "@/lib/capabilities";
 import { parseDocumentJson, remixDocument, uniqueStickerSlug } from "@/lib/composition";
 import { enqueueCompositionEncode } from "@/lib/composition-encode";
 import {
   MODERATION_ACTION,
+  MODERATION_STATUS,
   MODERATION_SUBJECT,
   recordModerationEvent,
 } from "@/lib/moderation";
 import { prisma } from "@/lib/prisma";
-import { canAccessSticker } from "@/lib/stickers";
-import { canModerate } from "@/lib/capabilities";
+import {
+  canAccessSticker,
+  MEDIA_ASSET_STATUS,
+  MEDIA_KIND,
+  PROCESSING_STATUS,
+  VISIBILITY,
+} from "@/lib/stickers";
 
 async function sessionUser() {
   const reqHeaders = await headers();
@@ -43,7 +49,7 @@ export async function POST(
     where: { id: BigInt(id) },
     include: {
       composition: true,
-      media: { where: { kind: "thumbnail", status: "ready" }, take: 1 },
+      media: { where: { kind: MEDIA_KIND.thumbnail, status: MEDIA_ASSET_STATUS.ready }, take: 1 },
     },
   });
   if (!source?.composition?.currentRevisionId) {
@@ -93,9 +99,12 @@ export async function POST(
           categoryId: source.categoryId,
           authorName: source.authorName,
           sourceUrl: source.sourceUrl,
-          visibility: source.visibility === "private" ? "private" : "unlisted",
-          moderationStatus: "draft",
-          processingStatus: "processing",
+          visibility:
+            source.visibility === VISIBILITY.private
+              ? VISIBILITY.private
+              : VISIBILITY.unlisted,
+          moderationStatus: MODERATION_STATUS.draft,
+          processingStatus: PROCESSING_STATUS.processing,
         },
       });
 

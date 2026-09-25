@@ -1,13 +1,14 @@
 import { Download } from "lucide-react";
 import { glassPublicObjectUrl } from "@/lib/glass";
+import { MEDIA_ASSET_STATUS, MEDIA_KIND } from "@/lib/stickers";
 
 const DOWNLOAD_KINDS: { kind: string; label: string }[] = [
-  { kind: "image", label: "Full PNG" },
-  { kind: "chat", label: "Chat PNG" },
-  { kind: "thumbnail", label: "Thumbnail" },
-  { kind: "gif", label: "GIF" },
-  { kind: "video", label: "Video" },
-  { kind: "mask", label: "Mask" },
+  { kind: MEDIA_KIND.image, label: "Full PNG" },
+  { kind: MEDIA_KIND.chat, label: "Chat PNG" },
+  { kind: MEDIA_KIND.thumbnail, label: "Thumbnail" },
+  { kind: MEDIA_KIND.gif, label: "GIF" },
+  { kind: MEDIA_KIND.video, label: "Video" },
+  { kind: MEDIA_KIND.mask, label: "Mask" },
 ];
 
 export type DownloadMedia = {
@@ -28,7 +29,9 @@ export function StickerDownloadButtons({
   media: DownloadMedia[];
 }) {
   const ready = new Map(
-    media.filter((m) => m.status === "ready").map((m) => [m.kind, m]),
+    media
+      .filter((m) => m.status === MEDIA_ASSET_STATUS.ready)
+      .map((m) => [m.kind, m]),
   );
   const items = DOWNLOAD_KINDS.filter((d) => ready.has(d.kind));
   if (items.length === 0) return null;

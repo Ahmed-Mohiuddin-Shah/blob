@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { ExportPayload } from "blob-editor/core";
+import { VISIBILITIES, VISIBILITY } from "@/lib/stickers";
 import { BlobEditorHost } from "./blob-editor-host";
 import { BusyButton } from "./busy-button";
 
@@ -29,7 +30,7 @@ const emptyMeta: Meta = {
   sourceUrl: "",
   categoryId: "",
   tags: "",
-  visibility: "public",
+  visibility: VISIBILITY.public,
 };
 
 export function StickerCreateForm({
@@ -382,9 +383,11 @@ export function StickerCreateForm({
           }
           className="mt-1 w-full rounded-2xl border border-divider bg-surface px-4 py-2.5 outline-none"
         >
-          <option value="public">Public</option>
-          <option value="unlisted">Unlisted</option>
-          <option value="private">Private</option>
+          {VISIBILITIES.map((v) => (
+            <option key={v} value={v}>
+              {v[0]!.toUpperCase() + v.slice(1)}
+            </option>
+          ))}
         </select>
       </label>
       <BusyButton

@@ -5,8 +5,14 @@ import {
   upsertTagsForCollection,
 } from "@/lib/collections";
 import { parseTagNames } from "@/lib/composition";
+import { FAVORITE_SUBJECT } from "@/lib/favorites";
 import { sessionUser } from "@/lib/session-user";
 import { prisma } from "@/lib/prisma";
+import {
+  CARD_MEDIA_KINDS,
+  MEDIA_ASSET_STATUS,
+  MEDIA_KIND,
+} from "@/lib/stickers";
 
 type Ctx = { params: Promise<{ slug: string }> };
 
@@ -26,8 +32,8 @@ export async function GET(_request: Request, ctx: Ctx) {
               createdBy: { select: { username: true, displayName: true } },
               media: {
                 where: {
-                  kind: { in: ["thumbnail", "image", "gif", "video"] },
-                  status: "ready",
+                  kind: { in: [...CARD_MEDIA_KINDS] },
+                  status: MEDIA_ASSET_STATUS.ready,
                 },
                 select: { kind: true },
               },
@@ -48,7 +54,7 @@ export async function GET(_request: Request, ctx: Ctx) {
       where: {
         userId_subjectType_subjectId: {
           userId: user.id,
-          subjectType: "collection",
+          subjectType: FAVORITE_SUBJECT.collection,
           subjectId: collection.id,
         },
       },
@@ -57,8 +63,8 @@ export async function GET(_request: Request, ctx: Ctx) {
   }
 
   function mediaLabel(kinds: string[]): string {
-    if (kinds.includes("video")) return "VIDEO";
-    if (kinds.includes("gif")) return "GIF";
+    if (kinds.includes(MEDIA_KIND.video)) return "VIDEO";
+    if (kinds.includes(MEDIA_KIND.gif)) return "GIF";
     return "IMAGE";
   }
 

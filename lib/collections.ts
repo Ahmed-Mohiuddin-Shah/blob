@@ -49,6 +49,9 @@ export function serializeCollection(c: {
   tags?: { tag: { id: bigint; name: string; slug: string } }[];
 }) {
   const stickerCount = c._count?.stickers ?? c.stickers?.length ?? 0;
+  const previewThumbUrls = (c.stickers ?? [])
+    .slice(0, 5)
+    .map((s) => `/api/stickers/${s.stickerId}/media/thumbnail`);
   return {
     id: c.id.toString(),
     name: c.name,
@@ -58,6 +61,7 @@ export function serializeCollection(c: {
     author: c.user.displayName || c.user.username,
     username: c.user.username,
     stickerCount,
+    previewThumbUrls,
     tags: (c.tags ?? []).map(({ tag }) => ({
       id: tag.id.toString(),
       name: tag.name,
@@ -66,3 +70,12 @@ export function serializeCollection(c: {
     createdAt: c.createdAt.toISOString(),
   };
 }
+
+/** Include for card collage: first 5 stickers by sort order. */
+export const collectionCardPreviewInclude = {
+  stickers: {
+    take: 5,
+    orderBy: { sortOrder: "asc" as const },
+    select: { stickerId: true },
+  },
+};

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { getSession } from "@/lib/auth";
+import { CLAIM_STATUS } from "@/lib/attribution";
 import { canModerate } from "@/lib/capabilities";
 import {
   MODERATION_ACTION,
@@ -62,7 +63,7 @@ export async function POST(
   if (!claim) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
-  if (claim.status !== "pending") {
+  if (claim.status !== CLAIM_STATUS.pending) {
     return NextResponse.json({ error: "Claim already reviewed" }, { status: 409 });
   }
 
@@ -77,7 +78,7 @@ export async function POST(
     await tx.attributionClaim.update({
       where: { id: claim.id },
       data: {
-        status: "approved",
+        status: CLAIM_STATUS.approved,
         adminNote: note,
         reviewedById: admin.id,
         reviewedAt: new Date(),

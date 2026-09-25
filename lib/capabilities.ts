@@ -1,5 +1,7 @@
 import {
+  ACCOUNT_STATUS,
   APP_ASSIGNABLE_ROLES,
+  BLOB_ROLE,
   isAdminRank,
   isBlobRole,
   isMemberRole,
@@ -13,20 +15,20 @@ export type CapabilityUser = {
 };
 
 export function isActive(user: CapabilityUser): boolean {
-  return user.accountStatus === "active";
+  return user.accountStatus === ACCOUNT_STATUS.active;
 }
 
 export function canUpload(user: CapabilityUser): boolean {
-  return hasMinRole(user, "member");
+  return hasMinRole(user, BLOB_ROLE.member);
 }
 
 export function canManageUsers(user: CapabilityUser): boolean {
-  return hasMinRole(user, "admin");
+  return hasMinRole(user, BLOB_ROLE.admin);
 }
 
 /** Only superadmin may promote/demote admin ranks. */
 export function canManageAdmins(user: CapabilityUser): boolean {
-  return isActive(user) && user.role === "superadmin";
+  return isActive(user) && user.role === BLOB_ROLE.superadmin;
 }
 
 export function canApproveUploads(user: CapabilityUser): boolean {
@@ -40,10 +42,10 @@ export function canModerate(user: CapabilityUser): boolean {
 export function hasMinRole(user: CapabilityUser, min: BlobRole): boolean {
   if (!isActive(user)) return false;
   const order: Record<BlobRole, number> = {
-    user: 1,
-    member: 2,
-    admin: 3,
-    superadmin: 4,
+    [BLOB_ROLE.user]: 1,
+    [BLOB_ROLE.member]: 2,
+    [BLOB_ROLE.admin]: 3,
+    [BLOB_ROLE.superadmin]: 4,
   };
   const rank = order[user.role as BlobRole] ?? 0;
   return rank >= order[min];
@@ -100,7 +102,7 @@ export function roleChangeError(
   if (nextRole === target.role) return null;
 
   // Promoting to superadmin is Zitadel-only — never via BLOB UI/API
-  if (nextRole === "superadmin") {
+  if (nextRole === BLOB_ROLE.superadmin) {
     return "superadmin can only be assigned in Zitadel";
   }
 
@@ -113,7 +115,7 @@ export function roleChangeError(
   }
 
   // Superadmin demoting someone away from superadmin
-  if (target.role === "superadmin") {
+  if (target.role === BLOB_ROLE.superadmin) {
     if (superadminCount <= 1) {
       return "Cannot demote the last superadmin";
     }

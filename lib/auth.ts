@@ -4,7 +4,12 @@ import { randomUUID } from "crypto";
 import * as oidc from "openid-client";
 import type { JWT } from "@auth/core/jwt";
 import { attributesFromClaims } from "@/lib/zitadel-user-mapper";
-import { rolesFromClaims, type BlobRole } from "@/lib/roles";
+import {
+  ACCOUNT_STATUS,
+  BLOB_ROLE,
+  rolesFromClaims,
+  type BlobRole,
+} from "@/lib/roles";
 import { zitadelScopes } from "@/lib/scopes";
 import { setUserRole, zitadelProjectId } from "@/lib/zitadel-mgmt";
 
@@ -23,25 +28,25 @@ async function ensureBootstrapSuperadmin(
   prisma: PrismaClient,
 ): Promise<bigint | null> {
   const has = await prisma.user.findFirst({
-    where: { role: "superadmin" },
+    where: { role: BLOB_ROLE.superadmin },
     select: { id: true },
   });
   if (has) return null;
 
   const firstAdmin = await prisma.user.findFirst({
-    where: { role: "admin" },
+    where: { role: BLOB_ROLE.admin },
     orderBy: { id: "asc" },
   });
   if (!firstAdmin) return null;
 
   try {
-    await setUserRole(firstAdmin.zitadelId, "superadmin");
+    await setUserRole(firstAdmin.zitadelId, BLOB_ROLE.superadmin);
   } catch (err) {
     console.warn("Zitadel bootstrap superadmin skipped:", err);
   }
   await prisma.user.update({
     where: { id: firstAdmin.id },
-    data: { role: "superadmin" },
+    data: { role: BLOB_ROLE.superadmin },
   });
   return firstAdmin.id;
 }
@@ -144,7 +149,7 @@ export const authOptions: NextAuthConfig = {
         const userCount = await prisma.user.count();
         // First signup owns the platform — forces superadmin even if claims say user.
         const role: BlobRole =
-          userCount === 0 ? "superadmin" : claimedRole;
+          userCount === 0 ? BLOB_ROLE.superadmin : claimedRole;
         await prisma.user.create({
           data: {
             zitadelId: attrs.zitadelId,
@@ -153,7 +158,7 @@ export const authOptions: NextAuthConfig = {
             email: attrs.email,
             emailVerifiedAt: attrs.emailVerifiedAt,
             role,
-            accountStatus: "active",
+            accountStatus: ACCOUNT_STATUS.active,
           },
         });
         // Seed Zitadel grant so console/app stay aligned (ignore if PAT unset)
@@ -167,12 +172,12 @@ export const authOptions: NextAuthConfig = {
         // Claims lag after Management API grant until re-auth; keep local superadmin.
         let role: BlobRole = claimedRole;
         if (promotedId !== null && existing.id === promotedId) {
-          role = "superadmin";
-        } else if (existing.role === "superadmin") {
-          role = "superadmin";
-          if (claimedRole !== "superadmin") {
+          role = BLOB_ROLE.superadmin;
+        } else if (existing.role === BLOB_ROLE.superadmin) {
+          role = BLOB_ROLE.superadmin;
+          if (claimedRole !== BLOB_ROLE.superadmin) {
             try {
-              await setUserRole(attrs.zitadelId, "superadmin");
+              await setUserRole(attrs.zitadelId, BLOB_ROLE.superadmin);
             } catch (err) {
               console.warn("Zitadel re-assert superadmin skipped:", err);
             }
@@ -232,8 +237,8 @@ export const authOptions: NextAuthConfig = {
         session.user.username = token.username ?? "";
         session.user.displayName =
           token.displayName ?? session.user.name ?? "";
-        session.user.role = token.role ?? "user";
-        session.user.accountStatus = token.accountStatus ?? "active";
+        session.user.role = token.role ?? BLOB_ROLE.user;
+        session.user.accountStatus = token.accountStatus ?? ACCOUNT_STATUS.active;
         session.user.name = token.displayName ?? session.user.name;
       }
       return session;

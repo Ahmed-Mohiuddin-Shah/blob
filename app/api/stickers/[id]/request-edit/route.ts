@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import { canModerate } from "@/lib/capabilities";
 import {
   MODERATION_ACTION,
+  MODERATION_STATUS,
   MODERATION_SUBJECT,
   recordModerationEvent,
 } from "@/lib/moderation";
@@ -49,14 +50,14 @@ export async function POST(
   if (!sticker) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
-  if (sticker.moderationStatus === "rejected") {
+  if (sticker.moderationStatus === MODERATION_STATUS.rejected) {
     return NextResponse.json({ error: "Sticker already rejected" }, { status: 409 });
   }
 
   await prisma.sticker.update({
     where: { id: sticker.id },
     data: {
-      moderationStatus: "needs_edit",
+      moderationStatus: MODERATION_STATUS.needsEdit,
       moderationNote: note.slice(0, 2000),
     },
   });
@@ -70,5 +71,5 @@ export async function POST(
     note,
   });
 
-  return NextResponse.json({ ok: true, status: "needs_edit" });
+  return NextResponse.json({ ok: true, status: MODERATION_STATUS.needsEdit });
 }

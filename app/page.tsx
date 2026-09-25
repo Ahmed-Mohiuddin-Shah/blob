@@ -17,7 +17,13 @@ import { Hero } from "@/components/home/hero";
 import { MemberCta } from "@/components/home/member-cta";
 import { PrintsCta } from "@/components/home/prints-cta";
 import { getSession } from "@/lib/auth";
+import { MODERATION_STATUS } from "@/lib/moderation";
 import { prisma } from "@/lib/prisma";
+import {
+  MEDIA_KIND,
+  PROCESSING_STATUS,
+  VISIBILITY,
+} from "@/lib/stickers";
 
 const CATEGORY_ICONS: Record<string, { icon: LucideIcon; className: string }> = {
   reactions: { icon: Smile, className: "bg-accent-gradient" },
@@ -32,8 +38,8 @@ const CATEGORY_ICONS: Record<string, { icon: LucideIcon; className: string }> = 
 };
 
 function typeFromMedia(kinds: string[]): string {
-  if (kinds.includes("video")) return "VIDEO";
-  if (kinds.includes("gif")) return "GIF";
+  if (kinds.includes(MEDIA_KIND.video)) return "VIDEO";
+  if (kinds.includes(MEDIA_KIND.gif)) return "GIF";
   return "IMAGE";
 }
 
@@ -48,9 +54,9 @@ export default async function HomePage() {
     }),
     prisma.sticker.findMany({
       where: {
-        visibility: "public",
-        moderationStatus: "approved",
-        processingStatus: "ready",
+        visibility: VISIBILITY.public,
+        moderationStatus: MODERATION_STATUS.approved,
+        processingStatus: PROCESSING_STATUS.ready,
       },
       orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
       take: 6,

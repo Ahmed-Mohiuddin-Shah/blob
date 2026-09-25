@@ -1,11 +1,13 @@
 import { StickerModerationList } from "@/components/sticker-moderation-list";
 import { canManageUsers } from "@/lib/capabilities";
+import { MODERATION_STATUS } from "@/lib/moderation";
 import { prisma } from "@/lib/prisma";
 import { requireSessionUser } from "@/lib/require-user";
+import { MEDIA_KIND } from "@/lib/stickers";
 
 function typeFromMedia(kinds: string[]): string {
-  if (kinds.includes("video")) return "VIDEO";
-  if (kinds.includes("gif")) return "GIF";
+  if (kinds.includes(MEDIA_KIND.video)) return "VIDEO";
+  if (kinds.includes(MEDIA_KIND.gif)) return "GIF";
   return "IMAGE";
 }
 
@@ -18,7 +20,7 @@ export default async function ProfilePendingPage() {
 
   const stickers = await prisma.sticker.findMany({
     where: {
-      moderationStatus: "pending_review",
+      moderationStatus: MODERATION_STATUS.pendingReview,
       ...(isAdmin ? {} : { uploadedById: user.id }),
     },
     orderBy: { createdAt: "desc" },
@@ -53,8 +55,8 @@ export default async function ProfilePendingPage() {
               status: s.moderationStatus,
               processingStatus: s.processingStatus,
               thumbUrl: `/api/stickers/${s.id}/media/thumbnail`,
-              prevThumbUrl: kinds.includes("prev_thumbnail")
-                ? `/api/stickers/${s.id}/media/prev_thumbnail`
+              prevThumbUrl: kinds.includes(MEDIA_KIND.prevThumbnail)
+                ? `/api/stickers/${s.id}/media/${MEDIA_KIND.prevThumbnail}`
                 : null,
               createdAt: s.createdAt.toISOString(),
             };

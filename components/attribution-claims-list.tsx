@@ -3,6 +3,12 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
+import {
+  CLAIM_REASON,
+  CLAIM_REASONS,
+  CLAIM_STATUS,
+  CLAIM_STATUSES,
+} from "@/lib/attribution";
 import { BusyButton } from "./busy-button";
 
 export type AttributionClaimItem = {
@@ -22,7 +28,7 @@ export type AttributionClaimItem = {
 export function AttributionClaimsList({ items }: { items: AttributionClaimItem[] }) {
   const router = useRouter();
   const [reasonFacet, setReasonFacet] = useState("");
-  const [statusFacet, setStatusFacet] = useState("pending");
+  const [statusFacet, setStatusFacet] = useState<string>(CLAIM_STATUS.pending);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [noteFor, setNoteFor] = useState<string | null>(null);
@@ -72,8 +78,10 @@ export function AttributionClaimsList({ items }: { items: AttributionClaimItem[]
       <div className="flex flex-wrap gap-2">
         {[
           { value: "", label: "All reasons" },
-          { value: "missing", label: "Missing" },
-          { value: "mislabeled", label: "Mislabeled" },
+          ...CLAIM_REASONS.map((r) => ({
+            value: r,
+            label: r === CLAIM_REASON.missing ? "Missing" : "Mislabeled",
+          })),
         ].map((f) => (
           <button
             key={`r-${f.value || "all"}`}
@@ -91,9 +99,10 @@ export function AttributionClaimsList({ items }: { items: AttributionClaimItem[]
       </div>
       <div className="flex flex-wrap gap-2">
         {[
-          { value: "pending", label: "Pending" },
-          { value: "approved", label: "Approved" },
-          { value: "rejected", label: "Rejected" },
+          ...CLAIM_STATUSES.map((s) => ({
+            value: s,
+            label: s[0]!.toUpperCase() + s.slice(1),
+          })),
           { value: "", label: "All status" },
         ].map((f) => (
           <button

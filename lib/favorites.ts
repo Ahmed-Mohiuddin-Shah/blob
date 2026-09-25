@@ -2,17 +2,27 @@
 
 import { prisma } from "@/lib/prisma";
 
-export const FAVORITE_SUBJECT_TYPES = [
-  "sticker",
-  "collection",
-  "sticker_sheet",
-  "sticker_pack",
-] as const;
+export const FAVORITE_SUBJECT = {
+  sticker: "sticker",
+  collection: "collection",
+  stickerSheet: "sticker_sheet",
+  stickerPack: "sticker_pack",
+} as const;
 
-export type FavoriteSubjectType = (typeof FAVORITE_SUBJECT_TYPES)[number];
+export const FAVORITE_SUBJECT_TYPES = [
+  FAVORITE_SUBJECT.sticker,
+  FAVORITE_SUBJECT.collection,
+  FAVORITE_SUBJECT.stickerSheet,
+  FAVORITE_SUBJECT.stickerPack,
+] as const;
+export type FavoriteSubjectType =
+  (typeof FAVORITE_SUBJECT)[keyof typeof FAVORITE_SUBJECT];
 
 /** Subject types the Favourites UI can create/toggle this pass. */
-export const FAVORITE_UI_TYPES = ["sticker", "collection"] as const;
+export const FAVORITE_UI_TYPES = [
+  FAVORITE_SUBJECT.sticker,
+  FAVORITE_SUBJECT.collection,
+] as const;
 export type FavoriteUiType = (typeof FAVORITE_UI_TYPES)[number];
 
 export function parseFavoriteSubjectType(

@@ -4,6 +4,7 @@ import {
   MIN_COLLECTION_STICKERS,
 } from "@/lib/collections";
 import {
+  FAVORITE_SUBJECT,
   parseFavoriteSubjectType,
   parseFavoriteUiType,
 } from "@/lib/favorites";
@@ -15,10 +16,16 @@ describe("collections + favourites locks", () => {
   });
 
   it("parses favourite subject types", () => {
-    expect(parseFavoriteUiType("sticker")).toBe("sticker");
-    expect(parseFavoriteUiType("collection")).toBe("collection");
-    expect(parseFavoriteUiType("sticker_sheet")).toBeNull();
-    expect(parseFavoriteSubjectType("sticker_pack")).toBe("sticker_pack");
+    expect(parseFavoriteUiType(FAVORITE_SUBJECT.sticker)).toBe(
+      FAVORITE_SUBJECT.sticker,
+    );
+    expect(parseFavoriteUiType(FAVORITE_SUBJECT.collection)).toBe(
+      FAVORITE_SUBJECT.collection,
+    );
+    expect(parseFavoriteUiType(FAVORITE_SUBJECT.stickerSheet)).toBeNull();
+    expect(parseFavoriteSubjectType(FAVORITE_SUBJECT.stickerPack)).toBe(
+      FAVORITE_SUBJECT.stickerPack,
+    );
     expect(parseFavoriteSubjectType("nope")).toBeNull();
   });
 });

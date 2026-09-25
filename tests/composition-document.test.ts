@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createFromSource, remixDeepCopy, validateDocument } from "blob-editor/core";
 import { primaryAssetIdFromDocument } from "@/lib/composition";
+import { MODERATION_STATUS } from "@/lib/moderation";
 import { canOwnerEditSticker } from "@/lib/stickers";
 
 describe("blob-editor document contract", () => {
@@ -22,10 +23,10 @@ describe("blob-editor document contract", () => {
 
 describe("canOwnerEditSticker", () => {
   it("allows approved and needs_edit only (no role bypass — status gate for everyone)", () => {
-    expect(canOwnerEditSticker("approved")).toBe(true);
-    expect(canOwnerEditSticker("needs_edit")).toBe(true);
-    expect(canOwnerEditSticker("pending_review")).toBe(false);
-    expect(canOwnerEditSticker("draft")).toBe(false);
-    expect(canOwnerEditSticker("rejected")).toBe(false);
+    expect(canOwnerEditSticker(MODERATION_STATUS.approved)).toBe(true);
+    expect(canOwnerEditSticker(MODERATION_STATUS.needsEdit)).toBe(true);
+    expect(canOwnerEditSticker(MODERATION_STATUS.pendingReview)).toBe(false);
+    expect(canOwnerEditSticker(MODERATION_STATUS.draft)).toBe(false);
+    expect(canOwnerEditSticker(MODERATION_STATUS.rejected)).toBe(false);
   });
 });

@@ -1,10 +1,11 @@
 import { StickerGrid } from "@/components/sticker-grid";
 import { prisma } from "@/lib/prisma";
 import { requireSessionUser } from "@/lib/require-user";
+import { MEDIA_KIND, PROCESSING_STATUS } from "@/lib/stickers";
 
 function typeFromMedia(kinds: string[]): string {
-  if (kinds.includes("video")) return "VIDEO";
-  if (kinds.includes("gif")) return "GIF";
+  if (kinds.includes(MEDIA_KIND.video)) return "VIDEO";
+  if (kinds.includes(MEDIA_KIND.gif)) return "GIF";
   return "IMAGE";
 }
 
@@ -37,7 +38,7 @@ export default async function ProfileUploadsPage() {
             href: `/stickers/${s.slug}`,
             thumbUrl: `/api/stickers/${s.id}/media/thumbnail`,
             remixHref: `/stickers/${s.slug}/remix`,
-            status: `${s.moderationStatus}${s.processingStatus !== "ready" ? ` · ${s.processingStatus}` : ""}`,
+            status: `${s.moderationStatus}${s.processingStatus !== PROCESSING_STATUS.ready ? ` · ${s.processingStatus}` : ""}`,
           }))}
         />
       </div>

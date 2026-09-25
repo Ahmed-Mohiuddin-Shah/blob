@@ -1,17 +1,48 @@
 /** Coarse BLOB roles — Zitadel project role keys + local mirror. */
 
-export const BLOB_ROLES = ["user", "member", "admin", "superadmin"] as const;
-export type BlobRole = (typeof BLOB_ROLES)[number];
+export const BLOB_ROLE = {
+  user: "user",
+  member: "member",
+  admin: "admin",
+  superadmin: "superadmin",
+} as const;
+
+export const BLOB_ROLES = [
+  BLOB_ROLE.user,
+  BLOB_ROLE.member,
+  BLOB_ROLE.admin,
+  BLOB_ROLE.superadmin,
+] as const;
+export type BlobRole = (typeof BLOB_ROLE)[keyof typeof BLOB_ROLE];
 
 /** Roles an admin (non-superadmin) may assign. */
-export const MEMBER_ROLES = ["user", "member"] as const;
+export const MEMBER_ROLES = [BLOB_ROLE.user, BLOB_ROLE.member] as const;
 export type MemberRole = (typeof MEMBER_ROLES)[number];
 
 /**
  * Roles the BLOB admin UI may assign. `superadmin` is Zitadel-only
  * (bootstrap / console) — never offered in-app.
  */
-export const APP_ASSIGNABLE_ROLES = ["user", "member", "admin"] as const;
+export const APP_ASSIGNABLE_ROLES = [
+  BLOB_ROLE.user,
+  BLOB_ROLE.member,
+  BLOB_ROLE.admin,
+] as const;
+
+export const ACCOUNT_STATUS = {
+  active: "active",
+  pending: "pending",
+  suspended: "suspended",
+  banned: "banned",
+} as const;
+
+export const ACCOUNT_STATUSES = [
+  ACCOUNT_STATUS.active,
+  ACCOUNT_STATUS.pending,
+  ACCOUNT_STATUS.suspended,
+  ACCOUNT_STATUS.banned,
+] as const;
+export type AccountStatus = (typeof ACCOUNT_STATUS)[keyof typeof ACCOUNT_STATUS];
 
 const RANK: Record<BlobRole, number> = {
   user: 1,
@@ -28,14 +59,18 @@ export function isMemberRole(value: string): value is MemberRole {
   return (MEMBER_ROLES as readonly string[]).includes(value);
 }
 
+export function isAccountStatus(value: string): value is AccountStatus {
+  return (ACCOUNT_STATUSES as readonly string[]).includes(value);
+}
+
 /** Admin or superadmin — elevated management ranks. */
 export function isAdminRank(role: string): boolean {
-  return role === "admin" || role === "superadmin";
+  return role === BLOB_ROLE.admin || role === BLOB_ROLE.superadmin;
 }
 
 /** Highest of known BLOB roles; default `user`. */
 export function highestRole(keys: Iterable<string>): BlobRole {
-  let best: BlobRole = "user";
+  let best: BlobRole = BLOB_ROLE.user;
   for (const key of keys) {
     if (isBlobRole(key) && RANK[key] > RANK[best]) best = key;
   }

@@ -1,7 +1,57 @@
 /** Shared sticker constants and small helpers. */
 
-export const VISIBILITIES = ["public", "unlisted", "private"] as const;
-export type Visibility = (typeof VISIBILITIES)[number];
+import { MODERATION_STATUS } from "@/lib/moderation";
+
+export const VISIBILITY = {
+  public: "public",
+  unlisted: "unlisted",
+  private: "private",
+} as const;
+
+export const VISIBILITIES = [
+  VISIBILITY.public,
+  VISIBILITY.unlisted,
+  VISIBILITY.private,
+] as const;
+export type Visibility = (typeof VISIBILITY)[keyof typeof VISIBILITY];
+
+export const PROCESSING_STATUS = {
+  processing: "processing",
+  ready: "ready",
+  failed: "failed",
+} as const;
+
+export type ProcessingStatus =
+  (typeof PROCESSING_STATUS)[keyof typeof PROCESSING_STATUS];
+
+export const MEDIA_KIND = {
+  image: "image",
+  chat: "chat",
+  thumbnail: "thumbnail",
+  mask: "mask",
+  gif: "gif",
+  video: "video",
+  prevThumbnail: "prev_thumbnail",
+} as const;
+
+export type MediaKind = (typeof MEDIA_KIND)[keyof typeof MEDIA_KIND];
+
+/** Browse/card preview kinds (repeated Prisma `kind: { in: … }` filter). */
+export const CARD_MEDIA_KINDS = [
+  MEDIA_KIND.thumbnail,
+  MEDIA_KIND.image,
+  MEDIA_KIND.gif,
+  MEDIA_KIND.video,
+] as const;
+
+export const MEDIA_ASSET_STATUS = {
+  pending: "pending",
+  ready: "ready",
+  failed: "failed",
+} as const;
+
+export type MediaAssetStatus =
+  (typeof MEDIA_ASSET_STATUS)[keyof typeof MEDIA_ASSET_STATUS];
 
 export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 
@@ -111,8 +161,8 @@ function sniff(bytes: Uint8Array): string | null {
 }
 
 export function mediaTypeLabel(kind: string | null | undefined): string {
-  if (kind === "gif") return "GIF";
-  if (kind === "video") return "VIDEO";
+  if (kind === MEDIA_KIND.gif) return "GIF";
+  if (kind === MEDIA_KIND.video) return "VIDEO";
   return "IMAGE";
 }
 
@@ -122,9 +172,9 @@ export function isPublicBrowseable(s: {
   processingStatus: string;
 }): boolean {
   return (
-    s.visibility === "public" &&
-    s.moderationStatus === "approved" &&
-    s.processingStatus === "ready"
+    s.visibility === VISIBILITY.public &&
+    s.moderationStatus === MODERATION_STATUS.approved &&
+    s.processingStatus === PROCESSING_STATUS.ready
   );
 }
 
@@ -141,9 +191,9 @@ export function canAccessSticker(
 ): boolean {
   if (isPublicBrowseable(s)) return true;
   if (
-    s.visibility === "unlisted" &&
-    s.moderationStatus === "approved" &&
-    s.processingStatus === "ready"
+    s.visibility === VISIBILITY.unlisted &&
+    s.moderationStatus === MODERATION_STATUS.approved &&
+    s.processingStatus === PROCESSING_STATUS.ready
   ) {
     return true;
   }
@@ -151,11 +201,16 @@ export function canAccessSticker(
     viewer.viewerId !== null &&
     (viewer.viewerId === s.uploadedById || viewer.viewerId === s.createdById);
   if (isOwner) return true;
-  if (viewer.isAdmin && s.moderationStatus !== "approved") return true;
+  if (viewer.isAdmin && s.moderationStatus !== MODERATION_STATUS.approved) {
+    return true;
+  }
   return false;
 }
 
 /** Owner may edit metadata/composition only when approved or admin requested edits. */
 export function canOwnerEditSticker(moderationStatus: string): boolean {
-  return moderationStatus === "approved" || moderationStatus === "needs_edit";
+  return (
+    moderationStatus === MODERATION_STATUS.approved ||
+    moderationStatus === MODERATION_STATUS.needsEdit
+  );
 }

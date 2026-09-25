@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { BusyButton } from "./busy-button";
 import type { CategoryOption } from "./sticker-create-form";
+import { MODERATION_STATUS } from "@/lib/moderation";
+import { VISIBILITIES, VISIBILITY } from "@/lib/stickers";
 
 export type StickerEditInitial = {
   id: string;
@@ -40,7 +42,7 @@ export function StickerEditForm({
     const payload = {
       title: String(fd.get("title") ?? "").trim(),
       description: String(fd.get("description") ?? "").trim(),
-      visibility: String(fd.get("visibility") ?? "public"),
+      visibility: String(fd.get("visibility") ?? VISIBILITY.public),
       categoryId: String(fd.get("categoryId") ?? ""),
       tags: String(fd.get("tags") ?? ""),
       hasAttribution: String(fd.get("hasAttribution") ?? ""),
@@ -58,7 +60,7 @@ export function StickerEditForm({
         setError(json.error ?? "Save failed");
         return;
       }
-      if (json.status === "pending_review") {
+      if (json.status === MODERATION_STATUS.pendingReview) {
         router.push("/profile/pending");
       } else {
         router.push("/profile/uploads");
@@ -152,9 +154,13 @@ export function StickerEditForm({
           defaultValue={initial.visibility}
           className="mt-1 w-full rounded-2xl border border-divider bg-surface px-4 py-2.5 outline-none"
         >
-          <option value="public">Public (after approval)</option>
-          <option value="unlisted">Unlisted</option>
-          <option value="private">Private</option>
+          {VISIBILITIES.map((v) => (
+            <option key={v} value={v}>
+              {v === VISIBILITY.public
+                ? "Public (after approval)"
+                : v[0]!.toUpperCase() + v.slice(1)}
+            </option>
+          ))}
         </select>
       </label>
 
@@ -199,7 +205,7 @@ export function StickerEditForm({
         busy={busy}
         className="rounded-full bg-accent-gradient px-8 py-3 text-sm font-semibold text-white transition-transform duration-200 hover:scale-105"
       >
-        {initial.moderationStatus === "needs_edit"
+        {initial.moderationStatus === MODERATION_STATUS.needsEdit
           ? "Save & resubmit"
           : "Save changes"}
       </BusyButton>

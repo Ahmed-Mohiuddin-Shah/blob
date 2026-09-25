@@ -9,12 +9,13 @@ import {
 import { enqueueCompositionEncode } from "@/lib/composition-encode";
 import {
   MODERATION_ACTION,
+  MODERATION_STATUS,
   MODERATION_SUBJECT,
   recordModerationEvent,
 } from "@/lib/moderation";
 import { prisma } from "@/lib/prisma";
 import { ensurePrivatePrism } from "@/lib/private-prism";
-import { canOwnerEditSticker } from "@/lib/stickers";
+import { canOwnerEditSticker, PROCESSING_STATUS } from "@/lib/stickers";
 
 async function sessionUser() {
   const reqHeaders = await headers();
@@ -87,8 +88,8 @@ export async function POST(
 
   const lastRev = sticker.composition.revisions[0]?.revision ?? 0;
   const requeueReview =
-    sticker.moderationStatus === "needs_edit" ||
-    sticker.moderationStatus === "approved";
+    sticker.moderationStatus === MODERATION_STATUS.needsEdit ||
+    sticker.moderationStatus === MODERATION_STATUS.approved;
 
   try {
     const revision = await prisma.$transaction(async (tx) => {
@@ -107,10 +108,10 @@ export async function POST(
       await tx.sticker.update({
         where: { id: sticker.id },
         data: {
-          processingStatus: "processing",
+          processingStatus: PROCESSING_STATUS.processing,
           processingError: null,
           ...(requeueReview
-            ? { moderationStatus: "pending_review", moderationNote: null }
+            ? { moderationStatus: MODERATION_STATUS.pendingReview, moderationNote: null }
             : {}),
         },
       });
