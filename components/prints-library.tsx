@@ -1,8 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { Search } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AddToCollectionButton } from "./add-to-collection-button";
 import { FavouriteButton } from "./favourite-button";
+import { LibrarySearchSentinel, useSearchDock } from "./library-search";
+import { COLLECTION_ITEM } from "@/lib/collections";
 import { FAVORITE_SUBJECT } from "@/lib/favorites";
 
 type SheetItem = {
@@ -31,55 +36,78 @@ type PackItem = {
 
 export function PrintsLibrary({
   signedIn = false,
+  signInHref = "/auth/login",
   mine = false,
+  initialQ = "",
+  /** When false, skip sticky dock + URL search (e.g. profile/prints). */
+  searchable = true,
 }: {
   signedIn?: boolean;
+  signInHref?: string;
   /** Show the signed-in user's sheets/packs (all statuses). */
   mine?: boolean;
+  initialQ?: string;
+  searchable?: boolean;
 }) {
+  const router = useRouter();
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
+  const docked = useSearchDock(sentinelRef);
+  const [q, setQ] = useState(initialQ);
   const [tab, setTab] = useState<"sheets" | "packs">("sheets");
   const [sheets, setSheets] = useState<SheetItem[]>([]);
   const [packs, setPacks] = useState<PackItem[]>([]);
   const [sheetCursor, setSheetCursor] = useState<string | null>(null);
   const [packCursor, setPackCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const loadMoreRef = useRef<HTMLDivElement>(null);
   const [loadingMore, setLoadingMore] = useState(false);
 
-  const loadSheets = useCallback(async (cursor: string | null, replace: boolean) => {
-    const params = new URLSearchParams();
-    if (cursor) params.set("cursor", cursor);
-    if (mine) params.set("mine", "1");
-    const res = await fetch(`/api/sheets?${params}`);
-    if (!res.ok) throw new Error("fail");
-    const json = (await res.json()) as {
-      items: SheetItem[];
-      nextCursor: string | null;
-    };
-    setSheets((prev) => (replace ? json.items : [...prev, ...json.items]));
-    setSheetCursor(json.nextCursor);
-  }, [mine]);
+  const loadSheets = useCallback(
+    async (cursor: string | null, replace: boolean, query: string) => {
+      const params = new URLSearchParams();
+      if (cursor) params.set("cursor", cursor);
+      if (mine) params.set("mine", "1");
+      if (query) params.set("q", query);
+      const res = await fetch(`/api/sheets?${params}`);
+      if (!res.ok) throw new Error("fail");
+      const json = (await res.json()) as {
+        items: SheetItem[];
+        nextCursor: string | null;
+      };
+      setSheets((prev) => (replace ? json.items : [...prev, ...json.items]));
+      setSheetCursor(json.nextCursor);
+    },
+    [mine],
+  );
 
-  const loadPacks = useCallback(async (cursor: string | null, replace: boolean) => {
-    const params = new URLSearchParams();
-    if (cursor) params.set("cursor", cursor);
-    if (mine) params.set("mine", "1");
-    const res = await fetch(`/api/packs?${params}`);
-    if (!res.ok) throw new Error("fail");
-    const json = (await res.json()) as {
-      items: PackItem[];
-      nextCursor: string | null;
-    };
-    setPacks((prev) => (replace ? json.items : [...prev, ...json.items]));
-    setPackCursor(json.nextCursor);
-  }, [mine]);
+  const loadPacks = useCallback(
+    async (cursor: string | null, replace: boolean, query: string) => {
+      const params = new URLSearchParams();
+      if (cursor) params.set("cursor", cursor);
+      if (mine) params.set("mine", "1");
+      if (query) params.set("q", query);
+      const res = await fetch(`/api/packs?${params}`);
+      if (!res.ok) throw new Error("fail");
+      const json = (await res.json()) as {
+        items: PackItem[];
+        nextCursor: string | null;
+      };
+      setPacks((prev) => (replace ? json.items : [...prev, ...json.items]));
+      setPackCursor(json.nextCursor);
+    },
+    [mine],
+  );
 
   useEffect(() => {
+    setQ(initialQ);
     setLoading(true);
-    Promise.all([loadSheets(null, true), loadPacks(null, true)])
+    Promise.all([
+      loadSheets(null, true, initialQ),
+      loadPacks(null, true, initialQ),
+    ])
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [loadSheets, loadPacks]);
+  }, [loadSheets, loadPacks, initialQ]);
 
   const cursor = tab === "sheets" ? sheetCursor : packCursor;
 
@@ -92,20 +120,91 @@ export function PrintsLibrary({
         setLoadingMore(true);
         const p =
           tab === "sheets"
-            ? loadSheets(cursor, false)
-            : loadPacks(cursor, false);
+            ? loadSheets(cursor, false, initialQ)
+            : loadPacks(cursor, false, initialQ);
         p.catch(() => {}).finally(() => setLoadingMore(false));
       },
       { rootMargin: "200px" },
     );
     obs.observe(el);
     return () => obs.disconnect();
-  }, [cursor, loadPacks, loadSheets, loadingMore, tab]);
+  }, [cursor, loadPacks, loadSheets, loadingMore, tab, initialQ]);
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!searchable || mine) {
+      setLoading(true);
+      Promise.all([loadSheets(null, true, q.trim()), loadPacks(null, true, q.trim())])
+        .catch(() => {})
+        .finally(() => setLoading(false));
+      return;
+    }
+    const params = new URLSearchParams();
+    if (q.trim()) params.set("q", q.trim());
+    const qs = params.toString();
+    router.push(qs ? `/prints?${qs}` : "/prints");
+  }
+
+  const searchForm = (dockedMode: boolean) => (
+    <form
+      onSubmit={submit}
+      className={dockedMode ? "w-full max-w-md" : "w-full max-w-2xl"}
+    >
+      <div
+        className={`group relative flex items-center rounded-full border border-divider bg-surface shadow-xl shadow-black/5 transition-all duration-300 focus-within:border-accent-pink/50 ${
+          dockedMode ? "p-1" : "p-2"
+        }`}
+      >
+        <div
+          className={`flex shrink-0 items-center justify-center text-inactive ${
+            dockedMode ? "h-9 w-9" : "h-12 w-12"
+          }`}
+        >
+          <Search
+            className={dockedMode ? "h-4 w-4" : "h-5 w-5"}
+            strokeWidth={1.75}
+            aria-hidden
+          />
+        </div>
+        <input
+          type="search"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search sheets and packs…"
+          className={`min-w-0 flex-1 bg-transparent outline-none placeholder:text-inactive ${
+            dockedMode ? "px-1 text-sm" : "px-2 text-base"
+          }`}
+          autoComplete="off"
+        />
+        {!dockedMode ? (
+          <button
+            type="submit"
+            className="hidden rounded-full bg-accent-gradient px-6 py-3 text-sm font-semibold text-white sm:block"
+          >
+            Search
+          </button>
+        ) : null}
+      </div>
+    </form>
+  );
 
   const items = tab === "sheets" ? sheets : packs;
 
   return (
     <div>
+      {searchable && docked ? (
+        <div className="sticky top-20 z-30 -mx-5 mb-4 border-b border-divider bg-background/90 px-5 py-2 backdrop-blur-md sm:-mx-8 sm:px-8">
+          <div className="flex w-full justify-center">{searchForm(true)}</div>
+        </div>
+      ) : null}
+
+      {searchable ? (
+        <div className="mb-6">
+          {searchForm(false)}
+          <LibrarySearchSentinel sentinelRef={sentinelRef} />
+        </div>
+      ) : null}
+
       <div className="flex gap-2">
         {(["sheets", "packs"] as const).map((t) => (
           <button
@@ -152,9 +251,11 @@ export function PrintsLibrary({
                   }
                   status={mine ? s.status : undefined}
                   subjectType={FAVORITE_SUBJECT.stickerSheet}
+                  collectionType={COLLECTION_ITEM.stickerSheet}
                   subjectId={s.id}
                   favourited={!!s.favourited}
                   signedIn={signedIn}
+                  signInHref={signInHref}
                 />
               ))
             : packs.map((p) => (
@@ -170,9 +271,11 @@ export function PrintsLibrary({
                   }
                   status={mine ? p.status : undefined}
                   subjectType={FAVORITE_SUBJECT.stickerPack}
+                  collectionType={COLLECTION_ITEM.stickerPack}
                   subjectId={p.id}
                   favourited={!!p.favourited}
                   signedIn={signedIn}
+                  signInHref={signInHref}
                 />
               ))}
         </div>
@@ -189,19 +292,27 @@ function PrintCard({
   meta,
   status,
   subjectType,
+  collectionType,
   subjectId,
   favourited,
   signedIn,
+  signInHref,
 }: {
   href: string;
   title: string;
   previewUrl: string | null;
   meta?: string;
   status?: string;
-  subjectType: typeof FAVORITE_SUBJECT.stickerSheet | typeof FAVORITE_SUBJECT.stickerPack;
+  subjectType:
+    | typeof FAVORITE_SUBJECT.stickerSheet
+    | typeof FAVORITE_SUBJECT.stickerPack;
+  collectionType:
+    | typeof COLLECTION_ITEM.stickerSheet
+    | typeof COLLECTION_ITEM.stickerPack;
   subjectId: string;
   favourited: boolean;
   signedIn: boolean;
+  signInHref: string;
 }) {
   return (
     <article className="group relative overflow-hidden rounded-[1.5rem] border border-divider bg-surface">
@@ -235,14 +346,24 @@ function PrintCard({
           {status.replaceAll("_", " ")}
         </div>
       ) : null}
-      <div className="absolute right-2 top-2">
+      <div className="absolute bottom-3 right-3 z-10 flex flex-col gap-2">
         <FavouriteButton
           subjectType={subjectType}
           subjectId={subjectId}
           initialFavourited={favourited}
           signedIn={signedIn}
+          signInHref={signInHref}
           variant="icon"
         />
+        {!status || status === "ready" ? (
+          <AddToCollectionButton
+            subjectType={collectionType}
+            subjectId={subjectId}
+            signedIn={signedIn}
+            signInHref={signInHref}
+            variant="icon"
+          />
+        ) : null}
       </div>
     </article>
   );

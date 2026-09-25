@@ -28,6 +28,7 @@ export default async function CollectionDetailPage({
     include: {
       user: { select: { username: true, displayName: true } },
       tags: { include: { tag: true } },
+      linkedPack: { select: { id: true, slug: true } },
       items: {
         orderBy: [{ sortOrder: "asc" }, { addedAt: "asc" }],
       },
@@ -165,7 +166,11 @@ export default async function CollectionDetailPage({
     }));
 
   const readySheets = sheets.filter((s) => s.status === PRINT_STATUS.ready);
+  const linkedPackId = collection.linkedPack?.id.toString() ?? null;
   const readyPacks = packs.filter((p) => p.status === PRINT_STATUS.ready);
+  const combinePacks = readyPacks.filter(
+    (p) => p.id.toString() !== linkedPackId,
+  );
 
   return (
     <section className="mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-16">
@@ -226,10 +231,12 @@ export default async function CollectionDetailPage({
           collectionSlug={collection.slug}
           stickerIds={stickerIds.map((id) => id.toString())}
           sheetIds={readySheets.map((s) => s.id.toString())}
-          packIds={readyPacks.map((p) => p.id.toString())}
-          packSheetIds={readyPacks.flatMap((p) =>
+          packIds={combinePacks.map((p) => p.id.toString())}
+          packSheetIds={combinePacks.flatMap((p) =>
             p.sheets.map((ps) => ps.sheetId.toString()),
           )}
+          linkedPackSlug={collection.linkedPack?.slug ?? null}
+          canManagePack={isOwner}
           signedIn={signedIn}
           signInHref={signInHref}
         />

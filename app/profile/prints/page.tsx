@@ -12,7 +12,7 @@ export default async function ProfilePrintsPage() {
         generating.
       </p>
       <div className="mt-8">
-        <PrintsLibrary signedIn mine />
+        <PrintsLibrary signedIn mine searchable={false} />
       </div>
     </div>
   );

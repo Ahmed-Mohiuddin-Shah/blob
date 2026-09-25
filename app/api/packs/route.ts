@@ -5,6 +5,7 @@ import { runPackEncode } from "@/lib/print-encode";
 import {
   MIN_PACK_SHEETS,
   PRINT_STATUS,
+  packSheetsHash,
   serializePack,
   uniquePackSlug,
 } from "@/lib/prints";
@@ -24,8 +25,18 @@ export async function GET(request: Request) {
     if (!user) {
       return NextResponse.json({ error: "Sign in required" }, { status: 401 });
     }
+    const where: {
+      createdById: bigint;
+      OR?: object[];
+    } = { createdById: user.id };
+    if (q) {
+      where.OR = [
+        { name: { contains: q, mode: "insensitive" } },
+        { description: { contains: q, mode: "insensitive" } },
+      ];
+    }
     const rows = await prisma.stickerPack.findMany({
-      where: { createdById: user.id },
+      where,
       take: PAGE + 1,
       ...(cursor ? { cursor: { id: BigInt(cursor) }, skip: 1 } : {}),
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -174,6 +185,22 @@ export async function POST(request: Request) {
     );
   }
 
+  const sheetsHash = packSheetsHash(orderedSheetIds);
+  const existing = await prisma.stickerPack.findUnique({
+    where: { sheetsHash },
+    select: { slug: true, name: true },
+  });
+  if (existing) {
+    return NextResponse.json(
+      {
+        error: "A pack with these sheets already exists",
+        slug: existing.slug,
+        name: existing.name,
+      },
+      { status: 409 },
+    );
+  }
+
   const slug = await uniquePackSlug(name);
   const pack = await prisma.stickerPack.create({
     data: {
@@ -182,6 +209,7 @@ export async function POST(request: Request) {
       description: body?.description?.trim() || null,
       createdById: user.id,
       status: PRINT_STATUS.pending,
+      sheetsHash,
       sheets: {
         create: orderedSheetIds.map((sheetId, i) => ({
           sheetId,

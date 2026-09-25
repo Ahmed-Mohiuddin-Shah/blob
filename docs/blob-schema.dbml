@@ -439,10 +439,12 @@ Table sticker_packs {
   png_size_bytes bigint [null]
   pdf_size_bytes bigint [null]
   likes_count bigint [not null, default: 0, note: 'Denormalized favourite count (favorites where subject_type=sticker_pack).']
+  sheets_hash varchar(64) [unique, not null, note: 'sha256 hex of sorted sheet ids ("1,2,3"); order-insensitive pack membership fingerprint']
+  source_collection_id bigint [unique, null, ref: - collections.id, note: '1:1: pack combined from this collection; create once, update membership on recombine']
   created_at timestamptz [not null]
   updated_at timestamptz [not null]
 
-  Note: 'Sticker Pack = bundle of ≥2 sheets (combined PDF + contact-sheet PNG). Always public. Not deletable. Stores sheet FKs.'
+  Note: 'Sticker Pack = bundle of ≥2 sheets (combined PDF + contact-sheet PNG). Always public. Not deletable. Stores sheet FKs. Duplicate sheet sets rejected via sheets_hash. Optional source_collection_id links the collection-combined pack (membership excludes that pack when expanding).'
 }
 
 Table pack_sheets {

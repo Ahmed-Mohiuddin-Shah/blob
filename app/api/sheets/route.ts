@@ -37,8 +37,18 @@ export async function GET(request: Request) {
     if (!user) {
       return NextResponse.json({ error: "Sign in required" }, { status: 401 });
     }
+    const where: {
+      createdById: bigint;
+      OR?: object[];
+    } = { createdById: user.id };
+    if (q) {
+      where.OR = [
+        { name: { contains: q, mode: "insensitive" } },
+        { description: { contains: q, mode: "insensitive" } },
+      ];
+    }
     const rows = await prisma.stickerSheet.findMany({
-      where: { createdById: user.id },
+      where,
       take: PAGE + 1,
       ...(cursor ? { cursor: { id: BigInt(cursor) }, skip: 1 } : {}),
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],

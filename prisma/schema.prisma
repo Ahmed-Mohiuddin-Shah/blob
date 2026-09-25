@@ -304,9 +304,10 @@ model Collection {
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  user  User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  items CollectionItem[]
-  tags  CollectionTag[]
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items      CollectionItem[]
+  tags       CollectionTag[]
+  linkedPack StickerPack?
 
   @@index([userId])
   @@map("collections")
@@ -413,11 +414,16 @@ model StickerPack {
   pdfSizeBytes     BigInt?  @map("pdf_size_bytes")
   /// Denormalized count of favorites where subject_type=sticker_pack.
   likesCount       BigInt   @default(0) @map("likes_count")
-  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  /// sha256 of sorted sheet ids ("1,2,3") — unique pack membership fingerprint.
+  sheetsHash         String   @unique @map("sheets_hash") @db.VarChar(64)
+  /// 1:1 link when this pack was combined from a collection (create once, update after).
+  sourceCollectionId BigInt?  @unique @map("source_collection_id")
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  createdBy User        @relation(fields: [createdById], references: [id])
-  sheets    PackSheet[]
+  createdBy        User         @relation(fields: [createdById], references: [id])
+  sourceCollection Collection?  @relation(fields: [sourceCollectionId], references: [id], onDelete: SetNull)
+  sheets           PackSheet[]
 
   @@index([status, createdAt(sort: Desc)])
   @@index([createdById])

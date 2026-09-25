@@ -6,7 +6,12 @@ import { PRINT_STATUS } from "@/lib/prints";
 import { prisma } from "@/lib/prisma";
 import { PrintsLibrary } from "@/components/prints-library";
 
-export default async function PrintsPage() {
+export default async function PrintsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string }>;
+}) {
+  const { q } = await searchParams;
   const reqHeaders = await headers();
   const session = await getSession(
     new Request("http://localhost", { headers: reqHeaders }),
@@ -81,7 +86,11 @@ export default async function PrintsPage() {
       </div>
 
       <div className="mt-12">
-        <PrintsLibrary signedIn={!!session?.user?.id} />
+        <PrintsLibrary
+          signedIn={!!session?.user?.id}
+          signInHref={signInHref}
+          initialQ={q ?? ""}
+        />
       </div>
     </section>
   );

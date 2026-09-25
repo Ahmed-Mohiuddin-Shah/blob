@@ -1,6 +1,7 @@
 /** Collections helpers. Always public; globally unique name + slug; 1–60 items. */
 
 import { prisma } from "@/lib/prisma";
+import { PRINT_STATUS, mergePackSheetIds } from "@/lib/prints";
 import { normalizeTagName, slugify, tagSlug } from "@/lib/stickers";
 
 export const MAX_COLLECTION_ITEMS = 60;
@@ -113,3 +114,67 @@ export const collectionCardPreviewInclude = {
     select: { subjectType: true, subjectId: true },
   },
 };
+
+/**
+ * Ready sheets from a collection for combine-into-pack.
+ * Expands member packs; always excludes the collection's linked pack.
+ */
+export async function resolveCollectionPackSheetIds(
+  collectionId: bigint,
+  excludePackId?: bigint | null,
+): Promise<bigint[]> {
+  const items = await prisma.collectionItem.findMany({
+    where: { collectionId },
+    orderBy: [{ sortOrder: "asc" }, { addedAt: "asc" }],
+  });
+  const sheetIds = items
+    .filter((i) => i.subjectType === COLLECTION_ITEM.stickerSheet)
+    .map((i) => i.subjectId);
+  const packIds = items
+    .filter((i) => i.subjectType === COLLECTION_ITEM.stickerPack)
+    .map((i) => i.subjectId);
+
+  const [readySheets, packs] = await Promise.all([
+    sheetIds.length
+      ? prisma.stickerSheet.findMany({
+          where: { id: { in: sheetIds }, status: PRINT_STATUS.ready },
+          select: { id: true },
+        })
+      : Promise.resolve([] as { id: bigint }[]),
+    packIds.length
+      ? prisma.stickerPack.findMany({
+          where: { id: { in: packIds }, status: PRINT_STATUS.ready },
+          include: {
+            sheets: {
+              orderBy: { sortOrder: "asc" },
+              select: { sheetId: true },
+            },
+          },
+        })
+      : Promise.resolve(
+          [] as {
+            id: bigint;
+            sheets: { sheetId: bigint }[];
+          }[],
+        ),
+  ]);
+
+  // Preserve collection item order for direct sheets
+  const readySheetSet = new Set(readySheets.map((s) => s.id.toString()));
+  const orderedDirect = sheetIds.filter((id) => readySheetSet.has(id.toString()));
+
+  const packById = new Map(packs.map((p) => [p.id.toString(), p]));
+  const orderedPacks = packIds
+    .map((id) => packById.get(id.toString()))
+    .filter((p): p is NonNullable<typeof p> => !!p)
+    .map((p) => ({
+      id: p.id,
+      sheetIds: p.sheets.map((s) => s.sheetId),
+    }));
+
+  return mergePackSheetIds({
+    sheetIds: orderedDirect,
+    packs: orderedPacks,
+    excludePackId,
+  });
+}

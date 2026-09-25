@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { MIN_PACK_SHEETS } from "@/lib/prints";
 import { BusyButton } from "./busy-button";
 
@@ -25,6 +26,8 @@ type Props = {
   initialPackIds?: string[];
 };
 
+type ExistingPack = { slug: string; name: string };
+
 export function CreatePackForm({
   initialSheetIds = [],
   initialPackIds = [],
@@ -42,6 +45,12 @@ export function CreatePackForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [existingPack, setExistingPack] = useState<ExistingPack | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -86,6 +95,7 @@ export function CreatePackForm({
   async function submit() {
     setBusy(true);
     setError(null);
+    setExistingPack(null);
     try {
       const res = await fetch("/api/packs", {
         method: "POST",
@@ -99,7 +109,15 @@ export function CreatePackForm({
       const json = (await res.json().catch(() => ({}))) as {
         error?: string;
         slug?: string;
+        name?: string;
       };
+      if (res.status === 409 && json.slug) {
+        setExistingPack({
+          slug: json.slug,
+          name: json.name ?? "Existing pack",
+        });
+        return;
+      }
       if (!res.ok) {
         setError(json.error ?? "Could not create pack");
         return;
@@ -223,6 +241,53 @@ export function CreatePackForm({
       >
         Create pack
       </BusyButton>
+
+      {mounted && existingPack
+        ? createPortal(
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="pack-exists-title"
+            >
+              <div className="w-full max-w-md rounded-[1.5rem] border border-divider bg-surface p-6 shadow-2xl">
+                <p
+                  id="pack-exists-title"
+                  className="text-xs font-bold uppercase tracking-[0.18em] text-accent-orange"
+                >
+                  Pack already exists
+                </p>
+                <h2 className="mt-2 text-xl font-semibold tracking-tight">
+                  {existingPack.name}
+                </h2>
+                <p className="mt-2 text-sm text-secondary">
+                  A pack with this combination of sheets already exists. Open it,
+                  or stay here and change your selection.
+                </p>
+                <div className="mt-6 flex flex-wrap gap-2">
+                  <BusyButton
+                    type="button"
+                    busy={false}
+                    onClick={() =>
+                      router.push(`/prints/packs/${existingPack.slug}`)
+                    }
+                    className="rounded-full bg-accent-gradient px-5 py-2.5 text-sm font-semibold text-white"
+                  >
+                    View pack
+                  </BusyButton>
+                  <button
+                    type="button"
+                    onClick={() => setExistingPack(null)}
+                    className="rounded-full border border-divider px-5 py-2.5 text-sm font-semibold text-secondary"
+                  >
+                    Stay here
+                  </button>
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

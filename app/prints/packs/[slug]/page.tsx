@@ -23,6 +23,7 @@ export default async function PackDetailPage({
     where: { slug },
     include: {
       createdBy: { select: { username: true, displayName: true } },
+      sourceCollection: { select: { slug: true, name: true } },
       sheets: {
         orderBy: { sortOrder: "asc" },
         include: {
@@ -134,6 +135,14 @@ export default async function PackDetailPage({
               signInHref={signInHref}
               variant="pill"
             />
+            {pack.sourceCollection ? (
+              <Link
+                href={`/collections/${pack.sourceCollection.slug}`}
+                className="rounded-full border border-divider bg-surface px-4 py-2 text-sm font-semibold hover:border-accent-pink/40"
+              >
+                Go to Collection
+              </Link>
+            ) : null}
           </div>
 
           <PrintDownloadButtons
