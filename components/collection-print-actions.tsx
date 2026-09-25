@@ -47,12 +47,15 @@ export function CollectionPrintActions({
 
   const uniqueSheets = new Set([...sheetIds, ...packSheetIds]);
   const canSheet = stickerIds.length >= 1;
-  const canCombine =
-    canManagePack &&
+  const combineEligible =
     sheetIds.length + packIds.length >= 1 &&
     uniqueSheets.size >= MIN_PACK_SHEETS;
+  const canCombine = canManagePack && combineEligible;
+  const ownerOnlyPackHint = combineEligible && !canManagePack;
 
-  if (!canSheet && !canCombine && !linkedPackSlug) return null;
+  if (!canSheet && !canCombine && !linkedPackSlug && !ownerOnlyPackHint) {
+    return null;
+  }
 
   const sheetHref = signedIn
     ? `/prints/sheets/new?collection=${encodeURIComponent(collectionSlug)}`
@@ -139,6 +142,13 @@ export function CollectionPrintActions({
           </Link>
         ) : null}
       </div>
+      {ownerOnlyPackHint ? (
+        <p className="text-sm text-secondary">
+          {linkedPackSlug
+            ? "Only the collection owner can update the pack."
+            : "Only the collection owner can create the pack."}
+        </p>
+      ) : null}
       {error ? <p className="text-sm text-accent-orange">{error}</p> : null}
 
       {mounted && existingPack
