@@ -36,23 +36,29 @@ export default async function ProfilePendingPage() {
       </h1>
       <p className="mt-1 text-sm text-secondary">
         {isAdmin
-          ? "Review and approve or reject submissions."
+          ? "Review still previews (previous vs current when edited). History keeps notes only after approve."
           : "Waiting for an admin to review."}
       </p>
       <div className="mt-8">
         <StickerModerationList
           canModerate={isAdmin}
-          items={stickers.map((s) => ({
-            id: s.id.toString(),
-            title: s.title,
-            slug: s.slug,
-            author: s.uploadedBy.displayName || s.uploadedBy.username,
-            type: typeFromMedia(s.media.map((m) => m.kind)),
-            status: s.moderationStatus,
-            processingStatus: s.processingStatus,
-            thumbUrl: `/api/stickers/${s.id}/media/thumbnail`,
-            createdAt: s.createdAt.toISOString(),
-          }))}
+          items={stickers.map((s) => {
+            const kinds = s.media.map((m) => m.kind);
+            return {
+              id: s.id.toString(),
+              title: s.title,
+              slug: s.slug,
+              author: s.uploadedBy.displayName || s.uploadedBy.username,
+              type: typeFromMedia(kinds),
+              status: s.moderationStatus,
+              processingStatus: s.processingStatus,
+              thumbUrl: `/api/stickers/${s.id}/media/thumbnail`,
+              prevThumbUrl: kinds.includes("prev_thumbnail")
+                ? `/api/stickers/${s.id}/media/prev_thumbnail`
+                : null,
+              createdAt: s.createdAt.toISOString(),
+            };
+          })}
         />
       </div>
     </div>

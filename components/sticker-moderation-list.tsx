@@ -15,6 +15,8 @@ export type ModerationItem = {
   status: string;
   processingStatus: string;
   thumbUrl: string;
+  /** Prior revision still when available (open-queue diff). */
+  prevThumbUrl?: string | null;
   createdAt: string;
   moderationNote?: string | null;
 };
@@ -97,17 +99,34 @@ export function StickerModerationList({
           key={item.id}
           className="flex flex-col gap-4 rounded-[1.5rem] border border-divider bg-surface p-4 sm:flex-row sm:items-center"
         >
-          <a
-            href={`/stickers/${item.slug}`}
-            className="h-24 w-24 shrink-0 overflow-hidden rounded-2xl"
-          >
-            <StickerMedia
-              src={item.thumbUrl}
-              seed={item.title}
-              alt={item.title}
-              video={item.type === "VIDEO"}
-            />
-          </a>
+          <div className="flex shrink-0 gap-2">
+            {item.prevThumbUrl ? (
+              <a
+                href={`/stickers/${item.slug}`}
+                className="h-24 w-24 overflow-hidden rounded-2xl opacity-70"
+                title="Previous revision"
+              >
+                <StickerMedia
+                  src={item.prevThumbUrl}
+                  seed={`${item.title}-prev`}
+                  alt={`${item.title} previous`}
+                  video={false}
+                />
+              </a>
+            ) : null}
+            <a
+              href={`/stickers/${item.slug}`}
+              className="h-24 w-24 overflow-hidden rounded-2xl"
+              title={item.prevThumbUrl ? "Current revision" : undefined}
+            >
+              <StickerMedia
+                src={item.thumbUrl}
+                seed={item.title}
+                alt={item.title}
+                video={item.type === "VIDEO"}
+              />
+            </a>
+          </div>
           <div className="min-w-0 flex-1">
             <p className="truncate font-semibold">{item.title}</p>
             <p className="mt-0.5 text-xs text-secondary">
@@ -179,6 +198,12 @@ export function StickerModerationList({
               >
                 Request edit
               </BusyButton>
+              <Link
+                href={`/stickers/${item.slug}/compose`}
+                className="rounded-full border border-divider bg-background px-4 py-2 text-xs font-semibold text-secondary"
+              >
+                Composition
+              </Link>
               <Link
                 href={`/stickers/${item.slug}/edit`}
                 className="rounded-full border border-divider bg-background px-4 py-2 text-xs font-semibold text-secondary"

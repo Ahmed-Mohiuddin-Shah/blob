@@ -1,11 +1,13 @@
 # BLOB Sticker Library — Locked v1 Requirements
 
-**Status:** Locked  
+**Status:** Locked (revision: Composition editor unlock)  
 **Scope:** Product and engineering requirements for BLOB v1  
 **Companion schema:** `[docs/blob-schema.dbml](blob-schema.dbml)`  
 **Storage contracts:** GLASS `[upload_download_api.md](/home/server/dev-drive/glass/doc/upload_download_api.md)`, `[prisms_api.md](/home/server/dev-drive/glass/doc/prisms_api.md)`
 
 This document freezes v1. Implement against this file and the DBML. Do not reopen decisions listed under **Locked decisions** without an explicit requirements revision.
+
+**Revision note:** Create-time `fit_mode` / pad-only upload is superseded by an **editor-required BLOB Composition** model (deterministic document → derivatives). Original binaries remain immutable; composition revisions regenerate cache. Remix deep-copies the edit document. Composition core must be extractable as npm + Flutter packages; editor UX is mobile-first.
 
 ---
 
@@ -13,16 +15,17 @@ This document freezes v1. Implement against this file and the DBML. Do not reope
 
 BLOB is a **public sticker library and sticker creation/browsing website** with two major areas:
 
-1. **Library** — browse, search, filter, view, download/share stickers; members contribute uploads; admins moderate.
+1. **Library** — browse, search, filter, view, download/share stickers; members create/remix via the composition editor; admins moderate.
 2. **Prints** — premade sticker packs and printable layouts; users select pack + layout and download a generated sheet (PDF/PNG).
 
 **Stack (v1):**
 
-- App: **Next.js** (App Router) — React Server Components for browse/detail; Client Components only where interactivity needs them (upload, like, fit-mode picker, admin actions)
-- Styling: Tailwind CSS
+- App: **Next.js** (App Router) — React Server Components for browse/detail; Client Components for composition editor, likes, admin actions
+- Composition core: language-agnostic **BLOB Composition JSON**; portable module boundary for **npm** + **Flutter/Dart** packages (web Konva is viewport only)
+- Styling: Tailwind CSS (Bloby / Zune; mobile-first editor chrome)
 - Metadata DB: PostgreSQL (access via Prisma or equivalent typed client)
 - Object storage: GLASS (via a gitsubmodule or custom npm package)
-- Jobs: separate Node workers (e.g. BullMQ / Redis, or equivalent) for media processing and print generation — **not** inside the Next.js request lifecycle
+- Jobs: separate Node workers (e.g. BullMQ / Redis, or equivalent) for composition render, smart cutout, media processing, and print generation — **not** inside the Next.js request lifecycle
 - Auth: Auth.js configured with **Zitadel as the sole provider** (OIDC + PKCE); no other IdPs or auth methods
 - Avatars: [blobatar](https://blobatar.dev/) from `username` only (never Zitadel `picture`)
 - Search: PostgreSQL full-text search + `pg_trgm` (v1); **Meilisearch planned post-v1**
@@ -40,8 +43,17 @@ Search must find what the user typed (title, aliases, tags, categories, keywords
 | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | Authorization                         | `role` + `account_status`, not `is_admin` / `is_member` booleans                                                                              |
 | Identity                              | **Zitadel only** (OIDC + PKCE via Auth.js). No Credentials provider, no Google/GitHub/etc., no magic link, no local password or register form |
-| Sticker media                         | `stickers` → many `media_assets`; never `image_path` / `gif_path` / `video_path` columns                                                      |
-| Media mutation                        | Fit/crop/pad and binary media are set **only at create/upload**. After create, media assets are **immutable**. Metadata remains editable.     |
+| Sticker media                         | `stickers` → composition + many `media_assets` (derivatives) + shared `assets` (originals); never `image_path` / `gif_path` / `video_path` columns |
+| Media mutation                        | **Original binaries** are immutable after upload. **Composition document** is the editable source of truth (new revision on save). **Derivatives** (`image` / `chat` / `thumbnail` / …) are regenerable cache from the current revision — not the SoT. Metadata remains editable. |
+| Composition SoT                       | Own versioned **BLOB Composition JSON** (canonical 1024×1024). Never persist Konva / Fabric / Polotno / tldraw canvas JSON as the document. |
+| Editor required                       | Every create and remix goes through the composition editor. No quick `fit_mode`-only upload path. Framing = document crop/transform + canvas background (`transparent` or `#RRGGBB`). |
+| Preview ≡ export                      | One composition engine / draw contract; browser preview, Flutter preview, and server derivatives share the same document semantics. |
+| Preview sizes                         | Live previews and stored derivatives: **chat** 128×128, **thumbnail** 256×256, **full** (`image`) 1024×1024. |
+| Remix                                 | Deep-copy source `document_json` (all edits) + reuse the same original **asset** identities. Dual provenance: set `stickers.remixed_from_sticker_id` (UI) **and** insert `composition_parents` (composition lineage). Parent later edits must not affect children (no live parent composition layers). |
+| Portable packages                     | Consume published **`blob-editor`** (npm) / Flutter package — do not vend or fork. Schema + core ops + React `BlobEditor`; Node worker uses `blob-editor/encode` only (never in client bundles). Host docs: [`docs/diff.md`](diff.md), [`docs/print-layout-host.md`](print-layout-host.md). |
+| Moderation previews                   | Open queues (pending / needs_edit) may show still diffs (previous vs current revision). **No** JSON document-diff UI. On **approve**, discard `media_assets` (and GLASS objects) for non-current revisions. Admin history is action + note only — no retained preview images. |
+| Prints UI                             | Packs / layouts / `PrintLayout` / `encodePrint` **deferred** (schema may remain; product UI later). |
+| Mobile-first editor                   | Phone / narrow viewports first-class: touch gestures, ~44px targets, no hover-only controls, bottom sheets / compact bars; three previews usable on small screens. |
 | Primary category                      | One `category_id` per sticker + many tags                                                                                                     |
 | Tags                                  | First-class `tags` table + pivot; not a comma string on the sticker row                                                                       |
 | Storage                               | Postgres = metadata + GLASS UUIDs; binaries only in GLASS                                                                                     |
@@ -67,7 +79,10 @@ Search must find what the user typed (title, aliases, tags, categories, keywords
 - Comments, following users, chat
 - Real-time notifications
 - Per-event analytics (who viewed what at which millisecond)
-- Post-create media replace or in-browser canvas re-edit
+- **Replacing the original binary** after upload (delete/reject and re-upload / remix as a new sticker if needed). Composition revisions and derivative regeneration are in scope.
+- Commercial / third-party editors as document SoT (Polotno, IMG.LY CE.SDK, tldraw, Excalidraw, etc.)
+- Live parent composition layers (remix must snapshot the document, not bind to upstream composition revisions)
+- Composition semantics trapped only in Next.js route handlers or React components (must remain package-extractable)
 - SVG print output (PDF + PNG only)
 - Hardcoding every pack×layout file permanently upfront
 - Any auth besides Zitadel (Credentials, social IdPs, magic links, API keys for end-user login, local password/register)
@@ -119,7 +134,9 @@ Search must find what the user typed (title, aliases, tags, categories, keywords
 | Browse / search public                           | Yes       | Yes                 | Yes    | Yes   | Yes         |
 | Like                                             | No        | Yes*                | Yes*   | Yes*  | Yes*        |
 | Download                                         | Yes†      | Yes†                | Yes†   | Yes†  | Yes†        |
-| Upload stickers                                  | No        | No                  | Yes    | Yes   | Yes         |
+| Create sticker (composition editor)              | No        | No                  | Yes    | Yes   | Yes         |
+| Remix sticker (snapshot composition)             | No        | No                  | Yes    | Yes   | Yes         |
+| Edit own composition (new revision)              | No        | No                  | Yes    | Yes   | Yes         |
 | Edit own sticker metadata                        | No        | No                  | Yes    | Yes   | Yes         |
 | Manage own uploads (metadata, soft-hide request) | No        | No                  | Yes    | Yes   | Yes         |
 | Approve members (`user` ↔ `member`)              | No        | No                  | No     | Yes   | Yes         |
@@ -175,10 +192,11 @@ Auth.js establishes the app session after the Zitadel OIDC callback. Zitadel is 
 
 ## 6. Sticker model
 
-A **sticker** is the primary content object. Required metadata fields:
+A **sticker** is the primary library content object. Behind it is a **BLOB Composition** (editable recipe). Required metadata fields:
 
 - Title, description, slug
-- `created_by`, `uploaded_by` (may differ)
+- `created_by`, `uploaded_by` (may differ; remix sets `created_by` to remixer, retains attribution rules as product policy)
+- `remixed_from_sticker_id` (nullable): set when remixed; null = original create. Complements `composition_parents`.
 - Primary `category_id` (nullable until set; admins/members should set before approve)
 - Tags (many)
 - Alternate names / keywords (for search)
@@ -191,118 +209,260 @@ A **sticker** is the primary content object. Required metadata fields:
 - `moderation_status`: `draft` | `pending_review` | `needs_edit` | `approved` | `rejected` | `hidden` | `deleted`
 - `moderation_note`: current open edit-request reason (cleared on resubmit)
 - `processing_status`: `processing` | `ready` | `failed`
-- `fit_mode` + `pad_background` (immutable after create)
 - Aggregate counters: views, downloads, likes, shares, search_appearances
+
+**Removed:** `fit_mode` and `pad_background` columns. Framing and empty-space fill live in the composition document (`canvas.background` + object crop/transform).
+
+Published face of a sticker = derivatives of the composition’s **current revision**.
 
 
 
 ### Content representations
 
-Logical sticker with multiple **media assets**, not three hardcoded columns:
-
 ```
 Sticker
-  ├── original
-  ├── image   (static square rendition when applicable)
-  ├── gif     (when source/animation warrants)
-  ├── video   (≤10s square mp4 when applicable)
-  └── thumbnail
+  ├── remixed_from_sticker_id (optional UI provenance)
+  ├── Composition → current revision (document_json) → parents (remix provenance)
+  ├── assets (immutable originals referenced by document; shared across remixes)
+  └── media_assets (derivatives / cache; only current revision kept after approve)
+        ├── image      (full 1024×1024)
+        ├── chat       (128×128)
+        ├── thumbnail  (256×256)
+        ├── mask       (cutout alpha when applicable)
+        ├── gif        (when animation warrants)
+        └── video      (≤10s square mp4 when applicable)
 ```
 
-Which derived kinds are produced depends on the uploaded original (static image → image+thumbnail; GIF → optimized gif + web-friendly preview asset kind as needed + thumbnail; video → video + thumbnail). Schema allows kinds via `media_assets.kind`; v1 kinds are exactly: `original`, `image`, `gif`, `video`, `thumbnail`.
+Schema kinds via `media_assets.kind`: `image` | `chat` | `thumbnail` | `mask` | `gif` | `video`. Immutable originals live in **`assets`** (not duplicated as SoT in `media_assets`). Which derived kinds are produced depends on the composition (static → image+chat+thumbnail; animated → gif/video as required + still previews).
 
 ---
 
 
 
-## 7. Create / upload lifecycle (media locked here)
+## 7. BLOB Composition
+
+A sticker is one published/rendered composition. The **document** stores intent (transforms, crop, text, masks, timing) — never embedded pixels or library canvas blobs.
 
 
 
-### 7.1 Flow
+### 7.1 Canonical document
+
+- Coordinate system: **1024 × 1024** (1:1 square). Display viewport may be any CSS/device size; all object positions/scales/rotations are in document coordinates.
+- `version` field on every document (start at `1`). Breaking changes bump version; packages validate.
+- Normative sketch (fields may grow; keep backward-compatible when possible):
+
+```json
+{
+  "version": 1,
+  "canvas": {
+    "width": 1024,
+    "height": 1024,
+    "background": "transparent"
+  },
+  "objects": [
+    {
+      "id": "obj_01",
+      "type": "media",
+      "asset_id": "…",
+      "transform": { "x": 512, "y": 512, "scale_x": 0.82, "scale_y": 0.82, "rotation": 0 },
+      "crop": { "x": 0, "y": 0, "width": 1920, "height": 1080 },
+      "mask_asset_id": null,
+      "timing": null
+    },
+    {
+      "id": "obj_02",
+      "type": "text",
+      "text": "WHAT",
+      "font": "Impact",
+      "font_size": 110,
+      "transform": { "x": 512, "y": 150, "scale_x": 1, "scale_y": 1, "rotation": 0 },
+      "style": { "fill": "#ffffff", "stroke": "#000000", "stroke_width": 12 }
+    }
+  ]
+}
+```
+
+- `canvas.background`: `transparent` or `#RRGGBB` (user choice for empty space).
+- Asset references: `asset_id` (+ checksum/mime resolved from `assets` table) — **not** base64 in the document.
+- Crop is non-destructive viewport on the original asset.
+- Optional `timing` / `animation` on objects reserved for GIF/video (**Should** for timeline UI; fields allowed in schema from day one).
+
+
+
+### 7.2 Revisions and undo
+
+- Client maintains a **local undo stack** while editing (command or document snapshots in memory).
+- **Save** persists a new `composition_revisions` row (`revision` increments) with full `document_json`; sets `compositions.current_revision_id`.
+- Prefer treating published revisions as immutable; do not mutate an existing revision row in place.
+- Do not persist every mouse move forever as separate DB rows.
+
+
+
+### 7.3 Remix (snapshot)
+
+1. Load parent composition’s **current** `document_json`.
+2. Deep-copy the document (`remixDeepCopy` from `blob-editor/core`) into a new sticker’s composition (revision 1). Edits are duplicated; originals stay the same `asset_id`s (from-scratch media, not flattened derivatives).
+3. Dual provenance: set `remixed_from_sticker_id` on the new sticker **and** insert `composition_parents` (composition → parent composition). Provenance only — **not** live layer binding.
+4. Enqueue derivative render for the new sticker.
+5. Later parent saves must not change child documents.
+
+Do **not** store objects as `type: "reference"` to a parent composition for rendering.
+
+
+
+### 7.4 Smart cutout
+
+First-class editor operation (image stickers only; see [`docs/diff.md`](diff.md)):
+
+- **Brush add/remove** + **polygon keep-region** in the editor; no ML / auto remove-BG in package or host for this pass.
+- Mask stored as asset / `mask_asset_id` on the media object; optional outline stroke (e.g. white border).
+- Original file is never destructive-cropped; cutout is composition intent + mask asset.
+
+
+
+### 7.5 Composition engine and previews
 
 ```
-Member uploads file + metadata + fit_mode
+Document
+   │
+   ▼
+Composition engine (shared draw contract)
+   ├── Web preview (editor)
+   ├── Flutter preview
+   └── Server/worker export → media_assets
+```
+
+Editor must show three live previews of the **same** composer output:
+
+| Label | Size | Typical use |
+| ----- | ---- | ----------- |
+| Chat | 128×128 | Messaging / compact |
+| Thumbnail | 256×256 | Browse cards |
+| Full | 1024×1024 | Detail / download still |
+
+Do not maintain a separate “pretty preview” path that diverges from export.
+
+
+
+### 7.6 Portable packages (extractability)
+
+Cross-platform contract = Composition JSON **v2** + `version`. Host consumes published packages — do not vend or fork.
+
+| Package | Entry | Role |
+| ------- | ----- | ---- |
+| **npm `blob-editor`** | `blob-editor/core` | Validate, ops, `remixDeepCopy`, `renderFrame` / `renderExports` |
+| | `blob-editor/react` | Drop-in `BlobEditor` (+ CSS); theme via primary/secondary |
+| | `blob-editor/encode` | **Node worker only** — `encodeComposition` (gif/mp4); never browser |
+| | `blob-editor/print` | PrintDocument helpers — **deferred** in app UI |
+| **Flutter/Dart** | `blob_editor` | Same document version; painter/render parity |
+
+- UI chrome may differ per platform; **document + rendered pixels** must match for the same inputs.
+- Host integration notes: [`docs/diff.md`](diff.md) (composition), [`docs/print-layout-host.md`](print-layout-host.md) (prints — later).
+
+
+
+### 7.7 Mobile-first editor UX
+
+- Touch-first: drag, pinch-to-scale, two-finger rotate; undo / redo / save reachable with thumbs.
+- No hover-only affordances; minimum touch targets ~44px.
+- Narrow layout: tools in bottom sheet / compact bar; object list secondary; canvas dominates the viewport.
+- Three previews stacked or tabbed on small screens (not desktop-only side chrome).
+- Smart cutout brushes usable with a finger; brush size prominent.
+- Mobile web and Flutter meet the same UX bar; desktop may add denser panels without breaking mobile.
+
+
+
+### 7.8 GIF / video (media layers)
+
+Treat canvas contents as **media layers** with optional `timing` (`start` / `end`). Static images: unbounded duration. GIF/video: finite duration; timeline UI when duration is finite (**Should** for full timeline; architecture reserved in Must). Keyframe animation is **Should**.
+
+---
+
+
+
+## 8. Create / composition lifecycle
+
+
+
+### 8.1 Flow
+
+```
+Member opens composition editor (create or remix)
         ↓
-Validate MIME, magic bytes, size, dimensions, duration, frames
+Upload original file(s) → validate MIME, magic bytes, size, dimensions, duration, frames
         ↓
-Store original in GLASS (private prism while pending)
+Store immutable asset(s) in GLASS + `assets` rows (private prism while pending)
         ↓
-Create sticker row (processing_status=processing, moderation_status=pending_review)
+Edit document in editor (crop/transform/text/cutout/background); live chat/thumbnail/full previews
         ↓
-Enqueue processing job
+Save → sticker + composition + composition_revision (document_json)
+        + metadata (attribution, tags, …)
+        moderation_status=pending_review, processing_status=processing
         ↓
-Worker: square renditions (crop|fit|pad), strip EXIF on public outputs,
-        generate thumbnail / gif / video as required
+Enqueue render job (composition engine → derivatives)
         ↓
-Upload derived assets to GLASS; write media_assets rows
+Worker: render full/chat/thumbnail (+ gif/video/mask as required), strip EXIF on public outputs
         ↓
-processing_status = ready | failed
+Upload derived media_assets; processing_status = ready | failed
         ↓
 Admin reviews → approved | needs_edit | reject (purge) | …
         ↓
-On approve + public: link assets to the app-owned public PRISM (`public_prism` row; create via Glass on first use if missing)
+On approve + public: link public-facing assets to app-owned public PRISM
 ```
 
-Upload **must not** block the HTTP request on FFmpeg/ImageMagick. Show “Processing…” in the UI while `processing_status = processing`.
-
-### 7.2 Square standardization
-
-All display renditions target a **1:1 square** canvas. **Do not** blindly crop without user choice at create time.
-
-`fit_mode` (set once at create):
-
-
-| Mode   | Behavior                                                             |
-| ------ | -------------------------------------------------------------------- |
-| `crop` | Center-crop (or documented crop policy) to square                    |
-| `fit`  | Scale to fit inside square; pad remainder                            |
-| `pad`  | Scale to fit; pad with `pad_background` (`transparent` or `#RRGGBB`) |
+Create/save **must not** block the HTTP request on FFmpeg / heavy segmentation / full export. Show “Processing…” while `processing_status = processing`.
 
 
 
+### 8.2 Square standardization
 
-### 7.3 Edit rules (locked)
+All stickers are **1:1 square**. Canonical document is **1024×1024**. The user chooses how content fills the square (transform/crop) and whether empty space is **transparent** or a **solid color**. Do not apply a silent center-crop outside the editor.
+
+
+
+### 8.3 Edit rules (locked)
 
 
 | What                                                                  | When editable                                                                              |
 | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| Original file / derived binaries                                      | **Create/upload only** — immutable afterward                                               |
-| `fit_mode`, `pad_background`                                          | **Create only**                                                                            |
+| Original `assets` binaries                                            | **Create/upload only** — immutable afterward                                               |
+| Composition document                                                  | New **revision** on save (create and post-create); owner for own stickers; admin as needed |
+| Derived `media_assets`                                                | Regenerated from current revision (cache); not hand-edited                                 |
 | Title, description, tags, category, visibility, attribution, keywords | After create: owner (member) for own stickers; admin for any — subject to moderation rules |
-| Replacing media                                                       | **Out of scope** — delete/reject and re-upload as a new sticker if needed                  |
+| Replacing original binary                                             | **Out of scope** — reject/delete and create/remix anew if needed                         |
 
 
-Metadata edits: browser → Next.js Route Handler / Server Action → PostgreSQL.  
-Any **new** sticker binary (create upload): browser → Next.js Route Handler → GLASS → store object UUID in Postgres → enqueue worker job. User faces use blobatar(`username`), not GLASS or Zitadel pictures.
+Metadata edits: client → Next.js Route Handler / Server Action → PostgreSQL.  
+New binaries: client → Route Handler → GLASS → `assets` UUID in Postgres.  
+Composition save: client → API → `composition_revisions` + enqueue render. Web (npm) and Flutter clients call the **same HTTP API**. User faces use blobatar(`username`), not GLASS or Zitadel pictures.
 
 ---
 
 
 
-## 8. Media rules
+## 9. Media rules
 
 
 
-### 8.1 Video
+### 9.1 Video
 
 - Max duration: **10 seconds**
 - Audio: optional; **preserve when present**
 - Square output; standardized codec/container (**mp4**)
-- Always generate `thumbnail` (e.g. webp/jpeg) for cards
+- Always generate still previews (`thumbnail` / `chat` / `image` as applicable) for cards
 - Enforce file size and resolution caps (configure in app; document in env)
 
 
 
-### 8.2 GIF
+### 9.2 GIF
 
 - Enforce max dimensions, frame count, file size, processing timeout, output size
-- Prefer lightweight preview for browse grids (thumbnail / optimized asset); retain downloadable GIF asset when that is the deliverable
+- Prefer lightweight preview for browse grids (`thumbnail` / `chat`); retain downloadable GIF when that is the deliverable
 - Do not load dozens of full-size animated GIFs on a browse page without thumbnails
 
 
 
-### 8.3 Trust and safety for files
+### 9.3 Trust and safety for files
 
 - Validate declared MIME **and** file signatures
 - Enforce size / resolution / duration / frame / timeout / worker memory / queue concurrency limits
@@ -311,32 +471,34 @@ Any **new** sticker binary (create upload): browser → Next.js Route Handler �
 
 
 
-### 8.4 Original retention
+### 9.4 Original retention and reprocess
 
-Keep the **original** in GLASS whenever legally/technically appropriate so processing settings can be revisited in a future version without re-upload. Admins may **reprocess** derived `image`/`thumbnail` from the original when a rendering bug is fixed (`POST /api/stickers/{id}/reprocess`).
+Keep **originals** in `assets` → GLASS whenever legally/technically appropriate. Admins may **reprocess** derivatives from the sticker’s **current composition revision** + referenced originals when a rendering bug is fixed (`POST /api/stickers/{id}/reprocess`). Reprocess must not invent framing outside the stored document.
 
 ---
 
 
 
-## 9. Moderation
+## 10. Moderation
 
-Uploads are **not** immediately public library content.
+Creates are **not** immediately public library content.
 
 ```
-Member uploads → pending_review → Admin → approved | needs_edit | reject (purge)
-needs_edit → owner or admin edits metadata → pending_review
+Member saves composition → pending_review → Admin → approved | needs_edit | reject (purge)
+needs_edit → owner or admin edits metadata and/or composition (new revision) → pending_review
 ```
 
 Admins can: approve, **request edit** (required note/reason), reject (hard purge), hide, soft-delete (`moderation_status = deleted`), edit metadata, change tags/category, change ownership (`created_by` / `uploaded_by`).
 
-**Reject (locked):** delete all sticker media objects from GLASS, then delete the local sticker row (cascades media + tag pivots). Record a `rejected` row in `moderation_events` before purge so history survives. Soft `rejected` status is not retained for this action.
+**Reject (locked):** delete sticker-linked media objects from GLASS as required, then delete the local sticker row (cascades composition, media, tag pivots). Shared `assets` retained if still referenced by other compositions; otherwise eligible for GC. Record a `rejected` row in `moderation_events` before purge so history survives. Soft `rejected` status is not retained for this action.
 
-**Edit request:** set `moderation_status = needs_edit` and `moderation_note`. Owner or admin edits metadata (media immutable). On save from `needs_edit`, status returns to `pending_review` and note clears (`resubmitted` event).
+**Edit request:** set `moderation_status = needs_edit` and `moderation_note`. Owner or admin may edit metadata and/or composition (new revision). On save from `needs_edit`, status returns to `pending_review` and note clears (`resubmitted` event).
 
-**Shared history:** all moderation actions write to polymorphic `moderation_events` (`subject_type` + `subject_id`, no subject FK). Stickers and attribution claims use it now; collections, sticker packs, and print layouts reuse the same table and admin history UI when those domains gain moderation.
+**Still previews in open queues:** pending / needs_edit / approval UIs show current stills; when a newer revision exists, may show previous vs current side-by-side (stills only — no JSON diff). **On approve:** delete derivative `media_assets` (and GLASS objects) whose `composition_revision_id` is not the current revision so prior-edit previews are not retained.
 
-### 9.1 Attribution claims
+**Shared history:** all moderation actions write to polymorphic `moderation_events` (`subject_type` + `subject_id`, no subject FK). History UI is **action + note + actor + time** (and subject title/link when the subject still exists) — **no** embedded preview images. Stickers and attribution claims use it now; collections, sticker packs, and print layouts reuse the same table when those domains gain moderation.
+
+### 10.1 Attribution claims
 
 Signed-in users may **claim attribution** on any sticker they can view:
 
@@ -348,7 +510,7 @@ Signed-in users may **claim attribution** on any sticker they can view:
 - **Approve auto-applies** `proposed_author_name` → `author_name` and `proposed_source_url` → `source_url` on the sticker
 - Events: `claim_submitted` / `claim_approved` / `claim_rejected` with `subject_type = attribution_claim`
 
-Cards and detail show credit label (linked to `source_url` when set) plus an info popover.
+Cards and detail show credit label (linked to `source_url` when set) plus an info popover. Remix lineage (“Remixed from”) is complementary provenance, not a substitute for attribution.
 
 Public browse/search includes only stickers that are:
 
@@ -363,7 +525,7 @@ Private: only owner after approve; admins may view only while pending review or 
 
 
 
-## 10. Search
+## 11. Search
 
 First-class feature. Index / query against:
 
@@ -393,7 +555,7 @@ Meilisearch is the intended next search engine (replaces or augments PG FTS). Sa
 
 
 
-## 11. Tags and categories
+## 12. Tags and categories
 
 **Categories** — controlled hierarchy (admin-managed): e.g. Memes, Reactions, Animals, People, Gaming, Anime, Movies, Internet, Miscellaneous.
 
@@ -405,7 +567,7 @@ Do not store tags as a comma string on the sticker row.
 
 
 
-## 12. Likes, favorites, collections
+## 13. Likes, favorites, collections
 
 
 | Feature     | Semantics              | v1                                              |
@@ -421,9 +583,9 @@ Likes and favorites are distinct tables.
 
 
 
-## 13. Prints domain
+## 14. Prints domain
 
-Treat as separate from the core sticker row:
+**Deferred for product UI** (schema may exist; do not ship PrintLayout / encodePrint host flows in this pass). Treat as separate from the core sticker row when built:
 
 ```
 Sticker Pack → stickers (ordered)
@@ -452,13 +614,15 @@ Reusable template: page size (mm), orientation, margins, rows, columns, sticker 
 
 
 
-## 14. Storage architecture (GLASS)
+## 15. Storage architecture (GLASS)
 
 ```
 PostgreSQL                    GLASS
 ─────────────                 ─────────────────────────
 users, stickers               objects (bytes)
-media_assets  ──►             glass_object_id + glass_prism_id
+assets        ──►             glass_object_id + glass_prism_id  (immutable originals)
+media_assets  ──►             glass_object_id + glass_prism_id  (derivatives)
+compositions / revisions      document_json in Postgres
 packs/prints  ──►             same
 public_prism  ──► (1 row)     app public PRISM UUID (created by BLOB)
 users.glass_private_prism_id  per-user private PRISM
@@ -495,7 +659,7 @@ Uploads use GLASS `PUT` (simple or multipart) with `prism_id` and SHA-256 checks
 
 
 
-## 15. Statistics
+## 16. Statistics
 
 v1: **aggregate counters only** on `stickers` (and pack-level later if needed). No eternal per-view event log.
 
@@ -505,25 +669,29 @@ Increment on meaningful actions (view detail, download, like, share, search impr
 
 
 
-## 16. API surface
+## 17. API surface
 
-Prefer **Server Components / Server Actions** for first-party UI reads and simple mutations. Expose the same domain through **Route Handlers** (`app/api/...`) as a JSON contract for uploads, likes, print generation, and any non-Next client. Keep domain logic in shared server modules — not duplicated in pages and handlers.
+Prefer **Server Components / Server Actions** for first-party UI reads and simple mutations. Expose the same domain through **Route Handlers** (`app/api/...`) as a JSON contract for uploads, composition save, likes, print generation, and any non-Next client (**npm web** and **Flutter**). Keep domain logic in shared server modules — not duplicated in pages and handlers. Composition **document ops** belong in the portable core package, not only in route handlers.
 
 Intended HTTP API (JSON) for v1:
 
 ```
 GET    /api/stickers
 GET    /api/stickers/{id}
-PATCH  /api/stickers/{id}          # metadata only — no media body
+PATCH  /api/stickers/{id}          # metadata only — no media body / no original replace
 GET    /api/search
 GET    /api/tags
 GET    /api/categories
 
-POST   /api/stickers
+POST   /api/assets                 # upload original → assets row + GLASS
+POST   /api/stickers               # create sticker + composition revision (document_json + metadata)
+POST   /api/stickers/{id}/composition   # save new revision (document_json); enqueue render
+POST   /api/stickers/{id}/remix         # snapshot remix from this sticker
+POST   /api/stickers/{id}/cutout        # enqueue smart-cutout / mask job (or sync small path)
 POST   /api/stickers/{id}/approve
-POST   /api/stickers/{id}/reject          # purge GLASS objects then delete row
+POST   /api/stickers/{id}/reject          # purge as required then delete row
 POST   /api/stickers/{id}/request-edit    # body: { note } required
-POST   /api/stickers/{id}/reprocess       # admin; regenerate derived image/thumbnail from original
+POST   /api/stickers/{id}/reprocess       # admin; regenerate derivatives from current composition revision + assets
 POST   /api/stickers/{id}/attribution-claims  # signed-in; body: reason, contact, proposed label+URL, message
 POST   /api/attribution-claims/{id}/approve   # admin; body: { note } required; auto-applies credit
 POST   /api/attribution-claims/{id}/reject    # admin; body: { note } required
@@ -540,30 +708,35 @@ GET    /api/prints/layouts
 POST   /api/prints/generate
 ```
 
-`PATCH` must reject media file replacement. Large uploads and long-running work go through handlers that return quickly and enqueue workers.
+`PATCH` must reject original binary replacement. Large uploads and long-running work go through handlers that return quickly and enqueue workers.
 
 ---
 
 
 
-## 17. Hard rules (pitfalls → requirements)
+## 18. Hard rules (pitfalls → requirements)
 
-1. Retain originals in GLASS; do not keep only processed derivatives.
-2. Use `media_assets`; never three hardcoded media path columns on `stickers`.
-3. Tags are entities + pivots, not CSV strings.
-4. Search must include aliases/keywords path; ship FTS+trgm first; alias table ready.
-5. Never trust uploads: MIME + magic bytes + limits + worker isolation.
-6. Strip EXIF from generated public assets.
-7. Cap GIF/video CPU/RAM/time; set queue concurrency deliberately.
-8. Ownership is explicit (`created_by` / `uploaded_by` + attribution fields).
-9. Couple to GLASS only through `MediaStorage`.
-10. Print sheets: on-demand + cache; no combinatorial pre-generation.
+1. Retain originals in `assets` → GLASS; do not keep only processed derivatives.
+2. Use `media_assets` for derivatives; never three hardcoded media path columns on `stickers`.
+3. Composition **document** is the SoT for framing/edits; never store Konva/Fabric/Polotno canvas JSON as the document.
+4. Remix = deep-copy document + shared asset ids + provenance rows — never live parent composition layers.
+5. One composition draw contract: preview ≡ export (web / Flutter / worker).
+6. Composition core must remain extractable as **npm** + **Flutter** packages; do not trap semantics in Next-only modules.
+7. Editor UX is **mobile-first** (touch, large targets, no hover-only).
+8. Tags are entities + pivots, not CSV strings.
+9. Search must include aliases/keywords path; ship FTS+trgm first; alias table ready.
+10. Never trust uploads: MIME + magic bytes + limits + worker isolation.
+11. Strip EXIF from generated public assets.
+12. Cap GIF/video CPU/RAM/time; set queue concurrency deliberately.
+13. Ownership is explicit (`created_by` / `uploaded_by` + attribution fields).
+14. Couple to GLASS only through `MediaStorage`.
+15. Print sheets: on-demand + cache; no combinatorial pre-generation.
 
 ---
 
 
 
-## 18. v1 checklist
+## 19. v1 checklist
 
 
 
@@ -574,17 +747,22 @@ POST   /api/prints/generate
 - [ ] Admin member promotion (Zitadel grant via PAT) / local status management
 - [ ] Public browse + search (FTS + pg_trgm)
 - [ ] Stickers with tags + primary category
-- [ ] Media assets: original / image / gif / video / thumbnail
-- [ ] Square renditions with crop|fit|pad at **create only**
+- [ ] `assets` + composition + composition_revisions + composition_parents tables
+- [ ] Media assets derivatives: image (1024) / chat (128) / thumbnail (256) / mask / gif / video as needed
+- [ ] Editor-required create path; 1024² document; background transparent|color
+- [ ] Mobile-usable web composition editor (touch, three live previews)
+- [ ] Remix snapshot (deep-copy + shared assets + `remixed_from_sticker_id` + `composition_parents`)
+- [ ] Smart cutout (brush + polygon; no ML auto-BG)
+- [ ] Consume **`blob-editor`** npm (`react` client + `encode` worker)
 - [ ] Video ≤10s; audio preserved when present
-- [ ] Member upload + async processing + admin moderation (approve / request-edit / purge-reject)
-- [ ] Shared `moderation_events` history (paginated admin UI)
+- [ ] Async render/processing + admin moderation (approve / request-edit / purge-reject)
+- [ ] Open-queue still diffs; discard non-current-revision derivatives on approve
+- [ ] Shared `moderation_events` history (paginated admin UI; no retained preview images)
 - [ ] Tag names ALL CAPS on save
 - [ ] Visibility public|unlisted|private
-- [ ] Ownership / attribution fields (required Yes/No on upload; label + source URL)
+- [ ] Ownership / attribution fields (required Yes/No on create; label + source URL)
 - [ ] Attribution claims (signed-in) + admin Claims queue + history
 - [ ] Likes (UI)
-- [ ] Sticker packs + print layouts + PDF/PNG generation with cache
 - [ ] GLASS-backed storage via MediaStorage
 - [ ] Favorites, collections, tag_aliases **tables** present
 
@@ -592,6 +770,12 @@ POST   /api/prints/generate
 
 ### Should have (after Must)
 
+- [ ] Sticker packs + print layouts + PDF/PNG (`PrintLayout` / `encodePrint`) with cache
+- [ ] Flutter editor shell consuming published Dart package
+- [ ] GIF/video layers + timeline UI
+- [ ] Keyframe animation on objects
+- [ ] Filters beyond cutout; richer masks
+- [ ] Server composer parity hardening / golden-image tests across platforms
 - [ ] Favorites UI
 - [ ] Collections UI
 - [ ] Tag alias expansion in search
@@ -610,18 +794,21 @@ POST   /api/prints/generate
 - [ ] AI recommendations
 - [ ] Comments / social graph / chat / realtime notifications
 - [ ] Event-level analytics warehouse
-- [ ] Post-create media editing or replace-upload
+- [ ] Replace-upload of original binaries
+- [ ] Commercial editor SDKs as document SoT (Polotno, CE.SDK, tldraw, …)
+- [ ] Live parent composition layers in remix
 - [ ] Non-Zitadel auth (Credentials, social IdPs, magic link, local passwords)
 
 ---
 
 
 
-## 19. Platform assumptions
+## 20. Platform assumptions
 
 - App: Next.js (App Router), Node.js runtime for Route Handlers that talk to GLASS / Postgres
+- Composition: portable core (TS → npm; Dart → Flutter) + web viewport (e.g. react-konva) + worker render; Flutter client **Should**
 - DB: PostgreSQL via `DATABASE_URL` (Prisma migrate or equivalent); enable `pg_trgm` extension
-- Queue: Redis + worker processes for media/print jobs; workers must run in deployment (not serverless-only for FFmpeg/ImageMagick)
+- Queue: Redis + worker processes for composition render / cutout / media / print jobs; workers must run in deployment (not serverless-only for FFmpeg/ImageMagick)
 - Auth env: Zitadel domain + client id/secret (sole Auth.js provider); service-account PAT + org id + project id for Management API; Auth.js `SESSION_SECRET`; callback URL aligned with `AUTH_URL`
 - Session store: Auth.js JWT by default (no app `sessions` table; see DBML). Database adapter only if JWT proves insufficient
 - GLASS base URL + service API key via env (not committed secrets). **Public PRISM UUID is not env** — BLOB creates it and stores it in `public_prism`. Per-user private prism UUIDs live on `users`.
@@ -632,12 +819,16 @@ POST   /api/prints/generate
 
 
 
-## 20. Domain sketch
+## 21. Domain sketch
 
 ```
 USER (role, account_status, glass_private_prism_id)
+  ├── ASSETS (immutable originals → GLASS)
   ├── STICKERS (created_by / uploaded_by)
-  │      ├── MEDIA_ASSETS → GLASS
+  │      ├── COMPOSITION
+  │      │      ├── COMPOSITION_REVISIONS (document_json)
+  │      │      └── COMPOSITION_PARENTS → parent compositions (remix provenance)
+  │      ├── MEDIA_ASSETS → GLASS (derivatives: image/chat/thumbnail/mask/gif/video)
   │      ├── TAGS (+ aliases)
   │      ├── CATEGORY
   │      ├── LIKES / FAVORITES

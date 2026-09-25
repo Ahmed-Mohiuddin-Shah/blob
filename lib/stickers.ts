@@ -1,14 +1,9 @@
 /** Shared sticker constants and small helpers. */
 
-export const FIT_MODES = ["crop", "fit", "pad"] as const;
-export type FitMode = (typeof FIT_MODES)[number];
-
 export const VISIBILITIES = ["public", "unlisted", "private"] as const;
 export type Visibility = (typeof VISIBILITIES)[number];
 
 export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
-export const SQUARE_SIZE = 512;
-export const THUMB_SIZE = 256;
 
 const STATIC_MIMES = new Set([
   "image/png",
@@ -68,7 +63,6 @@ export function detectUpload(
     return { mime: VIDEO_MIME, ext: "mp4", kind: "video" };
   }
 
-  // Fallback: trust declared MIME when magic is ambiguous (some webp variants)
   if (STATIC_MIMES.has(mime) && (!sig || sig.startsWith("image/"))) {
     const ext = mime === "image/png" ? "png" : mime === "image/webp" ? "webp" : "jpg";
     return { mime: mime === "image/jpg" ? "image/jpeg" : mime, ext, kind: "image" };
@@ -105,7 +99,6 @@ function sniff(bytes: Uint8Array): string | null {
   ) {
     return "image/webp";
   }
-  // ftyp box for mp4
   if (
     bytes[4] === 0x66 &&
     bytes[5] === 0x74 &&
@@ -158,7 +151,6 @@ export function canAccessSticker(
     viewer.viewerId !== null &&
     (viewer.viewerId === s.uploadedById || viewer.viewerId === s.createdById);
   if (isOwner) return true;
-  // Admins may view while moderating; not after approve when private.
   if (viewer.isAdmin && s.moderationStatus !== "approved") return true;
   return false;
 }

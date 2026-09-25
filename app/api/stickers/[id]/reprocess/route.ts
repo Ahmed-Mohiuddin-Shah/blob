@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { getSession } from "@/lib/auth";
 import { canModerate } from "@/lib/capabilities";
 import { prisma } from "@/lib/prisma";
-import { enqueueStickerProcessing } from "@/lib/sticker-process-stub";
+import { enqueueCompositionEncode } from "@/lib/composition-encode";
 
 async function sessionUser() {
   const reqHeaders = await headers();
@@ -14,7 +14,7 @@ async function sessionUser() {
   return prisma.user.findUnique({ where: { id: BigInt(session.user.id) } });
 }
 
-/** Admin: regenerate image/thumbnail from original (fixes bad sharp derivatives). */
+/** Admin: regenerate derivatives from current composition revision + assets. */
 export async function POST(
   _request: Request,
   context: { params: Promise<{ id: string }> },
@@ -28,8 +28,11 @@ export async function POST(
   }
 
   const { id } = await context.params;
-  const sticker = await prisma.sticker.findUnique({ where: { id: BigInt(id) } });
-  if (!sticker) {
+  const sticker = await prisma.sticker.findUnique({
+    where: { id: BigInt(id) },
+    include: { composition: true },
+  });
+  if (!sticker?.composition) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
@@ -37,7 +40,7 @@ export async function POST(
     where: { id: sticker.id },
     data: { processingStatus: "processing", processingError: null },
   });
-  enqueueStickerProcessing(sticker.id);
+  enqueueCompositionEncode(sticker.id);
 
   return NextResponse.json({ ok: true });
 }

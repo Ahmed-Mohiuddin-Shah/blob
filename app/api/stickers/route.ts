@@ -2,27 +2,23 @@ import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { getSession } from "@/lib/auth";
 import { canUpload } from "@/lib/capabilities";
-import { getGlass } from "@/lib/glass";
-import { prisma } from "@/lib/prisma";
-import { ensurePrivatePrism } from "@/lib/private-prism";
-import { enqueueStickerProcessing } from "@/lib/sticker-process-stub";
 import {
-  detectUpload,
-  FIT_MODES,
-  MAX_UPLOAD_BYTES,
-  normalizeTagName,
-  slugify,
-  tagSlug,
-  VISIBILITIES,
-  type FitMode,
-  type Visibility,
-} from "@/lib/stickers";
-import { parseAttributionInput } from "@/lib/attribution";
+  parseAttributionInput,
+  parseDocumentJson,
+  parseTagNames,
+  parseVisibility,
+  uniqueStickerSlug,
+  upsertStillExports,
+  upsertTagsForSticker,
+} from "@/lib/composition";
+import { enqueueCompositionEncode } from "@/lib/composition-encode";
 import {
   MODERATION_ACTION,
   MODERATION_SUBJECT,
   recordModerationEvent,
 } from "@/lib/moderation";
+import { prisma } from "@/lib/prisma";
+import { ensurePrivatePrism } from "@/lib/private-prism";
 
 async function sessionUser() {
   const reqHeaders = await headers();
@@ -104,6 +100,7 @@ export async function GET(request: Request) {
       type: mediaLabel(s.media.map((m) => m.kind)),
       href: `/stickers/${s.slug}`,
       thumbUrl: `/api/stickers/${s.id}/media/thumbnail`,
+      remixHref: `/stickers/${s.slug}/remix`,
     })),
     nextCursor,
   });
@@ -115,6 +112,10 @@ function mediaLabel(kinds: string[]): string {
   return "IMAGE";
 }
 
+/**
+ * Create sticker + composition revision from editor export.
+ * Body: multipart with metadata fields + document (JSON string) + optional chat/thumbnail/full/mask blobs.
+ */
 export async function POST(request: Request) {
   const user = await sessionUser();
   if (!user) {
@@ -131,36 +132,35 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Expected multipart form" }, { status: 400 });
   }
 
-  const file = form.get("file");
-  if (!(file instanceof File) || file.size === 0) {
-    return NextResponse.json({ error: "file required" }, { status: 400 });
-  }
-  if (file.size > MAX_UPLOAD_BYTES) {
-    return NextResponse.json({ error: "File too large (max 20 MiB)" }, { status: 400 });
-  }
-
   const title = String(form.get("title") ?? "").trim();
   if (!title || title.length > 200) {
     return NextResponse.json({ error: "title required (max 200)" }, { status: 400 });
   }
 
-  const description = String(form.get("description") ?? "").trim() || null;
-  const fitModeRaw = String(form.get("fitMode") ?? "pad");
-  const fitMode = (FIT_MODES.includes(fitModeRaw as FitMode) ? fitModeRaw : "pad") as FitMode;
-  let padBackground = String(form.get("padBackground") ?? "transparent").trim();
-  if (fitMode === "pad") {
-    if (padBackground !== "transparent" && !/^#[0-9a-fA-F]{6}$/.test(padBackground)) {
-      padBackground = "transparent";
-    }
-  } else {
-    padBackground = "transparent";
+  const documentRaw = form.get("document");
+  if (typeof documentRaw !== "string" || !documentRaw) {
+    return NextResponse.json({ error: "document JSON required" }, { status: 400 });
   }
 
-  const visibilityRaw = String(form.get("visibility") ?? "public");
-  const visibility = (
-    VISIBILITIES.includes(visibilityRaw as Visibility) ? visibilityRaw : "public"
-  ) as Visibility;
+  let documentJson: unknown;
+  try {
+    documentJson = JSON.parse(documentRaw);
+  } catch {
+    return NextResponse.json({ error: "document must be JSON" }, { status: 400 });
+  }
 
+  let doc;
+  try {
+    doc = parseDocumentJson(documentJson);
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Invalid document" },
+      { status: 400 },
+    );
+  }
+
+  const description = String(form.get("description") ?? "").trim() || null;
+  const visibility = parseVisibility(String(form.get("visibility") ?? "public"));
   const categoryIdRaw = String(form.get("categoryId") ?? "").trim();
   let categoryId: bigint | null = null;
   if (categoryIdRaw) {
@@ -171,13 +171,7 @@ export async function POST(request: Request) {
     categoryId = cat.id;
   }
 
-  const tagsRaw = String(form.get("tags") ?? "");
-  const tagNames = tagsRaw
-    .split(/[,#\n]+/)
-    .map((t) => t.trim())
-    .filter(Boolean)
-    .slice(0, 20);
-
+  const tagNames = parseTagNames(String(form.get("tags") ?? ""));
   const attribution = parseAttributionInput({
     hasAttribution: String(form.get("hasAttribution") ?? ""),
     authorName: String(form.get("authorName") ?? ""),
@@ -187,32 +181,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: attribution.error }, { status: 400 });
   }
 
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  const detected = detectUpload(bytes, file.type || "application/octet-stream");
-  if (!detected) {
-    return NextResponse.json(
-      { error: "Unsupported file type (png, jpeg, webp, gif, mp4)" },
-      { status: 400 },
-    );
-  }
+  const remixedFromRaw = String(form.get("remixedFromStickerId") ?? "").trim();
+  const remixedFromStickerId = remixedFromRaw ? BigInt(remixedFromRaw) : null;
+  const parentCompositionIdRaw = String(form.get("parentCompositionId") ?? "").trim();
 
-  const baseSlug = slugify(title);
-  let slug = baseSlug;
-  for (let i = 0; i < 8; i++) {
-    const taken = await prisma.sticker.findUnique({ where: { slug } });
-    if (!taken) break;
-    slug = `${baseSlug}-${Math.random().toString(36).slice(2, 7)}`;
-  }
+  const chatFile = form.get("chat");
+  const thumbFile = form.get("thumbnail");
+  const fullFile = form.get("full");
+  const maskFile = form.get("mask");
+
+  const slug = await uniqueStickerSlug(title);
 
   try {
     const prismId = await ensurePrivatePrism(user.id, user.glassPrivatePrismId);
-    const glass = getGlass();
-    const uploaded = await glass.objects.upload({
-      prismId,
-      file: bytes,
-      title,
-      filename: `${slug}.${detected.ext}`,
-    });
 
     const sticker = await prisma.$transaction(async (tx) => {
       const s = await tx.sticker.create({
@@ -222,66 +203,91 @@ export async function POST(request: Request) {
           slug,
           createdById: user.id,
           uploadedById: user.id,
+          remixedFromStickerId,
           categoryId,
           authorName: attribution.authorName,
           sourceUrl: attribution.sourceUrl,
           visibility,
           moderationStatus: "pending_review",
           processingStatus: "processing",
-          fitMode,
-          padBackground,
         },
       });
 
-      await tx.mediaAsset.create({
+      const composition = await tx.composition.create({
         data: {
           stickerId: s.id,
-          kind: "original",
-          mimeType: detected.mime,
-          fileExtension: detected.ext,
-          sizeBytes: BigInt(uploaded.size ?? bytes.length),
-          glassObjectId: uploaded.object_id,
-          glassPrismId: prismId,
-          status: "pending",
+          ownerId: user.id,
         },
       });
 
-      for (const name of tagNames) {
-        const display = normalizeTagName(name);
-        const tSlug = tagSlug(display);
-        if (!tSlug || !display) continue;
-        const tag = await tx.tag.upsert({
-          where: { slug: tSlug },
-          create: { slug: tSlug, name: display },
-          update: { name: display },
-        });
-        await tx.stickerTag.create({
-          data: { stickerId: s.id, tagId: tag.id },
+      const revision = await tx.compositionRevision.create({
+        data: {
+          compositionId: composition.id,
+          revision: 1,
+          documentJson: doc as object,
+          createdById: user.id,
+        },
+      });
+
+      await tx.composition.update({
+        where: { id: composition.id },
+        data: { currentRevisionId: revision.id },
+      });
+
+      if (parentCompositionIdRaw) {
+        await tx.compositionParent.create({
+          data: {
+            compositionId: composition.id,
+            parentCompositionId: BigInt(parentCompositionIdRaw),
+            sortOrder: 0,
+          },
         });
       }
 
-      return s;
+      return { sticker: s, composition, revision };
     });
+
+    await upsertTagsForSticker(sticker.sticker.id, tagNames);
+
+    if (
+      chatFile instanceof File &&
+      thumbFile instanceof File &&
+      fullFile instanceof File
+    ) {
+      await upsertStillExports({
+        stickerId: sticker.sticker.id,
+        revisionId: sticker.revision.id,
+        slug,
+        prismId,
+        chat: new Uint8Array(await chatFile.arrayBuffer()),
+        thumbnail: new Uint8Array(await thumbFile.arrayBuffer()),
+        full: new Uint8Array(await fullFile.arrayBuffer()),
+        mask:
+          maskFile instanceof File
+            ? new Uint8Array(await maskFile.arrayBuffer())
+            : undefined,
+      });
+    }
 
     await recordModerationEvent({
       subjectType: MODERATION_SUBJECT.sticker,
-      subjectId: sticker.id,
-      subjectTitle: sticker.title,
+      subjectId: sticker.sticker.id,
+      subjectTitle: sticker.sticker.title,
       action: MODERATION_ACTION.submitted,
       actorId: user.id,
     });
 
-    enqueueStickerProcessing(sticker.id);
+    enqueueCompositionEncode(sticker.sticker.id);
 
     return NextResponse.json({
       ok: true,
-      id: sticker.id.toString(),
-      slug: sticker.slug,
+      id: sticker.sticker.id.toString(),
+      slug: sticker.sticker.slug,
     });
   } catch (err) {
-    console.error("Sticker upload failed:", err);
+    console.error("Sticker create failed:", err);
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Upload failed" },
+      { error: err instanceof Error ? err.message : "Create failed" },
       { status: 502 },
     );
   }

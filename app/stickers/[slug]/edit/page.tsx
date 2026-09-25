@@ -64,7 +64,7 @@ export default async function StickerEditPage({
         {sticker.title}
       </h1>
       <p className="mt-2 text-sm text-secondary">
-        Metadata only — media and fit mode stay as uploaded.
+        Metadata only — open Edit composition to change the document.
       </p>
       <div className="mt-10">
         <StickerEditForm

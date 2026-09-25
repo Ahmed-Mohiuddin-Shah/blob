@@ -24,6 +24,9 @@ model User {
   glassUploads              GlassUpload[]
   stickersCreated           Sticker[]           @relation("StickerCreatedBy")
   stickersUploaded          Sticker[]           @relation("StickerUploadedBy")
+  assetsUploaded            Asset[]
+  compositionsOwned         Composition[]
+  compositionRevisions      CompositionRevision[]
   moderationEvents          ModerationEvent[]
   attributionClaims         AttributionClaim[]  @relation("AttributionClaimant")
   attributionClaimsReviewed AttributionClaim[]  @relation("AttributionClaimReviewer")
@@ -109,69 +112,143 @@ model Tag {
   @@map("tags")
 }
 
+/// Immutable original media. Composition documents reference asset id. Remixes reuse rows.
+model Asset {
+  id             BigInt   @id @default(autoincrement())
+  uploadedById   BigInt   @map("uploaded_by")
+  sha256         String?  @db.Char(64)
+  mimeType       String   @map("mime_type") @db.VarChar(100)
+  fileExtension  String   @map("file_extension") @db.VarChar(20)
+  width          Int?
+  height         Int?
+  durationMs     Int?     @map("duration_ms")
+  frameCount     Int?     @map("frame_count")
+  frameRate      Decimal? @map("frame_rate") @db.Decimal(8, 3)
+  hasAudio       Boolean  @default(false) @map("has_audio")
+  sizeBytes      BigInt   @default(0) @map("size_bytes")
+  glassObjectId  String   @map("glass_object_id") @db.Uuid
+  glassPrismId   String   @map("glass_prism_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  uploadedBy User @relation(fields: [uploadedById], references: [id])
+
+  @@index([sha256])
+  @@index([glassObjectId])
+  @@map("assets")
+}
+
 model Sticker {
-  id               BigInt    @id @default(autoincrement())
-  title            String    @db.VarChar(200)
-  description      String?
-  slug             String    @unique @db.VarChar(220)
-  createdById      BigInt    @map("created_by")
-  uploadedById     BigInt    @map("uploaded_by")
-  categoryId       BigInt?   @map("category_id")
+  id                     BigInt    @id @default(autoincrement())
+  title                  String    @db.VarChar(200)
+  description            String?
+  slug                   String    @unique @db.VarChar(220)
+  createdById            BigInt    @map("created_by")
+  uploadedById           BigInt    @map("uploaded_by")
+  remixedFromStickerId   BigInt?   @map("remixed_from_sticker_id")
+  categoryId             BigInt?   @map("category_id")
   /// Credit label when attribution is present (upload/claim). Null = no attribution.
-  authorName       String?   @map("author_name") @db.VarChar(200)
-  attribution      String?
+  authorName             String?   @map("author_name") @db.VarChar(200)
+  attribution            String?
   /// Source link when attribution is present. Null = no attribution.
-  sourceUrl        String?   @map("source_url") @db.VarChar(2048)
-  license          String?   @db.VarChar(100)
-  copyrightStatus  String?   @map("copyright_status") @db.VarChar(50)
-  alternateNames   String?   @map("alternate_names")
-  keywords         String?
-  visibility       String    @default("public") @db.VarChar(20)
-  moderationStatus String    @default("pending_review") @map("moderation_status") @db.VarChar(30)
-  moderationNote   String?   @map("moderation_note")
-  processingStatus String    @default("processing") @map("processing_status") @db.VarChar(20)
-  processingError  String?   @map("processing_error")
-  fitMode          String    @default("pad") @map("fit_mode") @db.VarChar(10)
-  padBackground    String    @default("transparent") @map("pad_background") @db.VarChar(30)
-  viewsCount       BigInt    @default(0) @map("views_count")
-  downloadsCount   BigInt    @default(0) @map("downloads_count")
-  likesCount       BigInt    @default(0) @map("likes_count")
-  sharesCount      BigInt    @default(0) @map("shares_count")
-  searchAppearancesCount BigInt @default(0) @map("search_appearances_count")
-  publishedAt      DateTime? @map("published_at") @db.Timestamptz(6)
-  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  sourceUrl              String?   @map("source_url") @db.VarChar(2048)
+  license                String?   @db.VarChar(100)
+  copyrightStatus        String?   @map("copyright_status") @db.VarChar(50)
+  alternateNames         String?   @map("alternate_names")
+  keywords               String?
+  visibility             String    @default("public") @db.VarChar(20)
+  moderationStatus       String    @default("pending_review") @map("moderation_status") @db.VarChar(30)
+  moderationNote         String?   @map("moderation_note")
+  processingStatus       String    @default("processing") @map("processing_status") @db.VarChar(20)
+  processingError        String?   @map("processing_error")
+  viewsCount             BigInt    @default(0) @map("views_count")
+  downloadsCount         BigInt    @default(0) @map("downloads_count")
+  likesCount             BigInt    @default(0) @map("likes_count")
+  sharesCount            BigInt    @default(0) @map("shares_count")
+  searchAppearancesCount BigInt    @default(0) @map("search_appearances_count")
+  publishedAt            DateTime? @map("published_at") @db.Timestamptz(6)
+  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   createdBy          User               @relation("StickerCreatedBy", fields: [createdById], references: [id])
   uploadedBy         User               @relation("StickerUploadedBy", fields: [uploadedById], references: [id])
+  remixedFrom        Sticker?           @relation("StickerRemixes", fields: [remixedFromStickerId], references: [id], onDelete: SetNull)
+  remixes            Sticker[]          @relation("StickerRemixes")
   category           Category?          @relation(fields: [categoryId], references: [id])
   tags               StickerTag[]
   media              MediaAsset[]
+  composition        Composition?
   attributionClaims  AttributionClaim[]
 
   @@index([moderationStatus, processingStatus, visibility])
   @@index([uploadedById])
   @@index([categoryId])
+  @@index([remixedFromStickerId])
   @@map("stickers")
+}
+
+model Composition {
+  id                BigInt   @id @default(autoincrement())
+  stickerId         BigInt   @unique @map("sticker_id")
+  ownerId           BigInt   @map("owner_id")
+  currentRevisionId BigInt?  @map("current_revision_id")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  sticker         Sticker               @relation(fields: [stickerId], references: [id], onDelete: Cascade)
+  owner           User                  @relation(fields: [ownerId], references: [id])
+  revisions       CompositionRevision[]
+  parentOf        CompositionParent[]   @relation("CompositionChild")
+  childOf         CompositionParent[]   @relation("CompositionParent")
+
+  @@map("compositions")
+}
+
+model CompositionRevision {
+  id            BigInt   @id @default(autoincrement())
+  compositionId BigInt   @map("composition_id")
+  revision      Int
+  documentJson  Json     @map("document_json")
+  createdById   BigInt   @map("created_by")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  composition Composition  @relation(fields: [compositionId], references: [id], onDelete: Cascade)
+  createdBy   User         @relation(fields: [createdById], references: [id])
+  media       MediaAsset[]
+
+  @@unique([compositionId, revision])
+  @@map("composition_revisions")
+}
+
+model CompositionParent {
+  compositionId       BigInt @map("composition_id")
+  parentCompositionId BigInt @map("parent_composition_id")
+  sortOrder           Int    @default(0) @map("sort_order")
+
+  composition       Composition @relation("CompositionChild", fields: [compositionId], references: [id], onDelete: Cascade)
+  parentComposition Composition @relation("CompositionParent", fields: [parentCompositionId], references: [id], onDelete: Cascade)
+
+  @@id([compositionId, parentCompositionId])
+  @@map("composition_parents")
 }
 
 /// Signed-in user claim that attribution is missing or mislabeled.
 model AttributionClaim {
-  id                  BigInt    @id @default(autoincrement())
-  stickerId           BigInt    @map("sticker_id")
-  claimantId          BigInt    @map("claimant_id")
-  reason              String    @db.VarChar(20)
-  contactName         String    @map("contact_name") @db.VarChar(200)
-  contactEmail        String    @map("contact_email") @db.VarChar(255)
-  message             String?
-  proposedAuthorName  String    @map("proposed_author_name") @db.VarChar(200)
-  proposedSourceUrl   String    @map("proposed_source_url") @db.VarChar(2048)
-  status              String    @default("pending") @db.VarChar(20)
-  adminNote           String?   @map("admin_note")
-  reviewedById        BigInt?   @map("reviewed_by")
-  reviewedAt          DateTime? @map("reviewed_at") @db.Timestamptz(6)
-  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                 BigInt    @id @default(autoincrement())
+  stickerId          BigInt    @map("sticker_id")
+  claimantId         BigInt    @map("claimant_id")
+  reason             String    @db.VarChar(20)
+  contactName        String    @map("contact_name") @db.VarChar(200)
+  contactEmail       String    @map("contact_email") @db.VarChar(255)
+  message            String?
+  proposedAuthorName String    @map("proposed_author_name") @db.VarChar(200)
+  proposedSourceUrl  String    @map("proposed_source_url") @db.VarChar(2048)
+  status             String    @default("pending") @db.VarChar(20)
+  adminNote          String?   @map("admin_note")
+  reviewedById       BigInt?   @map("reviewed_by")
+  reviewedAt         DateTime? @map("reviewed_at") @db.Timestamptz(6)
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   sticker    Sticker @relation(fields: [stickerId], references: [id], onDelete: Cascade)
   claimant   User    @relation("AttributionClaimant", fields: [claimantId], references: [id])
@@ -194,28 +271,32 @@ model StickerTag {
   @@map("sticker_tags")
 }
 
+/// Derivatives / cache only. Originals live in assets. Regenerated from current composition revision.
 model MediaAsset {
-  id              BigInt   @id @default(autoincrement())
-  stickerId       BigInt   @map("sticker_id")
-  kind            String   @db.VarChar(20)
-  mimeType        String   @map("mime_type") @db.VarChar(100)
-  fileExtension   String   @map("file_extension") @db.VarChar(20)
-  width           Int?
-  height          Int?
-  durationMs      Int?     @map("duration_ms")
-  frameCount      Int?     @map("frame_count")
-  hasAudio        Boolean  @default(false) @map("has_audio")
-  sizeBytes       BigInt   @default(0) @map("size_bytes")
-  checksumSha256  String?  @map("checksum_sha256") @db.Char(64)
-  glassObjectId   String   @map("glass_object_id") @db.Uuid
-  glassPrismId    String   @map("glass_prism_id") @db.Uuid
-  status          String   @default("pending") @db.VarChar(20)
-  sortOrder       Int      @default(0) @map("sort_order")
-  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                    BigInt   @id @default(autoincrement())
+  stickerId             BigInt   @map("sticker_id")
+  compositionRevisionId BigInt?  @map("composition_revision_id")
+  kind                  String   @db.VarChar(20)
+  mimeType              String   @map("mime_type") @db.VarChar(100)
+  fileExtension         String   @map("file_extension") @db.VarChar(20)
+  width                 Int?
+  height                Int?
+  durationMs            Int?     @map("duration_ms")
+  frameCount            Int?     @map("frame_count")
+  hasAudio              Boolean  @default(false) @map("has_audio")
+  sizeBytes             BigInt   @default(0) @map("size_bytes")
+  checksumSha256        String?  @map("checksum_sha256") @db.Char(64)
+  glassObjectId         String   @map("glass_object_id") @db.Uuid
+  glassPrismId          String   @map("glass_prism_id") @db.Uuid
+  status                String   @default("pending") @db.VarChar(20)
+  sortOrder             Int      @default(0) @map("sort_order")
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  sticker Sticker @relation(fields: [stickerId], references: [id], onDelete: Cascade)
+  sticker             Sticker              @relation(fields: [stickerId], references: [id], onDelete: Cascade)
+  compositionRevision CompositionRevision? @relation(fields: [compositionRevisionId], references: [id], onDelete: SetNull)
 
   @@unique([stickerId, kind])
+  @@index([compositionRevisionId])
   @@map("media_assets")
 }

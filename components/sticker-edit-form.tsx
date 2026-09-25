@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { BusyButton } from "./busy-button";
-import type { CategoryOption } from "./sticker-upload-form";
+import type { CategoryOption } from "./sticker-create-form";
 
 export type StickerEditInitial = {
   id: string;

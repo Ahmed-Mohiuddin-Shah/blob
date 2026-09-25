@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { StickerUploadForm } from "@/components/sticker-upload-form";
+import { StickerCreateForm } from "@/components/sticker-create-form";
 import { canUpload } from "@/lib/capabilities";
 import { prisma } from "@/lib/prisma";
 import { requireSessionUser } from "@/lib/require-user";
@@ -22,14 +22,15 @@ export default async function UploadPage() {
           Contribute
         </p>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">
-          Upload a sticker
+          Create a sticker
         </h1>
         <p className="mt-2 text-sm text-secondary">
-          Simple upload for now — editor comes later. Submissions go to pending review.
+          Compose in the editor, then submit for review. Framing and cutouts live
+          in the composition document.
         </p>
       </div>
       <div className="mt-10">
-        <StickerUploadForm
+        <StickerCreateForm
           categories={categories.map((c) => ({
             id: c.id.toString(),
             name: c.name,

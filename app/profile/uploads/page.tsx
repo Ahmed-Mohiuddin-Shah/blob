@@ -36,6 +36,7 @@ export default async function ProfileUploadsPage() {
             type: typeFromMedia(s.media.map((m) => m.kind)),
             href: `/stickers/${s.slug}`,
             thumbUrl: `/api/stickers/${s.id}/media/thumbnail`,
+            remixHref: `/stickers/${s.slug}/remix`,
             status: `${s.moderationStatus}${s.processingStatus !== "ready" ? ` · ${s.processingStatus}` : ""}`,
           }))}
         />

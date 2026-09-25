@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
+import { Blend } from "lucide-react";
 import { AttributionClaimForm } from "@/components/attribution-claim-form";
 import { AttributionCredit } from "@/components/attribution-credit";
 import { StickerMedia } from "@/components/sticker-media";
 import { getSession, signInUrl } from "@/lib/auth";
-import { canModerate } from "@/lib/capabilities";
+import { canModerate, canUpload } from "@/lib/capabilities";
 import { prisma } from "@/lib/prisma";
 import { canAccessSticker, isPublicBrowseable } from "@/lib/stickers";
 
@@ -28,6 +29,7 @@ export default async function StickerDetailPage({
       category: { select: { name: true, slug: true } },
       tags: { include: { tag: true } },
       media: true,
+      remixedFrom: { select: { slug: true, title: true } },
     },
   });
   if (!sticker) notFound();
@@ -38,6 +40,7 @@ export default async function StickerDetailPage({
   );
   let viewerId: bigint | null = null;
   let isAdmin = false;
+  let canRemix = false;
   let contactDefaults: { contactName: string; contactEmail: string } | undefined;
   if (session?.user?.id) {
     const u = await prisma.user.findUnique({
@@ -46,6 +49,10 @@ export default async function StickerDetailPage({
     if (u) {
       viewerId = u.id;
       isAdmin = canModerate({
+        role: u.role,
+        accountStatus: u.accountStatus,
+      });
+      canRemix = canUpload({
         role: u.role,
         accountStatus: u.accountStatus,
       });
@@ -123,6 +130,18 @@ export default async function StickerDetailPage({
             />
           </div>
 
+          {sticker.remixedFrom ? (
+            <p className="mt-3 text-sm text-secondary">
+              Remixed from{" "}
+              <Link
+                href={`/stickers/${sticker.remixedFrom.slug}`}
+                className="font-semibold text-accent-pink hover:underline"
+              >
+                {sticker.remixedFrom.title}
+              </Link>
+            </p>
+          ) : null}
+
           {sticker.description ? (
             <p className="mt-6 text-sm leading-relaxed text-secondary">
               {sticker.description}
@@ -150,16 +169,33 @@ export default async function StickerDetailPage({
             </p>
           ) : null}
 
-          {(isOwner || isAdmin) ? (
-            <p className="mt-4">
+          <div className="mt-6 flex flex-wrap gap-3">
+            {canRemix ? (
               <Link
-                href={`/stickers/${sticker.slug}/edit`}
-                className="text-sm font-semibold text-accent-pink hover:underline"
+                href={`/stickers/${sticker.slug}/remix`}
+                className="inline-flex items-center gap-2 rounded-full bg-accent-gradient px-5 py-2.5 text-sm font-semibold text-white"
               >
-                Edit metadata
+                <Blend className="h-4 w-4" strokeWidth={1.75} />
+                Remix
               </Link>
-            </p>
-          ) : null}
+            ) : null}
+            {(isOwner || isAdmin) ? (
+              <>
+                <Link
+                  href={`/stickers/${sticker.slug}/compose`}
+                  className="inline-flex items-center rounded-full border border-divider bg-surface px-5 py-2.5 text-sm font-semibold hover:border-accent-pink/40"
+                >
+                  Edit composition
+                </Link>
+                <Link
+                  href={`/stickers/${sticker.slug}/edit`}
+                  className="inline-flex items-center rounded-full border border-divider bg-surface px-5 py-2.5 text-sm font-semibold hover:border-accent-pink/40"
+                >
+                  Edit metadata
+                </Link>
+              </>
+            ) : null}
+          </div>
 
           <AttributionClaimForm
             stickerId={sticker.id.toString()}

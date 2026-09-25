@@ -1,6 +1,7 @@
 # BLOB Sticker Library — locked v1 schema (dbdiagram.io)
 # Import at https://dbdiagram.io
 # Target: Next.js + Auth.js (Zitadel OIDC) + PostgreSQL (+ Prisma)
+# Revision: Composition editor unlock — assets + compositions; fit_mode removed
 #
 # Enums are documented as notes; store as text/varchar + app validation
 # (or PostgreSQL ENUM / CHECK in migrations).
@@ -12,9 +13,8 @@ moderation_status: draft | pending_review | needs_edit | approved | rejected | h
 moderation_action: submitted | approved | rejected | edit_requested | resubmitted | edited | hidden | deleted | claim_submitted | claim_approved | claim_rejected
 moderation_subject_type: sticker | collection | sticker_pack | print_layout | attribution_claim
 processing_status: processing | ready | failed
-media_kind: original | image | gif | video | thumbnail
+media_kind: image | chat | thumbnail | mask | gif | video
 media_asset_status: pending | ready | failed
-fit_mode: crop | fit | pad
 attribution_claim_reason: missing | mislabeled
 attribution_claim_status: pending | approved | rejected
 print_format: pdf | png
@@ -129,7 +129,37 @@ Table tag_aliases {
 }
 
 # ---------------------------------------------------------------------------
-# Stickers
+# Immutable originals (shared across remixes)
+# ---------------------------------------------------------------------------
+
+Table assets {
+  id bigserial [pk]
+  uploaded_by bigint [not null, ref: > users.id]
+  sha256 char(64) [null, note: 'Lowercase hex SHA-256']
+  mime_type varchar(100) [not null]
+  file_extension varchar(20) [not null]
+  width integer [null]
+  height integer [null]
+  duration_ms integer [null, note: 'Video/GIF duration; null for static image']
+  frame_count integer [null]
+  frame_rate decimal(8,3) [null]
+  has_audio boolean [not null, default: false]
+  size_bytes bigint [not null, default: 0]
+  glass_object_id uuid [not null]
+  glass_prism_id uuid [not null]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  indexes {
+    sha256 [name: 'idx_assets_sha256']
+    glass_object_id [name: 'idx_assets_glass_object']
+  }
+
+  Note: 'Immutable original media. Composition documents reference asset id. Remixes reuse the same asset rows (no byte copy). Never mutate after create.'
+}
+
+# ---------------------------------------------------------------------------
+# Stickers + compositions
 # ---------------------------------------------------------------------------
 
 Table stickers {
@@ -138,8 +168,9 @@ Table stickers {
   description text [null]
   slug varchar(220) [unique, not null]
 
-  created_by bigint [not null, ref: > users.id, note: 'Original creator / artist']
-  uploaded_by bigint [not null, ref: > users.id, note: 'Account that uploaded the file']
+  created_by bigint [not null, ref: > users.id, note: 'Original creator / artist / remixer']
+  uploaded_by bigint [not null, ref: > users.id, note: 'Account that uploaded primary original(s) or initiated remix']
+  remixed_from_sticker_id bigint [null, ref: > stickers.id, note: 'Nullable self-FK: set when this sticker was remixed from another. Complements composition_parents.']
 
   category_id bigint [null, ref: > categories.id, note: 'Single primary category']
 
@@ -158,9 +189,6 @@ Table stickers {
   processing_status varchar(20) [not null, default: 'processing', note: 'processing | ready | failed']
   processing_error text [null]
 
-  fit_mode varchar(10) [not null, default: 'pad', note: 'crop | fit | pad — set at create only']
-  pad_background varchar(30) [not null, default: 'transparent', note: 'transparent | #RRGGBB']
-
   views_count bigint [not null, default: 0]
   downloads_count bigint [not null, default: 0]
   likes_count bigint [not null, default: 0]
@@ -173,7 +201,49 @@ Table stickers {
   created_at timestamptz [not null]
   updated_at timestamptz [not null]
 
-  Note: 'Primary content object. Binaries live in media_assets → GLASS. Media/fit_mode immutable after create; metadata editable by owner/admin. Reject = hard purge (GLASS objects then row). Upload requires Has attribution Yes/No; Yes needs author_name + source_url.'
+  indexes {
+    remixed_from_sticker_id [name: 'idx_stickers_remixed_from']
+  }
+
+  Note: 'Primary library object. Framing/edits live in compositions.document_json (1024²). fit_mode/pad_background removed. Published face = media_assets from current composition revision. Remix dual provenance: remixed_from_sticker_id (UI) + composition_parents (composition lineage). Reject = hard purge sticker (+ composition cascade); shared assets retained if still referenced. On approve, discard media_assets whose composition_revision_id ≠ current revision.'
+}
+
+Table compositions {
+  id bigserial [pk]
+  sticker_id bigint [unique, not null, ref: > stickers.id, note: '1:1 with sticker']
+  owner_id bigint [not null, ref: > users.id]
+  current_revision_id bigint [null, note: 'FK to composition_revisions.id; set after first save']
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  Note: 'Editable recipe behind a sticker. current_revision_id points at latest saved document. Soft circular FK to revisions — enforce in app/migration.'
+}
+
+Table composition_revisions {
+  id bigserial [pk]
+  composition_id bigint [not null, ref: > compositions.id]
+  revision integer [not null, note: 'Monotonic per composition; starts at 1']
+  document_json jsonb [not null, note: 'BLOB Composition JSON (version, canvas 1024², objects). Never Konva/Fabric JSON.']
+  created_by bigint [not null, ref: > users.id]
+  created_at timestamptz [not null]
+
+  indexes {
+    (composition_id, revision) [unique, name: 'uq_composition_revisions']
+  }
+
+  Note: 'Immutable saved documents. Save = insert new revision. Local undo stays in the client.'
+}
+
+Table composition_parents {
+  composition_id bigint [not null, ref: > compositions.id]
+  parent_composition_id bigint [not null, ref: > compositions.id]
+  sort_order integer [not null, default: 0]
+
+  indexes {
+    (composition_id, parent_composition_id) [pk]
+  }
+
+  Note: 'Composition remix lineage (deep-copy provenance). Complement to stickers.remixed_from_sticker_id for UI. Not live layer binding; parent edits do not affect children.'
 }
 
 Table attribution_claims {
@@ -214,8 +284,9 @@ Table sticker_tags {
 Table media_assets {
   id bigserial [pk]
   sticker_id bigint [not null, ref: > stickers.id]
+  composition_revision_id bigint [null, ref: > composition_revisions.id, note: 'Revision that produced this derivative; null for legacy/orphan']
 
-  kind varchar(20) [not null, note: 'original | image | gif | video | thumbnail']
+  kind varchar(20) [not null, note: 'image | chat | thumbnail | mask | gif | video — sizes: image=1024, chat=128, thumbnail=256']
   mime_type varchar(100) [not null]
   file_extension varchar(20) [not null]
   width integer [null]
@@ -235,10 +306,10 @@ Table media_assets {
   updated_at timestamptz [not null]
 
   indexes {
-    (sticker_id, kind) [unique, note: 'One asset per kind per sticker in v1']
+    (sticker_id, kind) [unique, note: 'One current asset per kind per sticker']
   }
 
-  Note: 'Do not hardcode image/gif/video columns on stickers. Original retained for regeneration. Public outputs strip EXIF.'
+  Note: 'Derivatives / cache only. Originals live in assets. Regenerated from current composition revision. Public outputs strip EXIF. mask = smart-cutout alpha.'
 }
 
 Table sticker_likes {

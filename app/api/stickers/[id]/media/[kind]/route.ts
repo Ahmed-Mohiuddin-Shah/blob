@@ -20,7 +20,7 @@ export async function GET(
   context: { params: Promise<{ id: string; kind: string }> },
 ) {
   const { id, kind } = await context.params;
-  const allowed = ["thumbnail", "image", "gif", "video", "original"];
+  const allowed = ["thumbnail", "image", "chat", "gif", "video", "mask", "prev_thumbnail"];
   if (!allowed.includes(kind)) {
     return NextResponse.json({ error: "Invalid kind" }, { status: 400 });
   }
@@ -54,10 +54,10 @@ export async function GET(
   if (!asset && kind === "thumbnail") {
     asset =
       sticker.media.find((m) => m.kind === "image" && m.status === "ready") ??
-      sticker.media.find((m) => m.kind === "original");
+      sticker.media.find((m) => m.kind === "chat" && m.status === "ready");
   }
-  if (!asset) {
-    asset = sticker.media.find((m) => m.kind === "original") ?? undefined;
+  if (!asset && (kind === "image" || kind === "chat")) {
+    asset = sticker.media.find((m) => m.kind === "thumbnail" && m.status === "ready");
   }
   if (!asset) {
     return NextResponse.json({ error: "No media" }, { status: 404 });

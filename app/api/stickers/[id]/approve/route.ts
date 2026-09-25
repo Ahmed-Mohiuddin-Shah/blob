@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { getSession } from "@/lib/auth";
 import { canModerate } from "@/lib/capabilities";
+import { discardNonCurrentRevisionMedia } from "@/lib/composition-encode";
 import { getGlass, getPublicPrismId } from "@/lib/glass";
 import {
   MODERATION_ACTION,
@@ -84,6 +85,9 @@ export async function POST(
         publishedAt: sticker.publishedAt ?? new Date(),
       },
     });
+
+    // Discard prior-revision derivative previews so history stays lean.
+    await discardNonCurrentRevisionMedia(sticker.id);
 
     await recordModerationEvent({
       subjectType: MODERATION_SUBJECT.sticker,
