@@ -15,7 +15,8 @@ export function PrintsCta() {
             problem is solved.
           </h2>
           <p className="mt-5 max-w-xl text-sm leading-6 text-white/60 sm:text-base">
-            Pick a pack, choose a layout, and get a printable sheet. No custom sticker-sheet negotiations required.
+            Lay stickers on a printable sheet, bundle sheets into packs, and
+            download PDF or PNG — no custom print negotiations.
           </p>
           <Link
             href="/prints"

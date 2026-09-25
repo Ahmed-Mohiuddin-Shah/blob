@@ -16,7 +16,7 @@ This document freezes v1. Implement against this file and the DBML. Do not reope
 BLOB is a **public sticker library and sticker creation/browsing website** with two major areas:
 
 1. **Library** — browse, search, filter, view, download/share stickers; members create/remix via the composition editor; admins moderate.
-2. **Prints** — premade **sticker packs** (bundles of sheets) and printable layouts; users compose or download **sticker sheets** (single PDF page or sheet image). Product UI deferred; see §14.
+2. **Prints** — **sticker sheets** (PrintLayout → single printable page) and **sticker packs** (bundles of ≥2 sheets); PDF/PNG download + print. See §14.
 
 **Stack (v1):**
 
@@ -52,19 +52,19 @@ Search must find what the user typed (title, aliases, tags, categories, keywords
 | Remix                                 | Deep-copy source `document_json` (all edits) + reuse the same original **asset** identities. Dual provenance: set `stickers.remixed_from_sticker_id` (UI) **and** insert `composition_parents` (composition lineage). Parent later edits must not affect children (no live parent composition layers). |
 | Portable packages                     | Consume published **`blob-editor`** (npm) / Flutter package — do not vend or fork. Schema + core ops + React `BlobEditor`; Node worker uses `blob-editor/encode` only (never in client bundles). Host docs: [`docs/diff.md`](diff.md), [`docs/print-layout-host.md`](print-layout-host.md). |
 | Moderation previews                   | Open queues (pending / needs_edit) may show still diffs (previous vs current revision). **No** JSON document-diff UI. On **approve**, discard `media_assets` (and GLASS objects) for non-current revisions. Admin history is action + note only — no retained preview images. |
-| Prints UI                             | Packs / layouts / `PrintLayout` / `encodePrint` **deferred** (schema may remain; product UI later). |
+| Prints UI                             | Sheets-first: `PrintLayout` create flow, packs of sheets, PDF/PNG downloads, favourites + collections membership. |
 | Mobile-first editor                   | Phone / narrow viewports first-class: touch gestures, ~44px targets, no hover-only controls, bottom sheets / compact bars; three previews usable on small screens. |
 | Primary category                      | One `category_id` per sticker + many tags                                                                                                     |
 | Tags                                  | First-class `tags` table + pivot; not a comma string on the sticker row                                                                       |
 | Storage                               | Postgres = metadata + GLASS UUIDs; binaries only in GLASS                                                                                     |
 | Search v1                             | PostgreSQL FTS + `pg_trgm` (Meilisearch planned post-v1)                                                                                      |
-| Prints                                | Separate domain: packs, layouts, generated_prints; generate on demand + cache                                                                 |
+| Prints                                | Sheets-first: sheets store PrintDocument + GLASS outputs; packs reference sheets (min 2); always public; async encode; presets from package |
 | Video audio                           | Optional: preserve when present; not required; do not strip by default                                                                        |
 | Email verification                    | Deferred (column reserved; no v1 flow required)                                                                                               |
 | Favorites / collections               | Tables + UI **Must** this pass. Collections always public; favourites private (profile). Tag aliases still deferred.                           |
-| Sticker Sheet vs Pack                 | **Sheet** = single printable page (one PDF page or one sheet image/PNG). **Pack** = bundle of multiple sheets/PDFs. Layout = geometry template. |
+| Sticker Sheet vs Pack                 | **Sheet** = single printable page (PrintDocument + PNG/PDF). **Pack** = bundle of ≥2 sheets (sheet FKs). Layout presets = package only. |
 | Tag display names                     | Stored **ALL CAPS** on save (`ANGRY CAT`); slug remains lowercase                                                                             |
-| Moderation history                    | Shared polymorphic `moderation_events` (stickers + attribution claims now; collections / packs / layouts later) |
+| Moderation history                    | Shared polymorphic `moderation_events` (stickers + attribution claims now; collections later). Sheets/packs are always public — no moderation queue. |
 | Attribution on upload                 | Required Yes/No; Yes requires `author_name` (label) + `source_url` (http/https)                                 |
 | Attribution claims                    | Signed-in only; admin approve auto-applies proposed label+URL; approve/reject require admin note               |
 | Domain enums                          | Closed vocabularies (`role`, `account_status`, `visibility`, `moderation_status`, `processing_status`, media kinds/statuses, claim reason/status, favourite/moderation subject types, moderation actions) live as shared `as const` enums in `lib/`. Call sites must import them — raw string literals for those fields are forbidden. |
@@ -355,7 +355,7 @@ Cross-platform contract = Composition JSON **v2** + `version`. Host consumes pub
 | **npm `blob-editor`** | `blob-editor/core` | Validate, ops, `remixDeepCopy`, `renderFrame` / `renderExports` |
 | | `blob-editor/react` | Drop-in `BlobEditor` (+ CSS); theme via primary/secondary |
 | | `blob-editor/encode` | **Node worker only** — `encodeComposition` (gif/mp4); never browser |
-| | `blob-editor/print` | PrintDocument helpers — **deferred** in app UI |
+| | `blob-editor/print` | PrintDocument helpers + host `PrintLayout` |
 | **Flutter/Dart** | `blob_editor` | Same document version; painter/render parity |
 
 - UI chrome may differ per platform; **document + rendered pixels** must match for the same inputs.
@@ -586,19 +586,18 @@ Likes and favorites are distinct. Favourites do **not** use a sticker-only join:
 - Always **public** (no visibility column).
 - **Globally unique** `name` and `slug` across all users.
 - Tags via `collection_tags` (reuse `tags` table; ALL CAPS names).
-- Members: stickers only for now (`collection_stickers`), **1–60** stickers (cannot delete the collection; cannot remove the last sticker).
-- Future: collections may also hold sticker sheets / packs (not in this pass).
+- Members: polymorphic `collection_items` — `sticker` \| `sticker_sheet` \| `sticker_pack`, **1–60** items (cannot delete the collection; cannot remove the last item).
 - Browse `/collections` with search + infinite-scroll cursor pagination.
-- Search matches collection **name** and titles of **stickers inside** the collection.
-- Card/detail: `PlayingCardsFan` adds a sticker to a collection (modal: pick own / create). Owner can remove stickers down to one remaining.
+- Card/detail: `PlayingCardsFan` adds a subject to a collection (modal: pick own / create). Owner can remove stickers down to one remaining item.
+- Detail CTAs: make sheet from stickers (max 20), make/combine pack from sheets/packs.
 
 ### Favourites
 
 - Private to the signed-in user; page at **`/profile/favourites`** (profile sub-nav only; not main header).
 - `subject_type`: `sticker` \| `collection` \| `sticker_sheet` \| `sticker_pack`.
-- This pass UI: favourite **stickers** and **collections** only (`sticker_sheet` / `sticker_pack` reserved).
+- UI: all four subject types.
 - Searchable (by subject title) + infinite-scroll cursor pagination.
-- Card/detail: `Heart` toggles favourite on stickers; collection detail also has Heart.
+- Card/detail: `Heart` toggles favourite.
 
 ---
 
@@ -606,38 +605,35 @@ Likes and favorites are distinct. Favourites do **not** use a sticker-only join:
 
 ## 14. Prints domain
 
-**Deferred for product UI** (schema may exist; do not ship PrintLayout / encodePrint host flows in this pass).
+Sheets-first product UI (this pass).
 
 ### Glossary (locked)
 
 | Term | Meaning |
 | ---- | ------- |
-| **Sticker Sheet** | A single printable page — one PDF page **or** one sheet image/PNG |
-| **Sticker Pack** | A bundle of multiple sheets and/or PDFs (combined multi-page PDF or multiple sheet PNGs) |
-| **Print Layout** | Geometry template (page mm, grid, gaps, cut marks) — implementation detail for composing sheets |
+| **Sticker Sheet** | A single printable page — one PDF page **or** one sheet image/PNG; first-class row with PrintDocument |
+| **Sticker Pack** | A bundle of ≥2 sheets; stores ordered sheet FKs; combined multi-page PDF + contact-sheet PNG |
+| **Print Layout** | Geometry preset (A4/A5 from `blob-editor/print`) — not a DB entity |
 
 ```
-Sticker Pack → ordered stickers / sheets
-Print Layout → geometry template
-Pack + Layout → Sticker Sheet (PDF | PNG) cached in GLASS
+Stickers (1–20) → PrintLayout → Sticker Sheet (pending → encodePrint → ready)
+Sheets (≥2) → Sticker Pack (pending → combinePdfs/combinePngsGrid → ready)
 ```
 
+### Sheet
 
+Name, slug, description?, creator, `print_document_json`, `sheet_stickers`, status, GLASS png+pdf. Always public. Not deletable. Including private/unlisted stickers publishes their pixels on the sheet (T&C + submit ack).
 
 ### Pack
 
-Name, description, cover image (GLASS), author, ordered stickers, published flag, visibility. Product entity for bundles (see glossary).
-
-### Layout
-
-Reusable template: page size (mm), orientation, margins, rows, columns, sticker size, gaps, cut marks, background, optional `extra_params` JSON. Do not hardcode only A4 2×3.
+Name, slug, description?, creator, `pack_sheets` (min 2), status, combined GLASS png+pdf. Always public. Not deletable.
 
 ### Generation
 
-- Formats: **PDF** and **PNG** (output = sticker sheet)
-- Generate **on demand**; cache by `cache_key` (hash of pack + layout + format + content revision)
-- Store result in GLASS; record in `generated_prints`
-- Do not pre-generate every pack×layout combination
+- Formats: **PDF** and **PNG**
+- Async: create `pending`, encode in-process (same pattern as composition), set `ready` / `failed`
+- Upload outputs to app public PRISM
+- Detail pages: download PDF/PNG (glass direct when ready) + Print; infinite-scroll grid of referenced stickers
 
 ---
 
@@ -741,11 +737,17 @@ GET    /api/favourites
 PUT    /api/favourites
 DELETE /api/favourites
 
-GET    /api/packs
-GET    /api/packs/{id}
+GET    /api/sheets
+POST   /api/sheets
+GET    /api/sheets/{id}
+GET    /api/sheets/{id}/media/{format}   # png | pdf
+GET    /api/sheets/{id}/stickers         # cursor pagination
 
-GET    /api/prints/layouts
-POST   /api/prints/generate
+GET    /api/packs
+POST   /api/packs
+GET    /api/packs/{id}
+GET    /api/packs/{id}/media/{format}
+GET    /api/packs/{id}/stickers
 ```
 
 `PATCH` must reject original binary replacement. Large uploads and long-running work go through handlers that return quickly and enqueue workers.
@@ -806,28 +808,27 @@ POST   /api/prints/generate
 - [ ] Likes (UI)
 - [ ] GLASS-backed storage via MediaStorage
 - [ ] Favorites + collections **tables** present
-- [ ] Favourites UI (`/profile/favourites`; polymorphic; stickers + collections)
-- [ ] Collections UI (`/collections`; public; unique name/slug; tags; 1–60 stickers; not deletable; search)
+- [x] Favourites UI (`/profile/favourites`; polymorphic; stickers + collections + sheets + packs)
+- [x] Collections UI (`/collections`; public; unique name/slug; tags; 1–60 items; not deletable; search)
+- [x] Sticker sheets + packs (`PrintLayout` / `encodePrint` / combine) with async status
+- [x] Favourite sticker sheets / packs
+- [x] Collections may contain sheets / packs
 
 
 
 ### Should have (after Must)
 
-- [ ] Sticker packs + print layouts + PDF/PNG (`PrintLayout` / `encodePrint`) with cache
 - [ ] Flutter editor shell consuming published Dart package
 - [ ] GIF/video layers + timeline UI
 - [ ] Keyframe animation on objects
 - [ ] Filters beyond cutout; richer masks
 - [ ] Server composer parity hardening / golden-image tests across platforms
-- [ ] Favourite sticker sheets / packs (types reserved on `favorites`)
-- [ ] Collections may contain sheets / packs
 - [ ] Tag aliases table + expansion in search
 - [ ] **Meilisearch** search (replace/augment PG FTS)
 - [ ] Related stickers
 - [ ] Richer download stats / share tracking
 - [ ] Presigned / path-token media URLs where private
-- [ ] Additional print page sizes beyond initial seed layouts
-- [ ] Collections / packs / layouts moderation via shared `moderation_events`
+- [ ] Collections moderation via shared `moderation_events`
 
 
 
@@ -877,9 +878,10 @@ USER (role, account_status, glass_private_prism_id)
   │      ├── LIKES
   │      ├── FAVORITES (polymorphic: sticker | collection | sheet | pack)
   │      └── COLLECTIONS (public; tags; stickers ≤60)
-  └── PACKS / SHEETS (prints domain; UI deferred)
-         ├── PACK_STICKERS → STICKERS
-         └── GENERATED_PRINTS (layout + GLASS cache = sticker sheet)
+  └── PACKS / SHEETS (prints domain)
+         ├── sticker_sheets + sheet_stickers
+         ├── sticker_packs + pack_sheets
+         └── encodePrint / combine → GLASS png+pdf
 
 PUBLIC_PRISM (singleton) → GLASS public PRISM UUID
 ```

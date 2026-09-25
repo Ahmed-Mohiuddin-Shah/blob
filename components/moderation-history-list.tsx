@@ -20,8 +20,6 @@ const SUBJECT_FILTERS = [
   { value: MODERATION_SUBJECT.sticker, label: "Stickers" },
   { value: MODERATION_SUBJECT.attributionClaim, label: "Claims" },
   { value: MODERATION_SUBJECT.collection, label: "Collections" },
-  { value: MODERATION_SUBJECT.stickerPack, label: "Packs" },
-  { value: MODERATION_SUBJECT.printLayout, label: "Layouts" },
 ] as const;
 
 export function ModerationHistoryList() {

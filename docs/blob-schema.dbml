@@ -11,7 +11,7 @@ account_status: active | pending | suspended | banned
 visibility: public | unlisted | private
 moderation_status: draft | pending_review | needs_edit | approved | rejected | hidden | deleted
 moderation_action: submitted | approved | rejected | edit_requested | resubmitted | edited | hidden | deleted | claim_submitted | claim_approved | claim_rejected
-moderation_subject_type: sticker | collection | sticker_pack | print_layout | attribution_claim
+moderation_subject_type: sticker | collection | attribution_claim
 processing_status: processing | ready | failed
 media_kind: image | chat | thumbnail | mask | gif | video
 media_asset_status: pending | ready | failed
@@ -19,6 +19,8 @@ attribution_claim_reason: missing | mislabeled
 attribution_claim_status: pending | approved | rejected
 print_format: pdf | png
 print_status: pending | ready | failed
+collection_item_type: sticker | sticker_sheet | sticker_pack
+favorite_subject_type: sticker | collection | sticker_sheet | sticker_pack
 
 # ---------------------------------------------------------------------------
 # Identity
@@ -336,7 +338,7 @@ Table favorites {
     (user_id, created_at)
   }
 
-  Note: 'Private polymorphic bookmark. No subject FK. UI: sticker + collection now; sheet/pack reserved.'
+  Note: 'Private polymorphic bookmark. No subject FK.'
 }
 
 # ---------------------------------------------------------------------------
@@ -352,20 +354,22 @@ Table collections {
   created_at timestamptz [not null]
   updated_at timestamptz [not null]
 
-  Note: 'Always public. Globally unique name and slug. Not deletable by users. Stickers only for now (1–60); sheets/packs later.'
+  Note: 'Always public. Globally unique name and slug. Not deletable by users. Holds stickers, sheets, packs (1–60 items).'
 }
 
-Table collection_stickers {
+Table collection_items {
   collection_id bigint [not null, ref: > collections.id]
-  sticker_id bigint [not null, ref: > stickers.id]
+  subject_type varchar(40) [not null, note: 'sticker | sticker_sheet | sticker_pack']
+  subject_id bigint [not null]
   sort_order integer [not null, default: 0]
   added_at timestamptz [not null]
 
   indexes {
-    (collection_id, sticker_id) [pk]
+    (collection_id, subject_type, subject_id) [pk]
+    (subject_type, subject_id)
   }
 
-  Note: '1–60 stickers per collection enforced in app. Cannot remove the last sticker.'
+  Note: 'Polymorphic membership. Max 60 items enforced in app. Cannot remove the last item.'
 }
 
 Table collection_tags {
@@ -378,84 +382,70 @@ Table collection_tags {
 }
 
 # ---------------------------------------------------------------------------
-# Prints domain
+# Prints domain (sheets-first)
 # ---------------------------------------------------------------------------
+
+Table sticker_sheets {
+  id bigserial [pk]
+  name varchar(200) [not null]
+  slug varchar(220) [unique, not null]
+  description text [null]
+  created_by bigint [not null, ref: > users.id]
+  print_document_json json [not null, note: 'PrintDocument v1 (mm page + asset_id refs)']
+  status varchar(20) [not null, default: 'pending', note: 'pending | ready | failed']
+  error_message text [null]
+  png_glass_object_id uuid [null]
+  png_glass_prism_id uuid [null]
+  pdf_glass_object_id uuid [null]
+  pdf_glass_prism_id uuid [null]
+  png_size_bytes bigint [null]
+  pdf_size_bytes bigint [null]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  Note: 'Sticker Sheet = single printable page. Always public. Not deletable. Page presets (A4/A5) live in blob-editor/print, not DB.'
+}
+
+Table sheet_stickers {
+  sheet_id bigint [not null, ref: > sticker_sheets.id]
+  sticker_id bigint [not null, ref: > stickers.id]
+  sort_order integer [not null, default: 0]
+
+  indexes {
+    (sheet_id, sticker_id) [pk]
+  }
+
+  Note: 'Source stickers on a sheet (max 20). asset_id in PrintDocument = sticker id string.'
+}
 
 Table sticker_packs {
   id bigserial [pk]
   name varchar(200) [not null]
   slug varchar(220) [unique, not null]
   description text [null]
-  cover_glass_object_id uuid [null]
-  cover_glass_prism_id uuid [null]
   created_by bigint [not null, ref: > users.id]
-  visibility varchar(20) [not null, default: 'public']
-  published boolean [not null, default: false]
+  status varchar(20) [not null, default: 'pending', note: 'pending | ready | failed']
+  error_message text [null]
+  png_glass_object_id uuid [null]
+  png_glass_prism_id uuid [null]
+  pdf_glass_object_id uuid [null]
+  pdf_glass_prism_id uuid [null]
+  png_size_bytes bigint [null]
+  pdf_size_bytes bigint [null]
   created_at timestamptz [not null]
   updated_at timestamptz [not null]
 
-  Note: 'Sticker Pack = bundle of multiple sheets/PDFs. Distinct from Sticker Sheet (single page/image).'
+  Note: 'Sticker Pack = bundle of ≥2 sheets (combined PDF + contact-sheet PNG). Always public. Not deletable. Stores sheet FKs.'
 }
 
-Table pack_stickers {
+Table pack_sheets {
   pack_id bigint [not null, ref: > sticker_packs.id]
-  sticker_id bigint [not null, ref: > stickers.id]
+  sheet_id bigint [not null, ref: > sticker_sheets.id]
   sort_order integer [not null, default: 0]
 
   indexes {
-    (pack_id, sticker_id) [pk]
-  }
-}
-
-Table print_layouts {
-  id bigserial [pk]
-  name varchar(120) [not null]
-  slug varchar(140) [unique, not null]
-  description text [null]
-
-  page_width_mm decimal(8,2) [not null, note: 'e.g. 210 for A4']
-  page_height_mm decimal(8,2) [not null, note: 'e.g. 297 for A4']
-  orientation varchar(20) [not null, default: 'portrait', note: 'portrait | landscape']
-  margin_top_mm decimal(8,2) [not null, default: 10]
-  margin_right_mm decimal(8,2) [not null, default: 10]
-  margin_bottom_mm decimal(8,2) [not null, default: 10]
-  margin_left_mm decimal(8,2) [not null, default: 10]
-
-  rows integer [not null]
-  columns integer [not null]
-  sticker_width_mm decimal(8,2) [not null]
-  sticker_height_mm decimal(8,2) [not null]
-  gap_x_mm decimal(8,2) [not null, default: 2]
-  gap_y_mm decimal(8,2) [not null, default: 2]
-  cut_marks boolean [not null, default: true]
-  background varchar(30) [not null, default: '#FFFFFF']
-
-  extra_params json [null, note: 'Optional JSON for non-column layout params']
-
-  published boolean [not null, default: true]
-  created_at timestamptz [not null]
-  updated_at timestamptz [not null]
-
-  Note: 'Reusable print templates. Do not hardcode A4 2×3 only.'
-}
-
-Table generated_prints {
-  id bigserial [pk]
-  pack_id bigint [not null, ref: > sticker_packs.id]
-  layout_id bigint [not null, ref: > print_layouts.id]
-  format varchar(10) [not null, note: 'pdf | png']
-  cache_key varchar(64) [unique, not null, note: 'Hash of pack+layout+format+content revision']
-  glass_object_id uuid [null, note: 'Set when generation succeeds']
-  glass_prism_id uuid [null]
-  status varchar(20) [not null, default: 'pending', note: 'pending | ready | failed']
-  error_message text [null]
-  size_bytes bigint [null]
-  created_at timestamptz [not null]
-  updated_at timestamptz [not null]
-
-  indexes {
-    (pack_id, layout_id, format) [name: 'idx_generated_prints_lookup']
+    (pack_id, sheet_id) [pk]
   }
 
-  Note: 'Generate on demand; cache in GLASS. Do not pre-generate every pack×layout combination.'
+  Note: 'Ordered sheet references inside a pack. Min 2 sheets enforced in app.'
 }

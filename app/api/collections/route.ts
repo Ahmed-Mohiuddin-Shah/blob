@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import {
   collectionCardPreviewInclude,
+  COLLECTION_ITEM,
   serializeCollection,
   uniqueCollectionSlug,
   upsertTagsForCollection,
@@ -15,7 +16,7 @@ const PAGE = 24;
 const listInclude = {
   user: { select: { username: true, displayName: true } },
   tags: { include: { tag: true } },
-  _count: { select: { stickers: true } },
+  _count: { select: { items: true } },
   ...collectionCardPreviewInclude,
 } as const;
 
@@ -54,9 +55,10 @@ export async function GET(request: Request) {
     where.OR = [
       { name: { contains: q, mode: "insensitive" } },
       {
-        stickers: {
+        items: {
           some: {
-            sticker: { title: { contains: q, mode: "insensitive" } },
+            subjectType: COLLECTION_ITEM.sticker,
+            // title search via sticker join not available polymorphically — name only for non-stickers
           },
         },
       },
@@ -64,7 +66,14 @@ export async function GET(request: Request) {
   }
 
   const rows = await prisma.collection.findMany({
-    where,
+    where: q
+      ? {
+          OR: [
+            { name: { contains: q, mode: "insensitive" } },
+            { description: { contains: q, mode: "insensitive" } },
+          ],
+        }
+      : {},
     take: PAGE + 1,
     ...(cursor ? { cursor: { id: BigInt(cursor) }, skip: 1 } : {}),
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -98,7 +107,7 @@ export async function GET(request: Request) {
   });
 }
 
-/** Create collection (auth). Optional stickerId to add as first member. */
+/** Create collection (auth). Optional stickerId / subject to add as first member. */
 export async function POST(request: Request) {
   const user = await sessionUser();
   if (!user) {
@@ -110,6 +119,8 @@ export async function POST(request: Request) {
     description?: string;
     tags?: string;
     stickerId?: string;
+    subjectType?: string;
+    subjectId?: string;
   } | null;
 
   const name = (body?.name ?? "").trim().slice(0, 120);
@@ -129,16 +140,31 @@ export async function POST(request: Request) {
   const description = (body?.description ?? "").trim() || null;
   const tagNames = parseTagNames(body?.tags ?? "");
 
-  let stickerId: bigint | null = null;
+  let firstItem: { subjectType: string; subjectId: bigint } | null = null;
   if (body?.stickerId) {
     try {
-      stickerId = BigInt(body.stickerId);
+      const stickerId = BigInt(body.stickerId);
+      const sticker = await prisma.sticker.findUnique({
+        where: { id: stickerId },
+      });
+      if (!sticker) {
+        return NextResponse.json({ error: "Sticker not found" }, { status: 404 });
+      }
+      firstItem = {
+        subjectType: COLLECTION_ITEM.sticker,
+        subjectId: stickerId,
+      };
     } catch {
       return NextResponse.json({ error: "Invalid stickerId" }, { status: 400 });
     }
-    const sticker = await prisma.sticker.findUnique({ where: { id: stickerId } });
-    if (!sticker) {
-      return NextResponse.json({ error: "Sticker not found" }, { status: 404 });
+  } else if (body?.subjectId && body.subjectType) {
+    try {
+      firstItem = {
+        subjectType: body.subjectType,
+        subjectId: BigInt(body.subjectId),
+      };
+    } catch {
+      return NextResponse.json({ error: "Invalid subjectId" }, { status: 400 });
     }
   }
 
@@ -148,10 +174,14 @@ export async function POST(request: Request) {
       name,
       slug,
       description,
-      ...(stickerId
+      ...(firstItem
         ? {
-            stickers: {
-              create: { stickerId, sortOrder: 0 },
+            items: {
+              create: {
+                subjectType: firstItem.subjectType,
+                subjectId: firstItem.subjectId,
+                sortOrder: 0,
+              },
             },
           }
         : {}),
@@ -159,7 +189,7 @@ export async function POST(request: Request) {
     include: {
       user: { select: { username: true, displayName: true } },
       tags: { include: { tag: true } },
-      _count: { select: { stickers: true } },
+      _count: { select: { items: true } },
     },
   });
 
@@ -172,7 +202,7 @@ export async function POST(request: Request) {
     include: {
       user: { select: { username: true, displayName: true } },
       tags: { include: { tag: true } },
-      _count: { select: { stickers: true } },
+      _count: { select: { items: true } },
       ...collectionCardPreviewInclude,
     },
   });

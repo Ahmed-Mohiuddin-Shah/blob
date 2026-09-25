@@ -151,16 +151,16 @@ const packPng = await combinePngsGrid([page1Png, page2Png, page3Png], {
 
 ## Suggested persistence (BLOB)
 
-Aligned with existing prints domain; interactive layout is an extra SoT:
+Sheets-first (locked):
 
-| Concept | Suggestion |
-|---------|------------|
-| Pack | `sticker_packs` + `pack_stickers` (ordered sticker ids) |
-| Page preset / grid default | `print_layouts` (mm, rows, cols) → seed `layoutGrid` |
-| User/admin free layout | Store `print_document_json` (PrintDocument) on the pack revision or a print-session row |
-| Output | `generated_prints` — cache PNG+PDF in GLASS; `cache_key` = hash(doc + asset content revisions + dpi + formats) |
+| Concept | Persistence |
+|---------|-------------|
+| Sticker Sheet | `sticker_sheets` — `print_document_json` + GLASS PNG/PDF; `sheet_stickers` (max 20) |
+| Sticker Pack | `sticker_packs` + `pack_sheets` (ordered sheet FKs, min 2) |
+| Page presets | Package only (`pageA4` / `pageA5`) — not DB rows |
+| Status | `pending` → async `encodePrint` / `combinePdfs` → `ready` \| `failed` |
 
-Generate on demand; do not precompute every pack×layout.
+Sheets and packs are always public and not deletable. Collections hold polymorphic `collection_items` (sticker \| sheet \| pack).
 
 ## Host checklist
 

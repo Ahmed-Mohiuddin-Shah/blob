@@ -85,7 +85,8 @@ export function FavouritesLibrary({ initialQ }: { initialQ: string }) {
     <div>
       <h1 className="text-2xl font-semibold tracking-tight">Favourites</h1>
       <p className="mt-1 text-sm text-secondary">
-        Private bookmarks — stickers and collections you want to find again.
+        Private bookmarks — stickers, collections, sheets, and packs you want to
+        find again.
       </p>
 
       <form onSubmit={submit} className="mt-6 max-w-md">

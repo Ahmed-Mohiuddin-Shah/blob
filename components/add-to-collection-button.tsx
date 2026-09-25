@@ -4,6 +4,7 @@ import { PlayingCardsFan, Plus, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { COLLECTION_ITEM } from "@/lib/collections";
 import { BusyButton } from "./busy-button";
 
 type CollectionOption = {
@@ -11,10 +12,14 @@ type CollectionOption = {
   name: string;
   slug: string;
   stickerCount: number;
+  itemCount?: number;
 };
 
 type Props = {
-  stickerId: string;
+  /** Legacy: sticker only */
+  stickerId?: string;
+  subjectType?: string;
+  subjectId?: string;
   signedIn: boolean;
   signInHref?: string;
   variant?: "icon" | "pill";
@@ -23,11 +28,18 @@ type Props = {
 
 export function AddToCollectionButton({
   stickerId,
+  subjectType: subjectTypeProp,
+  subjectId: subjectIdProp,
   signedIn,
   signInHref = "/auth/login",
   variant = "icon",
   className = "",
 }: Props) {
+  const subjectType =
+    subjectTypeProp ??
+    (stickerId ? COLLECTION_ITEM.sticker : COLLECTION_ITEM.sticker);
+  const subjectId = subjectIdProp ?? stickerId ?? "";
+
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -76,7 +88,7 @@ export function AddToCollectionButton({
       const res = await fetch(`/api/collections/${slug}/stickers`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stickerId }),
+        body: JSON.stringify({ subjectType, subjectId }),
       });
       const json = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
@@ -100,7 +112,7 @@ export function AddToCollectionButton({
       const res = await fetch("/api/collections", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, stickerId }),
+        body: JSON.stringify({ name, subjectType, subjectId }),
       });
       const json = (await res.json().catch(() => ({}))) as {
         error?: string;
@@ -192,7 +204,7 @@ export function AddToCollectionButton({
                     >
                       <span className="truncate">{c.name}</span>
                       <span className="shrink-0 text-xs text-secondary">
-                        {c.stickerCount}/60
+                        {c.itemCount ?? c.stickerCount}/60
                       </span>
                     </BusyButton>
                   ))

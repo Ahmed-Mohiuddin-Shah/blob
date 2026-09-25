@@ -3,8 +3,6 @@ import { prisma } from "@/lib/prisma";
 export const MODERATION_SUBJECT = {
   sticker: "sticker",
   collection: "collection",
-  stickerPack: "sticker_pack",
-  printLayout: "print_layout",
   attributionClaim: "attribution_claim",
 } as const;
 

@@ -66,6 +66,14 @@ export default function TermsPage() {
             underlying creative works.
           </p>
           <p className="mt-2">
+            Digital sticker sheets and sticker packs you create on BLOB are
+            always public. If you include private or unlisted stickers in a
+            sheet, their artwork will appear on that public printable download
+            (PDF/PNG) even though the original sticker page may remain private
+            or unlisted. Confirm this when creating a sheet that mixes
+            visibility.
+          </p>
+          <p className="mt-2">
             Except where we expressly state otherwise, we do not claim copyright
             or other intellectual-property rights in individual stickers,
             print layouts, or pack compositions contributed by users or third
@@ -74,7 +82,8 @@ export default function TermsPage() {
             non-exclusive licence to reproduce it on physical sheets solely for
             the print offerings described above (and for operating the online
             library). Digital downloads and on-site display remain governed by
-            the visibility and attribution settings of each sticker.
+            the visibility and attribution settings of each sticker, except as
+            described for sheets and packs above.
           </p>
         </section>
 

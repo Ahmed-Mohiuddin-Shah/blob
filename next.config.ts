@@ -6,6 +6,7 @@ const nextConfig: NextConfig = {
     "@napi-rs/canvas",
     "ffmpeg-static",
     "gifenc",
+    "pdf-lib",
   ],
 };
 

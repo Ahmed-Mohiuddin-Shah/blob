@@ -4,6 +4,7 @@ import {
   FAVORITE_UI_TYPES,
   parseFavoriteUiType,
 } from "@/lib/favorites";
+import { PRINT_STATUS } from "@/lib/prints";
 import { sessionUser } from "@/lib/session-user";
 import { prisma } from "@/lib/prisma";
 import {
@@ -35,18 +36,29 @@ export async function GET(request: Request) {
   };
 
   if (q) {
-    const [matchingStickers, matchingCollections] = await Promise.all([
-      prisma.sticker.findMany({
-        where: { title: { contains: q, mode: "insensitive" } },
-        select: { id: true },
-        take: 200,
-      }),
-      prisma.collection.findMany({
-        where: { name: { contains: q, mode: "insensitive" } },
-        select: { id: true },
-        take: 200,
-      }),
-    ]);
+    const [matchingStickers, matchingCollections, matchingSheets, matchingPacks] =
+      await Promise.all([
+        prisma.sticker.findMany({
+          where: { title: { contains: q, mode: "insensitive" } },
+          select: { id: true },
+          take: 200,
+        }),
+        prisma.collection.findMany({
+          where: { name: { contains: q, mode: "insensitive" } },
+          select: { id: true },
+          take: 200,
+        }),
+        prisma.stickerSheet.findMany({
+          where: { name: { contains: q, mode: "insensitive" } },
+          select: { id: true },
+          take: 200,
+        }),
+        prisma.stickerPack.findMany({
+          where: { name: { contains: q, mode: "insensitive" } },
+          select: { id: true },
+          take: 200,
+        }),
+      ]);
     where.OR = [
       {
         subjectType: FAVORITE_SUBJECT.sticker,
@@ -55,6 +67,14 @@ export async function GET(request: Request) {
       {
         subjectType: FAVORITE_SUBJECT.collection,
         subjectId: { in: matchingCollections.map((c) => c.id) },
+      },
+      {
+        subjectType: FAVORITE_SUBJECT.stickerSheet,
+        subjectId: { in: matchingSheets.map((s) => s.id) },
+      },
+      {
+        subjectType: FAVORITE_SUBJECT.stickerPack,
+        subjectId: { in: matchingPacks.map((p) => p.id) },
       },
     ];
   }
@@ -75,8 +95,14 @@ export async function GET(request: Request) {
   const collectionIds = page
     .filter((f) => f.subjectType === FAVORITE_SUBJECT.collection)
     .map((f) => f.subjectId);
+  const sheetIds = page
+    .filter((f) => f.subjectType === FAVORITE_SUBJECT.stickerSheet)
+    .map((f) => f.subjectId);
+  const packIds = page
+    .filter((f) => f.subjectType === FAVORITE_SUBJECT.stickerPack)
+    .map((f) => f.subjectId);
 
-  const [stickers, collections] = await Promise.all([
+  const [stickers, collections, sheets, packs] = await Promise.all([
     stickerIds.length
       ? prisma.sticker.findMany({
           where: { id: { in: stickerIds } },
@@ -97,7 +123,25 @@ export async function GET(request: Request) {
           where: { id: { in: collectionIds } },
           include: {
             user: { select: { username: true, displayName: true } },
-            _count: { select: { stickers: true } },
+            _count: { select: { items: true } },
+          },
+        })
+      : Promise.resolve([]),
+    sheetIds.length
+      ? prisma.stickerSheet.findMany({
+          where: { id: { in: sheetIds } },
+          include: {
+            createdBy: { select: { username: true, displayName: true } },
+            stickers: { select: { stickerId: true } },
+          },
+        })
+      : Promise.resolve([]),
+    packIds.length
+      ? prisma.stickerPack.findMany({
+          where: { id: { in: packIds } },
+          include: {
+            createdBy: { select: { username: true, displayName: true } },
+            sheets: { select: { sheetId: true } },
           },
         })
       : Promise.resolve([]),
@@ -105,6 +149,8 @@ export async function GET(request: Request) {
 
   const stickerMap = new Map(stickers.map((s) => [s.id.toString(), s]));
   const collectionMap = new Map(collections.map((c) => [c.id.toString(), c]));
+  const sheetMap = new Map(sheets.map((s) => [s.id.toString(), s]));
+  const packMap = new Map(packs.map((p) => [p.id.toString(), p]));
 
   function mediaLabel(kinds: string[]): string {
     if (kinds.includes(MEDIA_KIND.video)) return "VIDEO";
@@ -129,18 +175,56 @@ export async function GET(request: Request) {
           createdAt: f.createdAt.toISOString(),
         };
       }
-      const c = collectionMap.get(f.subjectId.toString());
-      if (!c) return null;
+      if (f.subjectType === FAVORITE_SUBJECT.collection) {
+        const c = collectionMap.get(f.subjectId.toString());
+        if (!c) return null;
+        return {
+          id: f.id.toString(),
+          subjectType: FAVORITE_SUBJECT.collection,
+          subjectId: f.subjectId.toString(),
+          title: c.name,
+          href: `/collections/${c.slug}`,
+          thumbUrl: null as string | null,
+          type: "COLLECTION",
+          author: c.user.displayName || c.user.username,
+          stickerCount: c._count.items,
+          createdAt: f.createdAt.toISOString(),
+        };
+      }
+      if (f.subjectType === FAVORITE_SUBJECT.stickerSheet) {
+        const s = sheetMap.get(f.subjectId.toString());
+        if (!s) return null;
+        return {
+          id: f.id.toString(),
+          subjectType: FAVORITE_SUBJECT.stickerSheet,
+          subjectId: f.subjectId.toString(),
+          title: s.name,
+          href: `/prints/sheets/${s.slug}`,
+          thumbUrl:
+            s.status === PRINT_STATUS.ready
+              ? `/api/sheets/${s.id}/media/png`
+              : null,
+          type: "SHEET",
+          author: s.createdBy.displayName || s.createdBy.username,
+          stickerCount: s.stickers.length,
+          createdAt: f.createdAt.toISOString(),
+        };
+      }
+      const p = packMap.get(f.subjectId.toString());
+      if (!p) return null;
       return {
         id: f.id.toString(),
-        subjectType: FAVORITE_SUBJECT.collection,
+        subjectType: FAVORITE_SUBJECT.stickerPack,
         subjectId: f.subjectId.toString(),
-        title: c.name,
-        href: `/collections/${c.slug}`,
-        thumbUrl: null as string | null,
-        type: "COLLECTION",
-        author: c.user.displayName || c.user.username,
-        stickerCount: c._count.stickers,
+        title: p.name,
+        href: `/prints/packs/${p.slug}`,
+        thumbUrl:
+          p.status === PRINT_STATUS.ready
+            ? `/api/packs/${p.id}/media/png`
+            : null,
+        type: "PACK",
+        author: p.createdBy.displayName || p.createdBy.username,
+        stickerCount: p.sheets.length,
         createdAt: f.createdAt.toISOString(),
       };
     })
@@ -167,7 +251,10 @@ export async function PUT(request: Request) {
   const subjectType = parseFavoriteUiType(body?.subjectType);
   if (!subjectType) {
     return NextResponse.json(
-      { error: "subjectType must be sticker or collection" },
+      {
+        error:
+          "subjectType must be sticker, collection, sticker_sheet, or sticker_pack",
+      },
       { status: 400 },
     );
   }
@@ -184,10 +271,20 @@ export async function PUT(request: Request) {
     if (!s) {
       return NextResponse.json({ error: "Sticker not found" }, { status: 404 });
     }
-  } else {
+  } else if (subjectType === FAVORITE_SUBJECT.collection) {
     const c = await prisma.collection.findUnique({ where: { id: subjectId } });
     if (!c) {
       return NextResponse.json({ error: "Collection not found" }, { status: 404 });
+    }
+  } else if (subjectType === FAVORITE_SUBJECT.stickerSheet) {
+    const s = await prisma.stickerSheet.findUnique({ where: { id: subjectId } });
+    if (!s) {
+      return NextResponse.json({ error: "Sheet not found" }, { status: 404 });
+    }
+  } else {
+    const p = await prisma.stickerPack.findUnique({ where: { id: subjectId } });
+    if (!p) {
+      return NextResponse.json({ error: "Pack not found" }, { status: 404 });
     }
   }
 
@@ -221,7 +318,10 @@ export async function DELETE(request: Request) {
   const subjectType = parseFavoriteUiType(body?.subjectType);
   if (!subjectType) {
     return NextResponse.json(
-      { error: "subjectType must be sticker or collection" },
+      {
+        error:
+          "subjectType must be sticker, collection, sticker_sheet, or sticker_pack",
+      },
       { status: 400 },
     );
   }

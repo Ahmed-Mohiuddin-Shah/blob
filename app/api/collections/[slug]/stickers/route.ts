@@ -1,11 +1,16 @@
 import { NextResponse } from "next/server";
-import { MAX_COLLECTION_STICKERS } from "@/lib/collections";
+import {
+  COLLECTION_ITEM,
+  MAX_COLLECTION_ITEMS,
+  parseCollectionItemType,
+} from "@/lib/collections";
+import { PRINT_STATUS } from "@/lib/prints";
 import { sessionUser } from "@/lib/session-user";
 import { prisma } from "@/lib/prisma";
 
 type Ctx = { params: Promise<{ slug: string }> };
 
-/** Add sticker to collection (owner). Rejects at 60. */
+/** Add item to collection (owner). Body: { subjectType, subjectId } or legacy { stickerId }. */
 export async function POST(request: Request, ctx: Ctx) {
   const user = await sessionUser();
   if (!user) {
@@ -22,44 +27,76 @@ export async function POST(request: Request, ctx: Ctx) {
 
   const body = (await request.json().catch(() => null)) as {
     stickerId?: string;
+    subjectType?: string;
+    subjectId?: string;
   } | null;
-  let stickerId: bigint;
+
+  let subjectType = parseCollectionItemType(body?.subjectType);
+  let subjectId: bigint;
   try {
-    stickerId = BigInt(body?.stickerId ?? "");
+    if (body?.stickerId && !body.subjectType) {
+      subjectType = COLLECTION_ITEM.sticker;
+      subjectId = BigInt(body.stickerId);
+    } else {
+      subjectId = BigInt(body?.subjectId ?? "");
+    }
   } catch {
-    return NextResponse.json({ error: "stickerId required" }, { status: 400 });
+    return NextResponse.json(
+      { error: "subjectId (or stickerId) required" },
+      { status: 400 },
+    );
+  }
+  if (!subjectType) {
+    return NextResponse.json(
+      { error: "subjectType must be sticker, sticker_sheet, or sticker_pack" },
+      { status: 400 },
+    );
   }
 
-  const sticker = await prisma.sticker.findUnique({ where: { id: stickerId } });
-  if (!sticker) {
-    return NextResponse.json({ error: "Sticker not found" }, { status: 404 });
+  if (subjectType === COLLECTION_ITEM.sticker) {
+    const s = await prisma.sticker.findUnique({ where: { id: subjectId } });
+    if (!s) {
+      return NextResponse.json({ error: "Sticker not found" }, { status: 404 });
+    }
+  } else if (subjectType === COLLECTION_ITEM.stickerSheet) {
+    const s = await prisma.stickerSheet.findUnique({ where: { id: subjectId } });
+    if (!s || s.status !== PRINT_STATUS.ready) {
+      return NextResponse.json({ error: "Sheet not found" }, { status: 404 });
+    }
+  } else {
+    const p = await prisma.stickerPack.findUnique({ where: { id: subjectId } });
+    if (!p || p.status !== PRINT_STATUS.ready) {
+      return NextResponse.json({ error: "Pack not found" }, { status: 404 });
+    }
   }
 
-  const count = await prisma.collectionSticker.count({
+  const count = await prisma.collectionItem.count({
     where: { collectionId: collection.id },
   });
-  const already = await prisma.collectionSticker.findUnique({
+  const already = await prisma.collectionItem.findUnique({
     where: {
-      collectionId_stickerId: {
+      collectionId_subjectType_subjectId: {
         collectionId: collection.id,
-        stickerId,
+        subjectType,
+        subjectId,
       },
     },
   });
   if (already) {
     return NextResponse.json({ ok: true, already: true });
   }
-  if (count >= MAX_COLLECTION_STICKERS) {
+  if (count >= MAX_COLLECTION_ITEMS) {
     return NextResponse.json(
-      { error: `Collections are limited to ${MAX_COLLECTION_STICKERS} stickers` },
+      { error: `Collections are limited to ${MAX_COLLECTION_ITEMS} items` },
       { status: 400 },
     );
   }
 
-  await prisma.collectionSticker.create({
+  await prisma.collectionItem.create({
     data: {
       collectionId: collection.id,
-      stickerId,
+      subjectType,
+      subjectId,
       sortOrder: count,
     },
   });

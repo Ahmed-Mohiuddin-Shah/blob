@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
-import { MIN_COLLECTION_STICKERS } from "@/lib/collections";
+import {
+  COLLECTION_ITEM,
+  MIN_COLLECTION_ITEMS,
+} from "@/lib/collections";
 import { sessionUser } from "@/lib/session-user";
 import { prisma } from "@/lib/prisma";
 
 type Ctx = { params: Promise<{ slug: string; stickerId: string }> };
 
+/** Remove a sticker item from collection (legacy path). */
 export async function DELETE(_request: Request, ctx: Ctx) {
   const user = await sessionUser();
   if (!user) {
@@ -26,28 +30,39 @@ export async function DELETE(_request: Request, ctx: Ctx) {
     return NextResponse.json({ error: "Invalid stickerId" }, { status: 400 });
   }
 
-  const count = await prisma.collectionSticker.count({
+  const count = await prisma.collectionItem.count({
     where: { collectionId: collection.id },
   });
-  if (count <= MIN_COLLECTION_STICKERS) {
+  if (count <= MIN_COLLECTION_ITEMS) {
     return NextResponse.json(
-      { error: "Collections must keep at least one sticker" },
+      { error: "Collections must keep at least one item" },
       { status: 400 },
     );
   }
 
-  const existing = await prisma.collectionSticker.findUnique({
+  const existing = await prisma.collectionItem.findUnique({
     where: {
-      collectionId_stickerId: { collectionId: collection.id, stickerId },
+      collectionId_subjectType_subjectId: {
+        collectionId: collection.id,
+        subjectType: COLLECTION_ITEM.sticker,
+        subjectId: stickerId,
+      },
     },
   });
   if (!existing) {
-    return NextResponse.json({ error: "Sticker not in collection" }, { status: 404 });
+    return NextResponse.json(
+      { error: "Sticker not in collection" },
+      { status: 404 },
+    );
   }
 
-  await prisma.collectionSticker.delete({
+  await prisma.collectionItem.delete({
     where: {
-      collectionId_stickerId: { collectionId: collection.id, stickerId },
+      collectionId_subjectType_subjectId: {
+        collectionId: collection.id,
+        subjectType: COLLECTION_ITEM.sticker,
+        subjectId: stickerId,
+      },
     },
   });
   return NextResponse.json({ ok: true });

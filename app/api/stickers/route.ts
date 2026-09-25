@@ -30,24 +30,36 @@ import {
 
 const PAGE = 24;
 
-/** Public browse + search (cursor pagination). */
+/** Public browse + search (cursor pagination). `mine=1` → own stickers incl. private/unlisted. */
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const q = (url.searchParams.get("q") ?? "").trim();
   const category = (url.searchParams.get("category") ?? "").trim();
   const cursor = url.searchParams.get("cursor");
+  const mine = url.searchParams.get("mine") === "1";
+
+  const userEarly = mine ? await sessionUser() : null;
+  if (mine && !userEarly) {
+    return NextResponse.json({ error: "Sign in required" }, { status: 401 });
+  }
 
   const where: {
-    visibility: string;
-    moderationStatus: string;
+    visibility?: string;
+    moderationStatus?: string;
     processingStatus: string;
+    uploadedById?: bigint;
     OR?: object[];
     category?: { slug: string };
-  } = {
-    visibility: VISIBILITY.public,
-    moderationStatus: MODERATION_STATUS.approved,
-    processingStatus: PROCESSING_STATUS.ready,
-  };
+  } = mine
+    ? {
+        uploadedById: userEarly!.id,
+        processingStatus: PROCESSING_STATUS.ready,
+      }
+    : {
+        visibility: VISIBILITY.public,
+        moderationStatus: MODERATION_STATUS.approved,
+        processingStatus: PROCESSING_STATUS.ready,
+      };
 
   if (category) {
     where.category = { slug: category };
@@ -104,6 +116,7 @@ export async function GET(request: Request) {
       id: s.id.toString(),
       title: s.title,
       slug: s.slug,
+      visibility: s.visibility,
       author: s.authorName || s.createdBy.displayName || s.createdBy.username,
       authorName: s.authorName,
       sourceUrl: s.sourceUrl,

@@ -1,4 +1,4 @@
-/** Polymorphic favourites. UI targets: sticker | collection (sheet/pack reserved). */
+/** Polymorphic favourites. UI: sticker | collection | sticker_sheet | sticker_pack. */
 
 import { prisma } from "@/lib/prisma";
 
@@ -18,10 +18,12 @@ export const FAVORITE_SUBJECT_TYPES = [
 export type FavoriteSubjectType =
   (typeof FAVORITE_SUBJECT)[keyof typeof FAVORITE_SUBJECT];
 
-/** Subject types the Favourites UI can create/toggle this pass. */
+/** Subject types the Favourites UI can create/toggle. */
 export const FAVORITE_UI_TYPES = [
   FAVORITE_SUBJECT.sticker,
   FAVORITE_SUBJECT.collection,
+  FAVORITE_SUBJECT.stickerSheet,
+  FAVORITE_SUBJECT.stickerPack,
 ] as const;
 export type FavoriteUiType = (typeof FAVORITE_UI_TYPES)[number];
 

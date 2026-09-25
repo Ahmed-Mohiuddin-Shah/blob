@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import {
+  COLLECTION_ITEM,
   serializeCollection,
   uniqueCollectionSlug,
   upsertTagsForCollection,
 } from "@/lib/collections";
 import { parseTagNames } from "@/lib/composition";
 import { FAVORITE_SUBJECT } from "@/lib/favorites";
+import { PRINT_STATUS } from "@/lib/prints";
 import { sessionUser } from "@/lib/session-user";
 import { prisma } from "@/lib/prisma";
 import {
@@ -23,23 +25,9 @@ export async function GET(_request: Request, ctx: Ctx) {
     include: {
       user: { select: { username: true, displayName: true } },
       tags: { include: { tag: true } },
-      _count: { select: { stickers: true } },
-      stickers: {
+      _count: { select: { items: true } },
+      items: {
         orderBy: [{ sortOrder: "asc" }, { addedAt: "asc" }],
-        include: {
-          sticker: {
-            include: {
-              createdBy: { select: { username: true, displayName: true } },
-              media: {
-                where: {
-                  kind: { in: [...CARD_MEDIA_KINDS] },
-                  status: MEDIA_ASSET_STATUS.ready,
-                },
-                select: { kind: true },
-              },
-            },
-          },
-        },
       },
     },
   });
@@ -62,27 +50,118 @@ export async function GET(_request: Request, ctx: Ctx) {
     favourited = !!fav;
   }
 
+  const stickerIds = collection.items
+    .filter((i) => i.subjectType === COLLECTION_ITEM.sticker)
+    .map((i) => i.subjectId);
+  const sheetIds = collection.items
+    .filter((i) => i.subjectType === COLLECTION_ITEM.stickerSheet)
+    .map((i) => i.subjectId);
+  const packIds = collection.items
+    .filter((i) => i.subjectType === COLLECTION_ITEM.stickerPack)
+    .map((i) => i.subjectId);
+
+  const [stickers, sheets, packs] = await Promise.all([
+    stickerIds.length
+      ? prisma.sticker.findMany({
+          where: { id: { in: stickerIds } },
+          include: {
+            createdBy: { select: { username: true, displayName: true } },
+            media: {
+              where: {
+                kind: { in: [...CARD_MEDIA_KINDS] },
+                status: MEDIA_ASSET_STATUS.ready,
+              },
+              select: { kind: true },
+            },
+          },
+        })
+      : Promise.resolve([]),
+    sheetIds.length
+      ? prisma.stickerSheet.findMany({
+          where: { id: { in: sheetIds }, status: PRINT_STATUS.ready },
+          include: {
+            createdBy: { select: { username: true, displayName: true } },
+            stickers: { select: { stickerId: true } },
+          },
+        })
+      : Promise.resolve([]),
+    packIds.length
+      ? prisma.stickerPack.findMany({
+          where: { id: { in: packIds }, status: PRINT_STATUS.ready },
+          include: {
+            createdBy: { select: { username: true, displayName: true } },
+            sheets: { select: { sheetId: true } },
+          },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  const stickerMap = new Map(stickers.map((s) => [s.id.toString(), s]));
+  const sheetMap = new Map(sheets.map((s) => [s.id.toString(), s]));
+  const packMap = new Map(packs.map((p) => [p.id.toString(), p]));
+
   function mediaLabel(kinds: string[]): string {
     if (kinds.includes(MEDIA_KIND.video)) return "VIDEO";
     if (kinds.includes(MEDIA_KIND.gif)) return "GIF";
     return "IMAGE";
   }
 
+  const items = collection.items
+    .map((item) => {
+      if (item.subjectType === COLLECTION_ITEM.sticker) {
+        const s = stickerMap.get(item.subjectId.toString());
+        if (!s) return null;
+        return {
+          subjectType: COLLECTION_ITEM.sticker,
+          id: s.id.toString(),
+          title: s.title,
+          slug: s.slug,
+          author: s.authorName || s.createdBy.displayName || s.createdBy.username,
+          type: mediaLabel(s.media.map((m) => m.kind)),
+          href: `/stickers/${s.slug}`,
+          thumbUrl: `/api/stickers/${s.id}/media/thumbnail`,
+          remixHref: `/stickers/${s.slug}/remix`,
+          visibility: s.visibility,
+        };
+      }
+      if (item.subjectType === COLLECTION_ITEM.stickerSheet) {
+        const s = sheetMap.get(item.subjectId.toString());
+        if (!s) return null;
+        return {
+          subjectType: COLLECTION_ITEM.stickerSheet,
+          id: s.id.toString(),
+          title: s.name,
+          slug: s.slug,
+          author: s.createdBy.displayName || s.createdBy.username,
+          type: "SHEET",
+          href: `/prints/sheets/${s.slug}`,
+          thumbUrl: `/api/sheets/${s.id}/media/png`,
+          stickerCount: s.stickers.length,
+        };
+      }
+      const p = packMap.get(item.subjectId.toString());
+      if (!p) return null;
+      return {
+        subjectType: COLLECTION_ITEM.stickerPack,
+        id: p.id.toString(),
+        title: p.name,
+        slug: p.slug,
+        author: p.createdBy.displayName || p.createdBy.username,
+        type: "PACK",
+        href: `/prints/packs/${p.slug}`,
+        thumbUrl: `/api/packs/${p.id}/media/png`,
+        sheetCount: p.sheets.length,
+      };
+    })
+    .filter(Boolean);
+
   return NextResponse.json({
     ...serializeCollection(collection),
     isOwner: user?.id === collection.userId,
     favourited,
-    stickers: collection.stickers.map(({ sticker: s }) => ({
-      id: s.id.toString(),
-      title: s.title,
-      slug: s.slug,
-      author: s.authorName || s.createdBy.displayName || s.createdBy.username,
-      sourceUrl: s.sourceUrl,
-      type: mediaLabel(s.media.map((m) => m.kind)),
-      href: `/stickers/${s.slug}`,
-      thumbUrl: `/api/stickers/${s.id}/media/thumbnail`,
-      remixHref: `/stickers/${s.slug}/remix`,
-    })),
+    items,
+    // Back-compat for clients expecting stickers[]
+    stickers: items.filter((i) => i?.subjectType === COLLECTION_ITEM.sticker),
   });
 }
 
@@ -133,11 +212,6 @@ export async function PATCH(request: Request, ctx: Ctx) {
   const updated = await prisma.collection.update({
     where: { id: collection.id },
     data,
-    include: {
-      user: { select: { username: true, displayName: true } },
-      tags: { include: { tag: true } },
-      _count: { select: { stickers: true } },
-    },
   });
 
   if (body?.tags !== undefined) {
@@ -149,16 +223,9 @@ export async function PATCH(request: Request, ctx: Ctx) {
     include: {
       user: { select: { username: true, displayName: true } },
       tags: { include: { tag: true } },
-      _count: { select: { stickers: true } },
+      _count: { select: { items: true } },
     },
   });
 
   return NextResponse.json(serializeCollection(full));
-}
-
-export async function DELETE() {
-  return NextResponse.json(
-    { error: "Collections cannot be deleted" },
-    { status: 405 },
-  );
 }
