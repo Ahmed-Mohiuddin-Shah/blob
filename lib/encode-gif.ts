@@ -47,7 +47,7 @@ export async function encodeGifFromComposition(
     const t = Math.min(duration, (i / fps) * 1000);
     const canvas = await renderFrame(doc, t, frameResolver);
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
-    if (!ctx) throw new Error("2d context unavailable");
+    if (!ctx || !("getImageData" in ctx)) throw new Error("2d context unavailable");
     const id = ctx.getImageData(0, 0, CANVAS_SIZE, CANVAS_SIZE);
     const data = new Uint8Array(id.data.buffer.slice(0));
     const palette = gifenc.quantize(data, 256);
