@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Blend } from "lucide-react";
+import { Blender } from "lucide-react";
 import { AttributionCredit } from "./attribution-credit";
 import { StickerMedia } from "./sticker-media";
 
@@ -55,7 +55,7 @@ export function StickerCard({
             className="absolute bottom-3 right-3 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-accent-gradient text-white shadow-lg transition hover:scale-105"
             onClick={(e) => e.stopPropagation()}
           >
-            <Blend className="h-5 w-5" strokeWidth={1.75} />
+            <Blender className="h-5 w-5" strokeWidth={1.75} />
           </Link>
         ) : null}
 

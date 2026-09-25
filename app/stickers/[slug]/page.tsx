@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
-import { Blend } from "lucide-react";
+import { Blender } from "lucide-react";
 import { AttributionClaimForm } from "@/components/attribution-claim-form";
 import { AttributionCredit } from "@/components/attribution-credit";
 import { StickerDownloadButtons } from "@/components/sticker-download-buttons";
@@ -74,13 +74,13 @@ export default async function StickerDetailPage({
   const pendingClaim =
     viewerId != null
       ? await prisma.attributionClaim.findFirst({
-          where: {
-            stickerId: sticker.id,
-            claimantId: viewerId,
-            status: "pending",
-          },
-          select: { id: true },
-        })
+        where: {
+          stickerId: sticker.id,
+          claimantId: viewerId,
+          status: "pending",
+        },
+        select: { id: true },
+      })
       : null;
 
   const type = typeFromMedia(sticker.media.map((m) => m.kind));
@@ -190,7 +190,7 @@ export default async function StickerDetailPage({
                 href={`/stickers/${sticker.slug}/remix`}
                 className="inline-flex items-center gap-2 rounded-full bg-accent-gradient px-5 py-2.5 text-sm font-semibold text-white"
               >
-                <Blend className="h-4 w-4" strokeWidth={1.75} />
+                <Blender className="h-4 w-4" strokeWidth={1.75} />
                 Remix
               </Link>
             ) : null}
