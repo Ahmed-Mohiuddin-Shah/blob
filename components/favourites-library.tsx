@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Search } from "lucide-react";
-import type { FavoriteUiType } from "@/lib/favorites";
+import { FAVORITE_SUBJECT, type FavoriteUiType } from "@/lib/favorites";
+import { MEDIA_KIND, mediaTypeLabel } from "@/lib/stickers";
 import { FavouriteButton } from "./favourite-button";
 import { StickerMedia } from "./sticker-media";
 
@@ -19,6 +20,16 @@ type FavItem = {
   author: string;
   stickerCount?: number;
 };
+
+function countLabel(subjectType: FavoriteUiType, n: number) {
+  const singular =
+    subjectType === FAVORITE_SUBJECT.collection
+      ? "collectible"
+      : subjectType === FAVORITE_SUBJECT.stickerPack
+        ? "sheet"
+        : "sticker";
+  return `${n} ${singular}${n === 1 ? "" : "s"}`;
+}
 
 export function FavouritesLibrary({ initialQ }: { initialQ: string }) {
   const router = useRouter();
@@ -133,7 +144,7 @@ export function FavouritesLibrary({ initialQ }: { initialQ: string }) {
                     src={item.thumbUrl}
                     seed={item.title}
                     alt={item.title}
-                    video={item.type === "VIDEO"}
+                    video={item.type === mediaTypeLabel(MEDIA_KIND.video)}
                   />
                 ) : (
                   <span className="flex h-full items-center justify-center text-[10px] font-bold uppercase text-inactive">
@@ -151,7 +162,7 @@ export function FavouritesLibrary({ initialQ }: { initialQ: string }) {
                 <p className="mt-0.5 text-xs text-secondary">
                   {item.type}
                   {item.stickerCount != null
-                    ? ` · ${item.stickerCount} stickers`
+                    ? ` · ${countLabel(item.subjectType, item.stickerCount)}`
                     : ""}{" "}
                   · {item.author}
                 </p>

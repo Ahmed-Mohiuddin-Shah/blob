@@ -82,7 +82,7 @@ export function CollectionCard({
           {name}
         </Link>
         <p className="mt-0.5 truncate text-xs text-secondary">
-          {stickerCount} sticker{stickerCount === 1 ? "" : "s"} · {author}
+          {stickerCount} collectible{stickerCount === 1 ? "" : "s"} · {author}
         </p>
       </div>
     </div>
