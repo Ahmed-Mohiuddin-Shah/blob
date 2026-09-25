@@ -14,6 +14,7 @@ import {
 } from "@/lib/moderation";
 import { prisma } from "@/lib/prisma";
 import { ensurePrivatePrism } from "@/lib/private-prism";
+import { canOwnerEditSticker } from "@/lib/stickers";
 
 async function sessionUser() {
   const reqHeaders = await headers();
@@ -56,6 +57,13 @@ export async function POST(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  if (!isAdmin && !canOwnerEditSticker(sticker.moderationStatus)) {
+    return NextResponse.json(
+      { error: "Sticker is awaiting review and cannot be edited" },
+      { status: 409 },
+    );
+  }
+
   let form: FormData;
   try {
     form = await request.formData();
@@ -78,7 +86,9 @@ export async function POST(
   }
 
   const lastRev = sticker.composition.revisions[0]?.revision ?? 0;
-  const fromNeedsEdit = sticker.moderationStatus === "needs_edit";
+  const requeueReview =
+    sticker.moderationStatus === "needs_edit" ||
+    sticker.moderationStatus === "approved";
 
   try {
     const revision = await prisma.$transaction(async (tx) => {
@@ -99,7 +109,7 @@ export async function POST(
         data: {
           processingStatus: "processing",
           processingError: null,
-          ...(fromNeedsEdit
+          ...(requeueReview
             ? { moderationStatus: "pending_review", moderationNote: null }
             : {}),
         },
@@ -136,7 +146,7 @@ export async function POST(
       subjectType: MODERATION_SUBJECT.sticker,
       subjectId: sticker.id,
       subjectTitle: sticker.title,
-      action: fromNeedsEdit
+      action: requeueReview
         ? MODERATION_ACTION.resubmitted
         : MODERATION_ACTION.edited,
       actorId: user.id,
@@ -187,6 +197,12 @@ export async function GET(
   });
   if (!isOwner && !isAdmin) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  if (!isAdmin && !canOwnerEditSticker(sticker.moderationStatus)) {
+    return NextResponse.json(
+      { error: "Sticker is awaiting review and cannot be edited" },
+      { status: 409 },
+    );
   }
 
   const revision = await prisma.compositionRevision.findUnique({

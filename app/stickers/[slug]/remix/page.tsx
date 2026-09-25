@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { remixDeepCopy, validateDocument } from "blob-editor/core";
 import { StickerCreateForm } from "@/components/sticker-create-form";
 import { canModerate, canUpload } from "@/lib/capabilities";
+import { primaryAssetIdFromDocument } from "@/lib/composition";
 import { prisma } from "@/lib/prisma";
 import { requireSessionUser } from "@/lib/require-user";
 import { canAccessSticker } from "@/lib/stickers";
@@ -37,6 +38,7 @@ export default async function RemixPage({
   if (!revision) notFound();
 
   const document = remixDeepCopy(validateDocument(revision.documentJson));
+  const primaryAssetId = primaryAssetIdFromDocument(document);
 
   const categories = await prisma.category.findMany({
     where: { parentId: null },
@@ -65,6 +67,9 @@ export default async function RemixPage({
             slug: c.slug,
           }))}
           initialDocument={document}
+          initialSourceAsset={
+            primaryAssetId ? `/api/assets/${primaryAssetId}` : undefined
+          }
           remixedFromStickerId={source.id.toString()}
           parentCompositionId={source.composition.id.toString()}
           defaultTitle={`Remix of ${source.title}`.slice(0, 200)}

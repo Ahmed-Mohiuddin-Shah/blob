@@ -10,6 +10,7 @@ import {
 import { prisma } from "@/lib/prisma";
 import {
   canAccessSticker,
+  canOwnerEditSticker,
   normalizeTagName,
   tagSlug,
   VISIBILITIES,
@@ -59,6 +60,13 @@ export async function PATCH(
     )
   ) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  if (!isAdmin && !canOwnerEditSticker(sticker.moderationStatus)) {
+    return NextResponse.json(
+      { error: "Sticker is awaiting review and cannot be edited" },
+      { status: 409 },
+    );
   }
 
   let body: Record<string, unknown>;
@@ -128,7 +136,9 @@ export async function PATCH(
     sourceUrl = attribution.sourceUrl;
   }
 
-  const wasNeedsEdit = sticker.moderationStatus === "needs_edit";
+  const requeueReview =
+    sticker.moderationStatus === "needs_edit" ||
+    sticker.moderationStatus === "approved";
   const nextTitle = title ?? sticker.title;
 
   await prisma.$transaction(async (tx) => {
@@ -140,7 +150,7 @@ export async function PATCH(
         ...(visibility !== undefined ? { visibility } : {}),
         ...(categoryId !== undefined ? { categoryId } : {}),
         ...(authorName !== undefined ? { authorName, sourceUrl } : {}),
-        ...(wasNeedsEdit
+        ...(requeueReview
           ? { moderationStatus: "pending_review", moderationNote: null }
           : {}),
       },
@@ -168,7 +178,7 @@ export async function PATCH(
     subjectType: MODERATION_SUBJECT.sticker,
     subjectId: sticker.id,
     subjectTitle: nextTitle,
-    action: wasNeedsEdit
+    action: requeueReview
       ? MODERATION_ACTION.resubmitted
       : MODERATION_ACTION.edited,
     actorId: user.id,
@@ -176,6 +186,6 @@ export async function PATCH(
 
   return NextResponse.json({
     ok: true,
-    status: wasNeedsEdit ? "pending_review" : sticker.moderationStatus,
+    status: requeueReview ? "pending_review" : sticker.moderationStatus,
   });
 }

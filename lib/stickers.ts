@@ -154,3 +154,8 @@ export function canAccessSticker(
   if (viewer.isAdmin && s.moderationStatus !== "approved") return true;
   return false;
 }
+
+/** Owner may edit metadata/composition only when approved or admin requested edits. */
+export function canOwnerEditSticker(moderationStatus: string): boolean {
+  return moderationStatus === "approved" || moderationStatus === "needs_edit";
+}

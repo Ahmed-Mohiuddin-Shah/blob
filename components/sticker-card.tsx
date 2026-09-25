@@ -53,7 +53,6 @@ export function StickerCard({
             title="Remix"
             aria-label="Remix"
             className="absolute bottom-3 right-3 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-accent-gradient text-white shadow-lg transition hover:scale-105"
-            onClick={(e) => e.stopPropagation()}
           >
             <Blender className="h-5 w-5" strokeWidth={1.75} />
           </Link>

@@ -208,6 +208,20 @@ export function parseDocumentJson(raw: unknown): CompositionDocument {
   return validateDocument(raw);
 }
 
+/** First media object's asset_id, for editor sourceAsset preload. */
+export function primaryAssetIdFromDocument(doc: unknown): string | null {
+  try {
+    const validated = validateDocument(doc);
+    const media = validated.objects.find((o) => o.type === "media");
+    if (media && media.type === "media" && /^\d+$/.test(media.asset_id)) {
+      return media.asset_id;
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
 export function remixDocument(source: CompositionDocument): CompositionDocument {
   return remixDeepCopy(source);
 }

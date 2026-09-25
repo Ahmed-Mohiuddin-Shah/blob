@@ -9,7 +9,7 @@ import { StickerMedia } from "@/components/sticker-media";
 import { getSession, signInUrl } from "@/lib/auth";
 import { canModerate, canUpload } from "@/lib/capabilities";
 import { prisma } from "@/lib/prisma";
-import { canAccessSticker, isPublicBrowseable } from "@/lib/stickers";
+import { canAccessSticker, canOwnerEditSticker, isPublicBrowseable } from "@/lib/stickers";
 
 function typeFromMedia(kinds: string[]): string {
   if (kinds.includes("video")) return "VIDEO";
@@ -194,7 +194,8 @@ export default async function StickerDetailPage({
                 Remix
               </Link>
             ) : null}
-            {(isOwner || isAdmin) ? (
+            {(isOwner || isAdmin) &&
+            (isAdmin || canOwnerEditSticker(sticker.moderationStatus)) ? (
               <>
                 <Link
                   href={`/stickers/${sticker.slug}/compose`}
@@ -209,6 +210,14 @@ export default async function StickerDetailPage({
                   Edit metadata
                 </Link>
               </>
+            ) : null}
+            {isOwner &&
+            !isAdmin &&
+            !canOwnerEditSticker(sticker.moderationStatus) ? (
+              <p className="w-full text-xs text-secondary">
+                Waiting for review — editing unlocks after approval or when an
+                admin requests changes.
+              </p>
             ) : null}
           </div>
 

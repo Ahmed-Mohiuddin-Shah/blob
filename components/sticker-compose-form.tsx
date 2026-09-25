@@ -8,9 +8,11 @@ import { BlobEditorHost } from "./blob-editor-host";
 export function StickerComposeForm({
   stickerId,
   initialDocument,
+  initialSourceAsset,
 }: {
   stickerId: string;
   initialDocument: unknown;
+  initialSourceAsset?: string;
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -70,6 +72,7 @@ export function StickerComposeForm({
       ) : null}
       <BlobEditorHost
         document={initialDocument}
+        sourceAsset={initialSourceAsset}
         onExport={onExport}
         onCancel={() => router.back()}
       />

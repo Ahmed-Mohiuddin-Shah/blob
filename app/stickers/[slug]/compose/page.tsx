@@ -2,8 +2,10 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { StickerComposeForm } from "@/components/sticker-compose-form";
 import { canModerate, canUpload } from "@/lib/capabilities";
+import { primaryAssetIdFromDocument } from "@/lib/composition";
 import { prisma } from "@/lib/prisma";
 import { requireSessionUser } from "@/lib/require-user";
+import { canOwnerEditSticker } from "@/lib/stickers";
 
 export default async function ComposePage({
   params,
@@ -30,10 +32,16 @@ export default async function ComposePage({
   });
   if (!isOwner && !isAdmin) notFound();
 
+  if (!isAdmin && !canOwnerEditSticker(sticker.moderationStatus)) {
+    redirect(`/stickers/${sticker.slug}`);
+  }
+
   const revision = await prisma.compositionRevision.findUnique({
     where: { id: sticker.composition.currentRevisionId },
   });
   if (!revision) notFound();
+
+  const primaryAssetId = primaryAssetIdFromDocument(revision.documentJson);
 
   return (
     <section className="mx-auto max-w-7xl px-5 py-10 sm:px-8">
@@ -56,6 +64,9 @@ export default async function ComposePage({
       <StickerComposeForm
         stickerId={sticker.id.toString()}
         initialDocument={revision.documentJson}
+        initialSourceAsset={
+          primaryAssetId ? `/api/assets/${primaryAssetId}` : undefined
+        }
       />
     </section>
   );

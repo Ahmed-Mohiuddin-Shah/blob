@@ -4,7 +4,7 @@ import { StickerEditForm } from "@/components/sticker-edit-form";
 import { getSession, signInUrl } from "@/lib/auth";
 import { canModerate } from "@/lib/capabilities";
 import { prisma } from "@/lib/prisma";
-import { canAccessSticker } from "@/lib/stickers";
+import { canAccessSticker, canOwnerEditSticker } from "@/lib/stickers";
 
 export default async function StickerEditPage({
   params,
@@ -49,6 +49,10 @@ export default async function StickerEditPage({
     )
   ) {
     notFound();
+  }
+
+  if (!isAdmin && !canOwnerEditSticker(sticker.moderationStatus)) {
+    redirect(`/stickers/${sticker.slug}`);
   }
 
   const categories = await prisma.category.findMany({
