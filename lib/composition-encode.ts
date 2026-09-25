@@ -11,6 +11,10 @@ import { getGlass } from "@/lib/glass";
 import { ensureNodeCanvas } from "@/lib/node-canvas";
 import { prisma } from "@/lib/prisma";
 import {
+  appendProcessingLog,
+  PROCESSING_SUBJECT,
+} from "@/lib/processing-log";
+import {
   MEDIA_ASSET_STATUS,
   MEDIA_KIND,
   PROCESSING_STATUS,
@@ -21,9 +25,18 @@ type FrameResolver = (
   assetId: string,
 ) => CanvasImageSource | null | Promise<CanvasImageSource | null>;
 
+const STILL_KINDS = [
+  MEDIA_KIND.chat,
+  MEDIA_KIND.thumbnail,
+  MEDIA_KIND.image,
+] as const;
+
 /**
  * ponytail: in-process encode instead of BullMQ.
  * Uses blob-editor/encode + @napi-rs/canvas. Upgrade: separate worker when volume needs isolation.
+ *
+ * Overlays are baked into client stills only — ephemeral ov_* asset_ids are expected and not
+ * persisted. Static stickers with complete client stills skip server re-encode.
  */
 export function enqueueCompositionEncode(stickerId: bigint): void {
   void processComposition(stickerId).catch((err) => {
@@ -33,6 +46,30 @@ export function enqueueCompositionEncode(stickerId: bigint): void {
 
 /** @deprecated alias for callers still importing the stub name */
 export const enqueueStickerProcessing = enqueueCompositionEncode;
+
+async function hasClientStills(
+  stickerId: bigint,
+  revisionId: bigint,
+): Promise<boolean> {
+  const stills = await prisma.mediaAsset.findMany({
+    where: {
+      stickerId,
+      compositionRevisionId: revisionId,
+      kind: { in: [...STILL_KINDS] },
+      status: MEDIA_ASSET_STATUS.ready,
+    },
+    select: { kind: true },
+  });
+  const kinds = new Set(stills.map((m) => m.kind));
+  return STILL_KINDS.every((k) => kinds.has(k));
+}
+
+async function markReady(stickerId: bigint): Promise<void> {
+  await prisma.sticker.update({
+    where: { id: stickerId },
+    data: { processingStatus: PROCESSING_STATUS.ready, processingError: null },
+  });
+}
 
 async function processComposition(stickerId: bigint): Promise<void> {
   const sticker = await prisma.sticker.findUnique({
@@ -46,7 +83,7 @@ async function processComposition(stickerId: bigint): Promise<void> {
     },
   });
   if (!sticker?.composition) {
-    await fail(stickerId, "Missing composition");
+    await fail(stickerId, sticker?.title ?? "sticker", "Missing composition");
     return;
   }
 
@@ -59,7 +96,7 @@ async function processComposition(stickerId: bigint): Promise<void> {
         })
       : null);
   if (!revision) {
-    await fail(stickerId, "Missing composition revision");
+    await fail(stickerId, sticker.title, "Missing composition revision");
     return;
   }
 
@@ -69,15 +106,24 @@ async function processComposition(stickerId: bigint): Promise<void> {
   } catch (err) {
     await fail(
       stickerId,
+      sticker.title,
       err instanceof Error ? err.message : "Invalid document",
     );
+    return;
+  }
+
+  const needsAnimated = compositionNeedsAnimatedEncode(doc);
+  if (!needsAnimated && (await hasClientStills(stickerId, revision.id))) {
+    // Client stills are the product for static stickers (overlays not asset-persisted).
+    await markReady(stickerId);
     return;
   }
 
   try {
     ensureNodeCanvas();
     const glass = getGlass();
-    const assetIds = collectAssetIds(doc);
+    // Only numeric asset ids resolve to assets rows; ov_* overlays are intentional ephemerals.
+    const assetIds = collectAssetIds(doc).filter((id) => /^\d+$/.test(id));
     const images = new Map<string, Awaited<ReturnType<typeof loadImage>>>();
     const bytesCache = new Map<string, Uint8Array>();
 
@@ -93,7 +139,6 @@ async function processComposition(stickerId: bigint): Promise<void> {
       ) {
         images.set(id, await loadImage(Buffer.from(bytes)));
       } else if (asset.mimeType === "image/gif") {
-        // gifenc/ffmpeg path still needs a still; first frame via loadImage when possible
         try {
           images.set(id, await loadImage(Buffer.from(bytes)));
         } catch {
@@ -109,7 +154,6 @@ async function processComposition(stickerId: bigint): Promise<void> {
 
     const encoded = await encodeComposition(doc, frameResolver, bytesResolver);
 
-    // Video stickers also get a lightweight GIF (package only emits gif for kind===gif).
     if (encoded.exports.video && !encoded.exports.gif) {
       encoded.exports.gif = await encodeGifFromComposition(doc, frameResolver);
       encoded.meta.mimeTypes.gif = "image/gif";
@@ -130,7 +174,11 @@ async function processComposition(stickerId: bigint): Promise<void> {
       )?.glassPrismId;
 
     if (!prismId) {
-      await fail(stickerId, "No GLASS prism for uploads");
+      if (!needsAnimated && (await hasClientStills(stickerId, revision.id))) {
+        await markReady(stickerId);
+        return;
+      }
+      await fail(stickerId, sticker.title, "No GLASS prism for uploads");
       return;
     }
 
@@ -188,7 +236,6 @@ async function processComposition(stickerId: bigint): Promise<void> {
     }
 
     for (const item of kinds) {
-      // Preserve previous thumbnail once before first overwrite in this encode pass
       if (item.kind === MEDIA_KIND.thumbnail) {
         const existing = await prisma.mediaAsset.findUnique({
           where: { stickerId_kind: { stickerId, kind: MEDIA_KIND.thumbnail } },
@@ -249,26 +296,15 @@ async function processComposition(stickerId: bigint): Promise<void> {
       });
     }
 
-    // Drop stale kinds not produced this encode (e.g. mask cleared)
-    const keep = new Set(kinds.map((k) => k.kind));
-    const stale = await prisma.mediaAsset.findMany({
-      where: {
-        stickerId,
-        kind: { notIn: [...keep] },
-        compositionRevisionId: revision.id,
-      },
-    });
-    // Don't delete other revisions' media here — approve does that.
-    void stale;
-    void compositionNeedsAnimatedEncode;
-
-    await prisma.sticker.update({
-      where: { id: stickerId },
-      data: { processingStatus: PROCESSING_STATUS.ready, processingError: null },
-    });
+    await markReady(stickerId);
   } catch (err) {
+    if (!needsAnimated && (await hasClientStills(stickerId, revision.id))) {
+      await markReady(stickerId);
+      return;
+    }
     await fail(
       stickerId,
+      sticker.title,
       err instanceof Error ? err.message : "Encode failed",
     );
   }
@@ -289,13 +325,19 @@ function sha256Hex(buf: Uint8Array): string {
   return createHash("sha256").update(buf).digest("hex");
 }
 
-async function fail(stickerId: bigint, message: string) {
+async function fail(stickerId: bigint, title: string, message: string) {
   await prisma.sticker.update({
     where: { id: stickerId },
     data: {
       processingStatus: PROCESSING_STATUS.failed,
       processingError: message.slice(0, 2000),
     },
+  });
+  await appendProcessingLog({
+    subjectType: PROCESSING_SUBJECT.sticker,
+    subjectId: stickerId,
+    subjectTitle: title,
+    message,
   });
 }
 

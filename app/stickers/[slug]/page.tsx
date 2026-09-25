@@ -7,6 +7,7 @@ import { AttributionClaimForm } from "@/components/attribution-claim-form";
 import { AttributionCredit } from "@/components/attribution-credit";
 import { FavouriteButton } from "@/components/favourite-button";
 import { StickerDownloadButtons } from "@/components/sticker-download-buttons";
+import { StickerFailedActions } from "@/components/sticker-failed-actions";
 import { StickerMedia } from "@/components/sticker-media";
 import { getSession, signInUrl } from "@/lib/auth";
 import { CLAIM_STATUS } from "@/lib/attribution";
@@ -210,6 +211,14 @@ export default async function StickerDetailPage({
                 ? ` · ${sticker.visibility}`
                 : ""}
             </p>
+          ) : null}
+
+          {(isOwner || isAdmin) &&
+          sticker.processingStatus === PROCESSING_STATUS.failed ? (
+            <StickerFailedActions
+              stickerId={sticker.id.toString()}
+              processingError={sticker.processingError}
+            />
           ) : null}
 
           <div className="mt-6 flex flex-wrap gap-3">

@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import {
   FAVORITE_SUBJECT,
   FAVORITE_UI_TYPES,
-  bumpStickerLikesCount,
+  bumpLikesCount,
   parseFavoriteUiType,
+  readLikesCount,
 } from "@/lib/favorites";
 import { PRINT_STATUS } from "@/lib/prints";
 import { sessionUser } from "@/lib/session-user";
@@ -304,15 +305,10 @@ export async function PUT(request: Request) {
     await prisma.favorite.create({
       data: { userId: user.id, subjectType, subjectId },
     });
-    if (subjectType === FAVORITE_SUBJECT.sticker) {
-      likesCount = (await bumpStickerLikesCount(subjectId, 1)).toString();
-    }
-  } else if (subjectType === FAVORITE_SUBJECT.sticker) {
-    const s = await prisma.sticker.findUnique({
-      where: { id: subjectId },
-      select: { likesCount: true },
-    });
-    likesCount = s?.likesCount.toString();
+    likesCount = (await bumpLikesCount(subjectType, subjectId, 1)).toString();
+  } else {
+    const current = await readLikesCount(subjectType, subjectId);
+    likesCount = current?.toString();
   }
 
   return NextResponse.json({
@@ -357,14 +353,11 @@ export async function DELETE(request: Request) {
   });
 
   let likesCount: string | undefined;
-  if (result.count > 0 && subjectType === FAVORITE_SUBJECT.sticker) {
-    likesCount = (await bumpStickerLikesCount(subjectId, -1)).toString();
-  } else if (subjectType === FAVORITE_SUBJECT.sticker) {
-    const s = await prisma.sticker.findUnique({
-      where: { id: subjectId },
-      select: { likesCount: true },
-    });
-    likesCount = s?.likesCount.toString();
+  if (result.count > 0) {
+    likesCount = (await bumpLikesCount(subjectType, subjectId, -1)).toString();
+  } else {
+    const current = await readLikesCount(subjectType, subjectId);
+    likesCount = current?.toString();
   }
 
   return NextResponse.json({

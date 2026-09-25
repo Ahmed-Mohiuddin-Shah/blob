@@ -121,6 +121,22 @@ Table moderation_events {
   Note: 'Polymorphic moderation history. Reuse for collections, sticker packs, print layouts when those domains gain moderation. Reject on stickers = purge GLASS then delete row; event retained.'
 }
 
+Table processing_logs {
+  id bigserial [pk]
+  subject_type varchar(40) [not null, note: 'sticker | sticker_sheet | sticker_pack']
+  subject_id bigint [not null]
+  subject_title varchar(220) [not null]
+  message text [not null]
+  created_at timestamptz [not null]
+
+  indexes {
+    created_at [name: 'idx_processing_logs_created']
+    (subject_type, subject_id, created_at) [name: 'idx_processing_logs_subject']
+  }
+
+  Note: 'Append-only encode/process failure log. Survives clearing of processing_error / error_message on retry. Superadmin profile UI.'
+}
+
 Table tag_aliases {
   id bigserial [pk]
   tag_id bigint [not null, ref: > tags.id]
@@ -339,6 +355,7 @@ Table collections {
   name varchar(120) [unique, not null]
   slug varchar(140) [unique, not null]
   description text [null]
+  likes_count bigint [not null, default: 0, note: 'Denormalized favourite count (favorites where subject_type=collection).']
   created_at timestamptz [not null]
   updated_at timestamptz [not null]
 
@@ -388,6 +405,7 @@ Table sticker_sheets {
   pdf_glass_prism_id uuid [null]
   png_size_bytes bigint [null]
   pdf_size_bytes bigint [null]
+  likes_count bigint [not null, default: 0, note: 'Denormalized favourite count (favorites where subject_type=sticker_sheet).']
   created_at timestamptz [not null]
   updated_at timestamptz [not null]
 
@@ -420,6 +438,7 @@ Table sticker_packs {
   pdf_glass_prism_id uuid [null]
   png_size_bytes bigint [null]
   pdf_size_bytes bigint [null]
+  likes_count bigint [not null, default: 0, note: 'Denormalized favourite count (favorites where subject_type=sticker_pack).']
   created_at timestamptz [not null]
   updated_at timestamptz [not null]
 

@@ -122,6 +122,7 @@ export default async function PackDetailPage({
               subjectType={FAVORITE_SUBJECT.stickerPack}
               subjectId={pack.id.toString()}
               initialFavourited={favourited}
+              initialLikesCount={Number(pack.likesCount)}
               signedIn={!!viewerId}
               signInHref={signInHref}
               variant="pill"

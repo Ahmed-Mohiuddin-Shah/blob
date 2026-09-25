@@ -15,6 +15,7 @@ export type ModerationItem = {
   type: string;
   status: string;
   processingStatus: string;
+  processingError?: string | null;
   thumbUrl: string;
   /** Prior revision still when available (open-queue diff). */
   prevThumbUrl?: string | null;
@@ -48,6 +49,24 @@ export function StickerModerationList({
       router.refresh();
     } catch {
       setError("Action failed");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function reprocess(id: string) {
+    setBusyId(id);
+    setError(null);
+    try {
+      const res = await fetch(`/api/stickers/${id}/reprocess`, { method: "POST" });
+      const json = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        setError(json.error ?? "Retry failed");
+        return;
+      }
+      router.refresh();
+    } catch {
+      setError("Retry failed");
     } finally {
       setBusyId(null);
     }
@@ -139,6 +158,12 @@ export function StickerModerationList({
             <p className="mt-0.5 text-xs text-inactive">
               {new Date(item.createdAt).toLocaleString()}
             </p>
+            {item.processingStatus === PROCESSING_STATUS.failed &&
+            item.processingError ? (
+              <p className="mt-2 text-xs text-accent-orange" role="alert">
+                {item.processingError}
+              </p>
+            ) : null}
             {item.moderationNote ? (
               <p className="mt-2 text-xs text-accent-orange">
                 Note: {item.moderationNote}
@@ -178,6 +203,16 @@ export function StickerModerationList({
           </div>
           {canModerate ? (
             <div className="flex flex-wrap gap-2">
+              {item.processingStatus === PROCESSING_STATUS.failed ? (
+                <BusyButton
+                  type="button"
+                  busy={busyId === item.id}
+                  onClick={() => void reprocess(item.id)}
+                  className="rounded-full bg-accent-gradient px-4 py-2 text-xs font-semibold text-white"
+                >
+                  Retry
+                </BusyButton>
+              ) : null}
               <BusyButton
                 type="button"
                 busy={busyId === item.id}
@@ -229,6 +264,15 @@ export function StickerModerationList({
                 Reject
               </BusyButton>
             </div>
+          ) : item.processingStatus === PROCESSING_STATUS.failed ? (
+            <BusyButton
+              type="button"
+              busy={busyId === item.id}
+              onClick={() => void reprocess(item.id)}
+              className="rounded-full bg-accent-gradient px-4 py-2 text-xs font-semibold text-white"
+            >
+              Retry
+            </BusyButton>
           ) : null}
         </div>
       ))}

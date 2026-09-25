@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Blender } from "lucide-react";
 import { FAVORITE_SUBJECT } from "@/lib/favorites";
+import { COLLECTION_ITEM } from "@/lib/collections";
 import { AttributionCredit } from "./attribution-credit";
 import { AddToCollectionButton } from "./add-to-collection-button";
 import { FavouriteButton } from "./favourite-button";
@@ -72,7 +73,8 @@ export function StickerCard({
         {collectionSlug && stickerId ? (
           <RemoveFromCollectionButton
             collectionSlug={collectionSlug}
-            stickerId={stickerId}
+            subjectType={COLLECTION_ITEM.sticker}
+            subjectId={stickerId}
             canRemove={canRemoveFromCollection}
           />
         ) : null}

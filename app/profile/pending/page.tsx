@@ -54,6 +54,7 @@ export default async function ProfilePendingPage() {
               type: typeFromMedia(kinds),
               status: s.moderationStatus,
               processingStatus: s.processingStatus,
+              processingError: s.processingError,
               thumbUrl: `/api/stickers/${s.id}/media/thumbnail`,
               prevThumbUrl: kinds.includes(MEDIA_KIND.prevThumbnail)
                 ? `/api/stickers/${s.id}/media/${MEDIA_KIND.prevThumbnail}`

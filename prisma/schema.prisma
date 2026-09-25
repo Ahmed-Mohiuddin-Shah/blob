@@ -57,6 +57,20 @@ model ModerationEvent {
   @@map("moderation_events")
 }
 
+/// Append-only encode/process failure log. Survives clearing of processing_error / error_message.
+model ProcessingLog {
+  id           BigInt   @id @default(autoincrement())
+  subjectType  String   @map("subject_type") @db.VarChar(40)
+  subjectId    BigInt   @map("subject_id")
+  subjectTitle String   @map("subject_title") @db.VarChar(220)
+  message      String
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([createdAt(sort: Desc)])
+  @@index([subjectType, subjectId, createdAt(sort: Desc)])
+  @@map("processing_logs")
+}
+
 /// Temporary Glass object tracker (legacy profile upload/view). Prefer stickers.
 model GlassUpload {
   id        BigInt   @id @default(autoincrement())
@@ -285,6 +299,8 @@ model Collection {
   name        String   @unique @db.VarChar(120)
   slug        String   @unique @db.VarChar(140)
   description String?
+  /// Denormalized count of favorites where subject_type=collection.
+  likesCount  BigInt   @default(0) @map("likes_count")
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -353,6 +369,8 @@ model StickerSheet {
   pdfGlassPrismId  String?  @map("pdf_glass_prism_id") @db.Uuid
   pngSizeBytes     BigInt?  @map("png_size_bytes")
   pdfSizeBytes     BigInt?  @map("pdf_size_bytes")
+  /// Denormalized count of favorites where subject_type=sticker_sheet.
+  likesCount       BigInt   @default(0) @map("likes_count")
   createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -393,6 +411,8 @@ model StickerPack {
   pdfGlassPrismId  String?  @map("pdf_glass_prism_id") @db.Uuid
   pngSizeBytes     BigInt?  @map("png_size_bytes")
   pdfSizeBytes     BigInt?  @map("pdf_size_bytes")
+  /// Denormalized count of favorites where subject_type=sticker_pack.
+  likesCount       BigInt   @default(0) @map("likes_count")
   createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 

@@ -13,6 +13,10 @@ import { getGlass, getPublicPrismId } from "@/lib/glass";
 import { ensureNodeCanvas } from "@/lib/node-canvas";
 import { PRINT_STATUS } from "@/lib/prints";
 import { prisma } from "@/lib/prisma";
+import {
+  appendProcessingLog,
+  PROCESSING_SUBJECT,
+} from "@/lib/processing-log";
 import { MEDIA_ASSET_STATUS, MEDIA_KIND } from "@/lib/stickers";
 
 /** Fire-and-forget (pack wait / detail recovery). Prefer `runSheetEncode` on create. */
@@ -226,21 +230,35 @@ async function processPack(packId: bigint): Promise<void> {
 }
 
 async function failSheet(sheetId: bigint, message: string) {
-  await prisma.stickerSheet.update({
+  const sheet = await prisma.stickerSheet.update({
     where: { id: sheetId },
     data: {
       status: PRINT_STATUS.failed,
       errorMessage: message.slice(0, 2000),
     },
+    select: { name: true },
+  });
+  await appendProcessingLog({
+    subjectType: PROCESSING_SUBJECT.stickerSheet,
+    subjectId: sheetId,
+    subjectTitle: sheet.name,
+    message,
   });
 }
 
 async function failPack(packId: bigint, message: string) {
-  await prisma.stickerPack.update({
+  const pack = await prisma.stickerPack.update({
     where: { id: packId },
     data: {
       status: PRINT_STATUS.failed,
       errorMessage: message.slice(0, 2000),
     },
+    select: { name: true },
+  });
+  await appendProcessingLog({
+    subjectType: PROCESSING_SUBJECT.stickerPack,
+    subjectId: packId,
+    subjectTitle: pack.name,
+    message,
   });
 }

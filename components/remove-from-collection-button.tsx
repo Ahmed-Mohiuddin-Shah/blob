@@ -3,18 +3,21 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { X } from "lucide-react";
+import type { CollectionItemType } from "@/lib/collections";
 import { BusyButton } from "./busy-button";
 
 type Props = {
   collectionSlug: string;
-  stickerId: string;
-  /** When false, hide remove (last sticker). */
+  subjectType: CollectionItemType;
+  subjectId: string;
+  /** When false, hide remove (last item). */
   canRemove: boolean;
 };
 
 export function RemoveFromCollectionButton({
   collectionSlug,
-  stickerId,
+  subjectType,
+  subjectId,
   canRemove,
 }: Props) {
   const router = useRouter();
@@ -27,8 +30,12 @@ export function RemoveFromCollectionButton({
     setBusy(true);
     setError(null);
     try {
+      const params = new URLSearchParams({
+        subjectType,
+        subjectId,
+      });
       const res = await fetch(
-        `/api/collections/${collectionSlug}/stickers/${stickerId}`,
+        `/api/collections/${collectionSlug}/stickers/${subjectId}?${params}`,
         { method: "DELETE" },
       );
       const json = (await res.json().catch(() => ({}))) as { error?: string };

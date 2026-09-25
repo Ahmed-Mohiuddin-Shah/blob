@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getSession, signInUrl } from "@/lib/auth";
-import { canManageUsers, type CapabilityUser } from "@/lib/capabilities";
+import { canManageAdmins, canManageUsers, type CapabilityUser } from "@/lib/capabilities";
 import { prisma } from "@/lib/prisma";
 
 export async function requireSessionUser() {
@@ -28,6 +28,18 @@ export async function requireAdmin() {
     accountStatus: user.accountStatus,
   };
   if (!canManageUsers(cap)) {
+    redirect("/profile");
+  }
+  return { session, user };
+}
+
+export async function requireSuperadmin() {
+  const { session, user } = await requireSessionUser();
+  const cap: CapabilityUser = {
+    role: user.role,
+    accountStatus: user.accountStatus,
+  };
+  if (!canManageAdmins(cap)) {
     redirect("/profile");
   }
   return { session, user };

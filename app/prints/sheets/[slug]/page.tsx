@@ -113,6 +113,7 @@ export default async function SheetDetailPage({
               subjectType={FAVORITE_SUBJECT.stickerSheet}
               subjectId={sheet.id.toString()}
               initialFavourited={favourited}
+              initialLikesCount={Number(sheet.likesCount)}
               signedIn={!!viewerId}
               signInHref={signInHref}
               variant="pill"

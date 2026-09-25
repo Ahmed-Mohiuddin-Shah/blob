@@ -15,7 +15,7 @@ async function sessionUser() {
   return prisma.user.findUnique({ where: { id: BigInt(session.user.id) } });
 }
 
-/** Admin: regenerate derivatives from current composition revision + assets. */
+/** Owner or admin: regenerate derivatives from current composition revision + assets. */
 export async function POST(
   _request: Request,
   context: { params: Promise<{ id: string }> },
@@ -23,9 +23,6 @@ export async function POST(
   const user = await sessionUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  if (!canModerate({ role: user.role, accountStatus: user.accountStatus })) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const { id } = await context.params;
@@ -35,6 +32,16 @@ export async function POST(
   });
   if (!sticker?.composition) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  const isAdmin = canModerate({
+    role: user.role,
+    accountStatus: user.accountStatus,
+  });
+  const isOwner =
+    sticker.createdById === user.id || sticker.uploadedById === user.id;
+  if (!isAdmin && !isOwner) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   await prisma.sticker.update({

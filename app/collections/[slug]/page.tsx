@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { FavouriteButton } from "@/components/favourite-button";
 import { CollectionDetailActions } from "@/components/collection-detail-actions";
 import { CollectionPrintActions } from "@/components/collection-print-actions";
+import { RemoveFromCollectionButton } from "@/components/remove-from-collection-button";
 import { StickerGrid } from "@/components/sticker-grid";
 import { getSession, signInUrl } from "@/lib/auth";
 import { COLLECTION_ITEM } from "@/lib/collections";
@@ -129,6 +130,7 @@ export default async function CollectionDetailPage({
   const signInHref = signInUrl({
     redirectTo: `/collections/${collection.slug}`,
   });
+  const canRemove = isOwner && collection.items.length > 1;
 
   function mediaLabel(kinds: string[]): string {
     if (kinds.includes(MEDIA_KIND.video)) return "VIDEO";
@@ -157,7 +159,7 @@ export default async function CollectionDetailPage({
       ...(isOwner
         ? {
             collectionSlug: collection.slug,
-            canRemoveFromCollection: collection.items.length > 1,
+            canRemoveFromCollection: canRemove,
           }
         : {}),
     }));
@@ -207,6 +209,7 @@ export default async function CollectionDetailPage({
           subjectType={FAVORITE_SUBJECT.collection}
           subjectId={collection.id.toString()}
           initialFavourited={favourited}
+          initialLikesCount={Number(collection.likesCount)}
           signedIn={signedIn}
           signInHref={signInHref}
           variant="pill"
@@ -235,42 +238,60 @@ export default async function CollectionDetailPage({
       {readySheets.length > 0 || readyPacks.length > 0 ? (
         <div className="mt-10 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
           {readySheets.map((s) => (
-            <Link
+            <div
               key={s.id.toString()}
-              href={`/prints/sheets/${s.slug}`}
-              className="overflow-hidden rounded-[1.5rem] border border-divider bg-surface"
+              className="relative overflow-hidden rounded-[1.5rem] border border-divider bg-surface"
             >
-              <div className="aspect-[3/4] bg-badge">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={`/api/sheets/${s.id}/media/png`}
-                  alt=""
-                  className="h-full w-full object-contain p-2"
+              <Link href={`/prints/sheets/${s.slug}`} className="block">
+                <div className="aspect-[3/4] bg-badge">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={`/api/sheets/${s.id}/media/png`}
+                    alt=""
+                    className="h-full w-full object-contain p-2"
+                  />
+                </div>
+                <p className="truncate px-3 py-2 text-sm font-semibold">
+                  {s.name}
+                </p>
+              </Link>
+              {isOwner ? (
+                <RemoveFromCollectionButton
+                  collectionSlug={collection.slug}
+                  subjectType={COLLECTION_ITEM.stickerSheet}
+                  subjectId={s.id.toString()}
+                  canRemove={canRemove}
                 />
-              </div>
-              <p className="truncate px-3 py-2 text-sm font-semibold">
-                {s.name}
-              </p>
-            </Link>
+              ) : null}
+            </div>
           ))}
           {readyPacks.map((p) => (
-            <Link
+            <div
               key={p.id.toString()}
-              href={`/prints/packs/${p.slug}`}
-              className="overflow-hidden rounded-[1.5rem] border border-divider bg-surface"
+              className="relative overflow-hidden rounded-[1.5rem] border border-divider bg-surface"
             >
-              <div className="aspect-square bg-badge">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={`/api/packs/${p.id}/media/png`}
-                  alt=""
-                  className="h-full w-full object-contain p-2"
+              <Link href={`/prints/packs/${p.slug}`} className="block">
+                <div className="aspect-square bg-badge">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={`/api/packs/${p.id}/media/png`}
+                    alt=""
+                    className="h-full w-full object-contain p-2"
+                  />
+                </div>
+                <p className="truncate px-3 py-2 text-sm font-semibold">
+                  {p.name}
+                </p>
+              </Link>
+              {isOwner ? (
+                <RemoveFromCollectionButton
+                  collectionSlug={collection.slug}
+                  subjectType={COLLECTION_ITEM.stickerPack}
+                  subjectId={p.id.toString()}
+                  canRemove={canRemove}
                 />
-              </div>
-              <p className="truncate px-3 py-2 text-sm font-semibold">
-                {p.name}
-              </p>
-            </Link>
+              ) : null}
+            </div>
           ))}
         </div>
       ) : null}

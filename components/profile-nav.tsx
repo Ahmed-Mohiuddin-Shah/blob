@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   Pencil,
   Printer,
+  ScrollText,
   Settings,
   Upload,
   Users,
@@ -19,6 +20,7 @@ import {
 type Props = {
   canUpload: boolean;
   isAdmin: boolean;
+  isSuperadmin: boolean;
   pendingCount: number;
   needsEditCount: number;
   claimsCount: number;
@@ -35,6 +37,7 @@ const linkClass = (active: boolean) =>
 export function ProfileNav({
   canUpload,
   isAdmin,
+  isSuperadmin,
   pendingCount,
   needsEditCount,
   claimsCount,
@@ -125,6 +128,15 @@ export function ProfileNav({
               <History className="h-4 w-4" strokeWidth={1.75} aria-hidden />
               History
             </Link>
+            {isSuperadmin ? (
+              <Link
+                href="/profile/logs"
+                className={linkClass(pathname.startsWith("/profile/logs"))}
+              >
+                <ScrollText className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+                Logs
+              </Link>
+            ) : null}
             <Link
               href="/profile/users"
               className={linkClass(pathname.startsWith("/profile/users"))}

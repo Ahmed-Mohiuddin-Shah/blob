@@ -9,6 +9,7 @@ import {
   FAVORITE_SUBJECT,
   parseFavoriteSubjectType,
   parseFavoriteUiType,
+  bumpLikesCount,
   bumpStickerLikesCount,
 } from "@/lib/favorites";
 import {
@@ -59,8 +60,9 @@ describe("collections + favourites locks", () => {
     expect(parseFavoriteSubjectType("nope")).toBeNull();
   });
 
-  it("exports sticker likes_count bump helper", () => {
+  it("exports likes_count bump helpers", () => {
     expect(typeof bumpStickerLikesCount).toBe("function");
+    expect(typeof bumpLikesCount).toBe("function");
   });
 });
 
