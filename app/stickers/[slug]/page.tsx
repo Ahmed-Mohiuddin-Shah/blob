@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { Blend } from "lucide-react";
 import { AttributionClaimForm } from "@/components/attribution-claim-form";
 import { AttributionCredit } from "@/components/attribution-credit";
+import { StickerDownloadButtons } from "@/components/sticker-download-buttons";
 import { StickerMedia } from "@/components/sticker-media";
 import { getSession, signInUrl } from "@/lib/auth";
 import { canModerate, canUpload } from "@/lib/capabilities";
@@ -160,6 +161,20 @@ export default async function StickerDetailPage({
               ))}
             </ul>
           ) : null}
+
+          <StickerDownloadButtons
+            stickerId={sticker.id.toString()}
+            useGlassDirect={
+              sticker.visibility === "public" &&
+              sticker.moderationStatus === "approved" &&
+              sticker.processingStatus === "ready"
+            }
+            media={sticker.media.map((m) => ({
+              kind: m.kind,
+              status: m.status,
+              glassObjectId: m.glassObjectId,
+            }))}
+          />
 
           {(isOwner || isAdmin) && !isPublicBrowseable(sticker) ? (
             <p className="mt-6 text-xs text-inactive">

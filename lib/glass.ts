@@ -10,6 +10,15 @@ export function getGlass(): Glass {
   return new Glass({ baseUrl, apiKey });
 }
 
+/** Public anonymous download URL for an object in a public PRISM. */
+export function glassPublicObjectUrl(objectId: string): string {
+  const baseUrl = process.env.GLASS_API_URL?.replace(/\/$/, "");
+  if (!baseUrl) {
+    throw new Error("Missing GLASS_API_URL");
+  }
+  return `${baseUrl}/objects/${objectId}`;
+}
+
 /** Process-local cache of the app public PRISM UUID (from `public_prism`). */
 let cachedPublicPrismId: string | null = null;
 

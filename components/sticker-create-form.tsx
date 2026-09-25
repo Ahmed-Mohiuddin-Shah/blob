@@ -44,9 +44,7 @@ export function StickerCreateForm({
   defaultTitle?: string;
 }) {
   const router = useRouter();
-  const [step, setStep] = useState<"meta" | "edit">(
-    initialDocument ? "edit" : "meta",
-  );
+  const [step, setStep] = useState<"meta" | "edit">("meta");
   const [meta, setMeta] = useState<Meta>({
     ...emptyMeta,
     title: defaultTitle ?? "",

@@ -6,6 +6,7 @@ import {
   type AssetBytesResolver,
 } from "blob-editor/encode";
 import { validateDocument, type CompositionDocument } from "blob-editor/core";
+import { encodeGifFromComposition } from "@/lib/encode-gif";
 import { getGlass } from "@/lib/glass";
 import { ensureNodeCanvas } from "@/lib/node-canvas";
 import { prisma } from "@/lib/prisma";
@@ -102,6 +103,13 @@ async function processComposition(stickerId: bigint): Promise<void> {
       bytesCache.get(assetId) ?? null;
 
     const encoded = await encodeComposition(doc, frameResolver, bytesResolver);
+
+    // Video stickers also get a lightweight GIF (package only emits gif for kind===gif).
+    if (encoded.exports.video && !encoded.exports.gif) {
+      encoded.exports.gif = await encodeGifFromComposition(doc, frameResolver);
+      encoded.meta.mimeTypes.gif = "image/gif";
+    }
+
     const prismId =
       (
         await prisma.asset.findFirst({

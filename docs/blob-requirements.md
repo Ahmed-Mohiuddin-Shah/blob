@@ -233,7 +233,7 @@ Sticker
         └── video      (≤10s square mp4 when applicable)
 ```
 
-Schema kinds via `media_assets.kind`: `image` | `chat` | `thumbnail` | `mask` | `gif` | `video`. Immutable originals live in **`assets`** (not duplicated as SoT in `media_assets`). Which derived kinds are produced depends on the composition (static → image+chat+thumbnail; animated → gif/video as required + still previews).
+Schema kinds via `media_assets.kind`: `image` | `chat` | `thumbnail` | `mask` | `gif` | `video`. Immutable originals live in **`assets`** (not duplicated as SoT in `media_assets`). Which derived kinds are produced depends on the composition (static → image+chat+thumbnail; **gif source → gif**; **video source → video + gif** lightweight silent derivative + still previews).
 
 ---
 
