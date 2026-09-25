@@ -4,6 +4,7 @@ import { Search, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { BusyButton } from "./busy-button";
+import { StickerMedia } from "./sticker-media";
 import { MAX_SHEET_STICKERS } from "@/lib/prints";
 import { VISIBILITY } from "@/lib/stickers";
 
@@ -14,6 +15,8 @@ export type PickerSticker = {
   thumbUrl: string;
   fullUrl: string;
   visibility: string;
+  /** IMAGE | GIF | VIDEO — VIDEO thumbs may be mp4 stubs */
+  type?: string;
 };
 
 type Props = {
@@ -65,6 +68,7 @@ export function StickerPickerDialog({
             slug: string;
             visibility?: string;
             thumbUrl?: string;
+            type?: string;
           }[];
         };
         setResults(
@@ -75,6 +79,7 @@ export function StickerPickerDialog({
             visibility: s.visibility ?? VISIBILITY.public,
             thumbUrl: s.thumbUrl ?? `/api/stickers/${s.id}/media/thumbnail`,
             fullUrl: `/api/stickers/${s.id}/media/image`,
+            type: s.type,
           })),
         );
       } catch {
@@ -210,11 +215,12 @@ export function StickerPickerDialog({
                         : "border-transparent hover:border-divider"
                     }`}
                   >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
+                    <StickerMedia
                       src={s.thumbUrl}
+                      seed={s.title}
                       alt=""
-                      className="aspect-square w-full object-cover bg-badge"
+                      video={s.type === "VIDEO"}
+                      className="bg-badge"
                     />
                     <span className="absolute inset-x-0 bottom-0 truncate bg-black/50 px-2 py-1 text-[10px] text-white">
                       {s.title}

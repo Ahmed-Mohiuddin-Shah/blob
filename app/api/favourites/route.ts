@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import {
   FAVORITE_SUBJECT,
   FAVORITE_UI_TYPES,
+  bumpStickerLikesCount,
   parseFavoriteUiType,
 } from "@/lib/favorites";
 import { PRINT_STATUS } from "@/lib/prints";
@@ -288,7 +289,7 @@ export async function PUT(request: Request) {
     }
   }
 
-  await prisma.favorite.upsert({
+  const existing = await prisma.favorite.findUnique({
     where: {
       userId_subjectType_subjectId: {
         userId: user.id,
@@ -296,11 +297,29 @@ export async function PUT(request: Request) {
         subjectId,
       },
     },
-    create: { userId: user.id, subjectType, subjectId },
-    update: {},
   });
 
-  return NextResponse.json({ ok: true, favourited: true });
+  let likesCount: string | undefined;
+  if (!existing) {
+    await prisma.favorite.create({
+      data: { userId: user.id, subjectType, subjectId },
+    });
+    if (subjectType === FAVORITE_SUBJECT.sticker) {
+      likesCount = (await bumpStickerLikesCount(subjectId, 1)).toString();
+    }
+  } else if (subjectType === FAVORITE_SUBJECT.sticker) {
+    const s = await prisma.sticker.findUnique({
+      where: { id: subjectId },
+      select: { likesCount: true },
+    });
+    likesCount = s?.likesCount.toString();
+  }
+
+  return NextResponse.json({
+    ok: true,
+    favourited: true,
+    ...(likesCount !== undefined ? { likesCount } : {}),
+  });
 }
 
 /** Remove favourite (auth). Body: { subjectType, subjectId }. */
@@ -333,9 +352,24 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: "subjectId required" }, { status: 400 });
   }
 
-  await prisma.favorite.deleteMany({
+  const result = await prisma.favorite.deleteMany({
     where: { userId: user.id, subjectType, subjectId },
   });
 
-  return NextResponse.json({ ok: true, favourited: false });
+  let likesCount: string | undefined;
+  if (result.count > 0 && subjectType === FAVORITE_SUBJECT.sticker) {
+    likesCount = (await bumpStickerLikesCount(subjectId, -1)).toString();
+  } else if (subjectType === FAVORITE_SUBJECT.sticker) {
+    const s = await prisma.sticker.findUnique({
+      where: { id: subjectId },
+      select: { likesCount: true },
+    });
+    likesCount = s?.likesCount.toString();
+  }
+
+  return NextResponse.json({
+    ok: true,
+    favourited: false,
+    ...(likesCount !== undefined ? { likesCount } : {}),
+  });
 }

@@ -4,9 +4,12 @@ import { headers } from "next/headers";
 import { AddToCollectionButton } from "@/components/add-to-collection-button";
 import { FavouriteButton } from "@/components/favourite-button";
 import { PrintDownloadButtons } from "@/components/print-download-buttons";
+import { PrintFailedActions } from "@/components/print-failed-actions";
+import { PrintPendingRefresh } from "@/components/print-pending-refresh";
 import { PrintStickersInfiniteGrid } from "@/components/print-stickers-infinite-grid";
 import { getSession, signInUrl } from "@/lib/auth";
 import { FAVORITE_SUBJECT } from "@/lib/favorites";
+import { enqueueSheetEncode } from "@/lib/print-encode";
 import { PRINT_STATUS } from "@/lib/prints";
 import { prisma } from "@/lib/prisma";
 
@@ -24,6 +27,11 @@ export default async function SheetDetailPage({
     },
   });
   if (!sheet) notFound();
+
+  // Recovery: fire-and-forget jobs lost on deploy leave rows pending forever
+  if (sheet.status === PRINT_STATUS.pending) {
+    enqueueSheetEncode(sheet.id);
+  }
 
   const reqHeaders = await headers();
   const session = await getSession(
@@ -57,6 +65,7 @@ export default async function SheetDetailPage({
 
   return (
     <section className="mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-16">
+      <PrintPendingRefresh active={sheet.status === PRINT_STATUS.pending} />
       <p className="text-sm">
         <Link href="/prints" className="text-accent-pink hover:underline">
           ← Prints
@@ -121,10 +130,12 @@ export default async function SheetDetailPage({
             id={sheet.id.toString()}
             slug={sheet.slug}
             kind="sheets"
-            pngGlassObjectId={sheet.pngGlassObjectId}
-            pdfGlassObjectId={sheet.pdfGlassObjectId}
             ready={ready}
           />
+
+          {isCreator && sheet.status === PRINT_STATUS.failed ? (
+            <PrintFailedActions kind="sheets" id={sheet.id.toString()} />
+          ) : null}
         </div>
       </div>
 

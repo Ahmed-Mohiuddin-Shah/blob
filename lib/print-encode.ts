@@ -15,6 +15,7 @@ import { PRINT_STATUS } from "@/lib/prints";
 import { prisma } from "@/lib/prisma";
 import { MEDIA_ASSET_STATUS, MEDIA_KIND } from "@/lib/stickers";
 
+/** Fire-and-forget (pack wait / detail recovery). Prefer `runSheetEncode` on create. */
 export function enqueueSheetEncode(sheetId: bigint): void {
   void processSheet(sheetId).catch((err) => {
     console.error("Sheet encode failed:", sheetId.toString(), err);
@@ -27,6 +28,22 @@ export function enqueuePackEncode(packId: bigint): void {
   });
 }
 
+/** Awaitable encode — use on create so Next doesn't drop the job mid-request. */
+export async function runSheetEncode(sheetId: bigint): Promise<void> {
+  await processSheet(sheetId);
+}
+
+export async function runPackEncode(packId: bigint): Promise<void> {
+  await processPack(packId);
+}
+
+async function toPngBytes(bytes: Uint8Array, mime: string): Promise<Uint8Array> {
+  if (mime === "image/png") return bytes;
+  // pdf-lib embedPng needs PNG; stickers may be webp/jpeg (or gif stills)
+  const sharp = (await import("sharp")).default;
+  return new Uint8Array(await sharp(Buffer.from(bytes)).png().toBuffer());
+}
+
 async function processSheet(sheetId: bigint): Promise<void> {
   const sheet = await prisma.stickerSheet.findUnique({
     where: { id: sheetId },
@@ -35,6 +52,7 @@ async function processSheet(sheetId: bigint): Promise<void> {
     },
   });
   if (!sheet) return;
+  if (sheet.status === PRINT_STATUS.ready) return;
 
   try {
     ensureNodeCanvas();
@@ -54,8 +72,14 @@ async function processSheet(sheetId: bigint): Promise<void> {
     const bytesResolver = async (assetId: string) => {
       const m = bySticker.get(assetId);
       if (!m) return null;
+      if (!m.mimeType.startsWith("image/")) return null;
       const res = await glass.objects.download(m.glassObjectId);
-      return new Uint8Array(await res.arrayBuffer());
+      const raw = new Uint8Array(await res.arrayBuffer());
+      try {
+        return await toPngBytes(raw, m.mimeType);
+      } catch {
+        return null;
+      }
     };
 
     const encoded = await encodePrint(doc, bytesResolver, {

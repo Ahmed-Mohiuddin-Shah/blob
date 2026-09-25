@@ -79,11 +79,14 @@ export function CreateSheetForm({
         code?: string;
         slug?: string;
       };
+      if (json.slug) {
+        router.push(`/prints/sheets/${json.slug}`);
+        return;
+      }
       if (!res.ok) {
         setError(json.error ?? "Could not create sheet");
         return;
       }
-      router.push(`/prints/sheets/${json.slug}`);
     } finally {
       setSaving(false);
     }
@@ -116,7 +119,29 @@ export function CreateSheetForm({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="relative space-y-6">
+      {saving ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-6 backdrop-blur-sm"
+          role="status"
+          aria-live="polite"
+          aria-busy
+        >
+          <div className="flex w-full max-w-sm flex-col items-center gap-5 rounded-[2rem] border border-divider bg-surface p-8 shadow-xl">
+            <div className="relative">
+              <div className="h-56 w-40 animate-pulse rounded-[1.75rem] bg-badge sm:h-64 sm:w-48" />
+              <div className="absolute inset-x-6 bottom-6 h-3 animate-pulse rounded-full bg-accent-gradient opacity-80" />
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-semibold">Generating your sticker sheet…</p>
+              <p className="mt-1 text-xs text-secondary">
+                Laying out PNG + PDF — hang tight
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <div className="flex flex-wrap items-end gap-4 rounded-[1.5rem] border border-divider bg-surface p-5">
         <label className="min-w-[12rem] flex-1">
           <span className="text-xs font-semibold uppercase tracking-[0.14em] text-secondary">
@@ -126,12 +151,15 @@ export function CreateSheetForm({
             value={name}
             onChange={(e) => setName(e.target.value)}
             maxLength={200}
-            className="mt-1 w-full rounded-full border border-divider bg-background px-4 py-2.5 text-sm outline-none focus:border-accent-pink"
+            disabled={saving}
+            className="mt-1 w-full rounded-full border border-divider bg-background px-4 py-2.5 text-sm outline-none focus:border-accent-pink disabled:opacity-50"
             placeholder="My sticker sheet"
           />
         </label>
         <BusyButton
           type="button"
+          busy={saving}
+          disabled={saving}
           onClick={() => setPickerOpen(true)}
           className="rounded-full border border-divider px-4 py-2.5 text-sm font-semibold"
         >
@@ -145,6 +173,7 @@ export function CreateSheetForm({
             type="checkbox"
             checked={ackNonPublic}
             onChange={(e) => setAckNonPublic(e.target.checked)}
+            disabled={saving}
             className="mt-1"
           />
           <span>
@@ -162,9 +191,6 @@ export function CreateSheetForm({
         <p className="text-sm text-accent-orange" role="alert">
           {error}
         </p>
-      ) : null}
-      {saving ? (
-        <p className="text-sm text-secondary">Creating sheet…</p>
       ) : null}
 
       <PrintLayoutHost

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { canUpload } from "@/lib/capabilities";
 import { FAVORITE_SUBJECT } from "@/lib/favorites";
-import { enqueueSheetEncode } from "@/lib/print-encode";
+import { runSheetEncode } from "@/lib/print-encode";
 import {
   MAX_SHEET_STICKERS,
   MIN_SHEET_STICKERS,
@@ -238,7 +238,28 @@ export async function POST(request: Request) {
     },
   });
 
-  enqueueSheetEncode(sheet.id);
+  // Await encode in-request — void enqueue was dropped by Next after the response,
+  // leaving sheets stuck on pending (and invisible on the ready-only /prints list).
+  await runSheetEncode(sheet.id);
 
-  return NextResponse.json(serializeSheet(sheet), { status: 201 });
+  const done = await prisma.stickerSheet.findUniqueOrThrow({
+    where: { id: sheet.id },
+    include: {
+      createdBy: { select: { username: true, displayName: true } },
+      stickers: { select: { stickerId: true } },
+    },
+  });
+
+  if (done.status === PRINT_STATUS.failed) {
+    return NextResponse.json(
+      {
+        error: done.errorMessage ?? "Sheet encode failed",
+        slug: done.slug,
+        status: done.status,
+      },
+      { status: 502 },
+    );
+  }
+
+  return NextResponse.json(serializeSheet(done), { status: 201 });
 }

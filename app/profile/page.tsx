@@ -55,6 +55,12 @@ export default async function ProfileOverviewPage() {
               Uploads ({uploadCount})
             </Link>
             <Link
+              href="/profile/prints"
+              className="rounded-full border border-divider bg-surface px-5 py-2 text-sm font-semibold"
+            >
+              Prints
+            </Link>
+            <Link
               href="/profile/pending"
               className="rounded-full border border-divider bg-surface px-5 py-2 text-sm font-semibold"
             >

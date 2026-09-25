@@ -14,6 +14,7 @@ type SheetItem = {
   author?: string;
   favourited?: boolean;
   stickerCount?: number;
+  status?: string;
 };
 
 type PackItem = {
@@ -25,9 +26,17 @@ type PackItem = {
   author?: string;
   favourited?: boolean;
   sheetCount?: number;
+  status?: string;
 };
 
-export function PrintsLibrary({ signedIn = false }: { signedIn?: boolean }) {
+export function PrintsLibrary({
+  signedIn = false,
+  mine = false,
+}: {
+  signedIn?: boolean;
+  /** Show the signed-in user's sheets/packs (all statuses). */
+  mine?: boolean;
+}) {
   const [tab, setTab] = useState<"sheets" | "packs">("sheets");
   const [sheets, setSheets] = useState<SheetItem[]>([]);
   const [packs, setPacks] = useState<PackItem[]>([]);
@@ -40,6 +49,7 @@ export function PrintsLibrary({ signedIn = false }: { signedIn?: boolean }) {
   const loadSheets = useCallback(async (cursor: string | null, replace: boolean) => {
     const params = new URLSearchParams();
     if (cursor) params.set("cursor", cursor);
+    if (mine) params.set("mine", "1");
     const res = await fetch(`/api/sheets?${params}`);
     if (!res.ok) throw new Error("fail");
     const json = (await res.json()) as {
@@ -48,11 +58,12 @@ export function PrintsLibrary({ signedIn = false }: { signedIn?: boolean }) {
     };
     setSheets((prev) => (replace ? json.items : [...prev, ...json.items]));
     setSheetCursor(json.nextCursor);
-  }, []);
+  }, [mine]);
 
   const loadPacks = useCallback(async (cursor: string | null, replace: boolean) => {
     const params = new URLSearchParams();
     if (cursor) params.set("cursor", cursor);
+    if (mine) params.set("mine", "1");
     const res = await fetch(`/api/packs?${params}`);
     if (!res.ok) throw new Error("fail");
     const json = (await res.json()) as {
@@ -61,7 +72,7 @@ export function PrintsLibrary({ signedIn = false }: { signedIn?: boolean }) {
     };
     setPacks((prev) => (replace ? json.items : [...prev, ...json.items]));
     setPackCursor(json.nextCursor);
-  }, []);
+  }, [mine]);
 
   useEffect(() => {
     setLoading(true);
@@ -139,6 +150,7 @@ export function PrintsLibrary({ signedIn = false }: { signedIn?: boolean }) {
                       ? `${s.stickerCount} stickers`
                       : s.author
                   }
+                  status={mine ? s.status : undefined}
                   subjectType={FAVORITE_SUBJECT.stickerSheet}
                   subjectId={s.id}
                   favourited={!!s.favourited}
@@ -156,6 +168,7 @@ export function PrintsLibrary({ signedIn = false }: { signedIn?: boolean }) {
                       ? `${p.sheetCount} sheets`
                       : p.author
                   }
+                  status={mine ? p.status : undefined}
                   subjectType={FAVORITE_SUBJECT.stickerPack}
                   subjectId={p.id}
                   favourited={!!p.favourited}
@@ -174,6 +187,7 @@ function PrintCard({
   title,
   previewUrl,
   meta,
+  status,
   subjectType,
   subjectId,
   favourited,
@@ -183,6 +197,7 @@ function PrintCard({
   title: string;
   previewUrl: string | null;
   meta?: string;
+  status?: string;
   subjectType: typeof FAVORITE_SUBJECT.stickerSheet | typeof FAVORITE_SUBJECT.stickerPack;
   subjectId: string;
   favourited: boolean;
@@ -199,6 +214,13 @@ function PrintCard({
               alt=""
               className="h-full w-full object-contain p-2"
             />
+          ) : status && status !== "ready" ? (
+            <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-center">
+              <div className="h-16 w-12 animate-pulse rounded-xl bg-surface" />
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-secondary">
+                {status.replaceAll("_", " ")}
+              </p>
+            </div>
           ) : null}
         </div>
         <div className="p-3">
@@ -208,6 +230,11 @@ function PrintCard({
           ) : null}
         </div>
       </Link>
+      {status && status !== "ready" ? (
+        <div className="pointer-events-none absolute left-2 top-2 rounded-full bg-badge px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-secondary">
+          {status.replaceAll("_", " ")}
+        </div>
+      ) : null}
       <div className="absolute right-2 top-2">
         <FavouriteButton
           subjectType={subjectType}

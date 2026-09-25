@@ -217,6 +217,7 @@ export default async function StickerDetailPage({
               subjectType={FAVORITE_SUBJECT.sticker}
               subjectId={sticker.id.toString()}
               initialFavourited={favourited}
+              initialLikesCount={Number(sticker.likesCount)}
               signedIn={!!viewerId}
               signInHref={signInUrl({ redirectTo: `/stickers/${sticker.slug}` })}
               variant="pill"

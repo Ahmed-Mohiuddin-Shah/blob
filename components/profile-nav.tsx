@@ -10,6 +10,7 @@ import {
   ImageIcon,
   LayoutDashboard,
   Pencil,
+  Printer,
   Settings,
   Upload,
   Users,
@@ -64,6 +65,13 @@ export function ProfileNav({
         >
           <Heart className="h-4 w-4" strokeWidth={1.75} aria-hidden />
           Favourites
+        </Link>
+        <Link
+          href="/profile/prints"
+          className={linkClass(pathname.startsWith("/profile/prints"))}
+        >
+          <Printer className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+          Prints
         </Link>
         <Link
           href="/profile/pending"

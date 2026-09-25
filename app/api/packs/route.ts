@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { canUpload } from "@/lib/capabilities";
 import { FAVORITE_SUBJECT } from "@/lib/favorites";
-import { enqueuePackEncode } from "@/lib/print-encode";
+import { runPackEncode } from "@/lib/print-encode";
 import {
   MIN_PACK_SHEETS,
   PRINT_STATUS,
@@ -195,7 +195,27 @@ export async function POST(request: Request) {
     },
   });
 
-  enqueuePackEncode(pack.id);
+  await runPackEncode(pack.id);
 
-  return NextResponse.json(serializePack(pack), { status: 201 });
+  const done = await prisma.stickerPack.findUniqueOrThrow({
+    where: { id: pack.id },
+    include: {
+      createdBy: { select: { username: true, displayName: true } },
+      sheets: { select: { sheetId: true } },
+    },
+  });
+
+  // Member sheets still encoding — stay pending; detail page will re-kick.
+  if (done.status === PRINT_STATUS.failed) {
+    return NextResponse.json(
+      {
+        error: done.errorMessage ?? "Pack encode failed",
+        slug: done.slug,
+        status: done.status,
+      },
+      { status: 502 },
+    );
+  }
+
+  return NextResponse.json(serializePack(done), { status: 201 });
 }

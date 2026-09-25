@@ -9,6 +9,7 @@ import {
   FAVORITE_SUBJECT,
   parseFavoriteSubjectType,
   parseFavoriteUiType,
+  bumpStickerLikesCount,
 } from "@/lib/favorites";
 import {
   MAX_SHEET_STICKERS,
@@ -56,6 +57,10 @@ describe("collections + favourites locks", () => {
       FAVORITE_SUBJECT.stickerPack,
     );
     expect(parseFavoriteSubjectType("nope")).toBeNull();
+  });
+
+  it("exports sticker likes_count bump helper", () => {
+    expect(typeof bumpStickerLikesCount).toBe("function");
   });
 });
 

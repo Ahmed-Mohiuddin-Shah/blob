@@ -20,7 +20,7 @@ BLOB is a **public sticker library and sticker creation/browsing website** with 
 
 **Stack (v1):**
 
-- App: **Next.js** (App Router) — React Server Components for browse/detail; Client Components for composition editor, likes, admin actions
+- App: **Next.js** (App Router) — React Server Components for browse/detail; Client Components for composition editor, favourites, admin actions
 - Composition core: language-agnostic **BLOB Composition JSON**; portable module boundary for **npm** + **Flutter/Dart** packages (web Konva is viewport only)
 - Styling: Tailwind CSS (Bloby / Zune; mobile-first editor chrome)
 - Metadata DB: PostgreSQL (access via Prisma or equivalent typed client)
@@ -134,7 +134,7 @@ Search must find what the user typed (title, aliases, tags, categories, keywords
 | Capability                                       | Anonymous | Registered (`user`) | Member | Admin | Super Admin |
 | ------------------------------------------------ | --------- | ------------------- | ------ | ----- | ----------- |
 | Browse / search public                           | Yes       | Yes                 | Yes    | Yes   | Yes         |
-| Like                                             | No        | Yes*                | Yes*   | Yes*  | Yes*        |
+| Favourite / like tally                           | No        | Yes*                | Yes*   | Yes*  | Yes*        |
 | Download                                         | Yes†      | Yes†                | Yes†   | Yes†  | Yes†        |
 | Create sticker (composition editor)              | No        | No                  | Yes    | Yes   | Yes         |
 | Remix sticker (snapshot composition)             | No        | No                  | Yes    | Yes   | Yes         |
@@ -145,14 +145,14 @@ Search must find what the user typed (title, aliases, tags, categories, keywords
 | Promote / demote admins (`admin` only)           | No        | No                  | No     | No    | Yes         |
 | Assign `superadmin`                              | No††      | No††                | No††   | No††  | No††        |
 | Moderate any sticker                             | No        | No                  | No     | Yes   | Yes         |
-| Manage packs / layouts                           | No        | No                  | No     | Yes   | Yes         |
+| Manage packs / sheets                            | No        | No                  | Yes    | Yes   | Yes         |
 
 
  Requires `account_status = active`.  
 † Subject to sticker visibility and download policy; unlisted requires knowing the link; private only for authorized users.  
 †† `superadmin` is assigned only in Zitadel (or first-signup / one-shot bootstrap), never via BLOB UI/API.
 
-**Registration defaults (locked):** `role = user` (Zitadel grant + local mirror), `account_status = active` — except the first signup, which is `superadmin`. New accounts are registered spectators (browse, search, like, download). Upload requires an admin or superadmin to grant Zitadel `member` (or higher) via BLOB admin UI. Only a superadmin may grant `admin` in-app; additional `superadmin` grants require Zitadel. `account_status` of `suspended` or `banned` blocks likes, uploads, and management regardless of role. Use `pending` only when an admin deliberately gates an account before activation.
+**Registration defaults (locked):** `role = user` (Zitadel grant + local mirror), `account_status = active` — except the first signup, which is `superadmin`. New accounts are registered spectators (browse, search, favourite, download). Upload requires an admin or superadmin to grant Zitadel `member` (or higher) via BLOB admin UI. Only a superadmin may grant `admin` in-app; additional `superadmin` grants require Zitadel. `account_status` of `suspended` or `banned` blocks favourites, uploads, and management regardless of role. Use `pending` only when an admin deliberately gates an account before activation.
 
 ---
 
@@ -569,17 +569,17 @@ Do not store tags as a comma string on the sticker row.
 
 
 
-## 13. Likes, favorites, collections
+## 13. Favourites, likes tally, collections
 
 
 | Feature     | Semantics                         | v1                                                              |
 | ----------- | --------------------------------- | --------------------------------------------------------------- |
-| Like        | “I like this”                     | **Must** — UI + `sticker_likes` + `likes_count` (likes UI still open) |
 | Favorite    | Private bookmark “find again”     | **Must** — polymorphic `favorites` + Favourites UI at `/profile/favourites` |
-| Collections | Public named lists of stickers    | **Must** — always public; unique name + slug; tags; **1–60** stickers; not deletable; `/collections` |
+| Like tally  | Public count of sticker favourites | **Must** — denormalized `stickers.likes_count` (no separate `sticker_likes` table) |
+| Collections | Public named lists                | **Must** — always public; unique name + slug; tags; **1–60** items; not deletable; `/collections` |
 
 
-Likes and favorites are distinct. Favourites do **not** use a sticker-only join: `favorites` is polymorphic (`subject_type` + `subject_id`).
+There is **no** separate like action. Favouriting a sticker increments `likes_count`; unfavouriting decrements (clamped at 0). Favourites remain polymorphic (`subject_type` + `subject_id`); only sticker favourites affect `likes_count`.
 
 ### Collections
 
@@ -597,7 +597,7 @@ Likes and favorites are distinct. Favourites do **not** use a sticker-only join:
 - `subject_type`: `sticker` \| `collection` \| `sticker_sheet` \| `sticker_pack`.
 - UI: all four subject types.
 - Searchable (by subject title) + infinite-scroll cursor pagination.
-- Card/detail: `Heart` toggles favourite.
+- Card/detail: `Heart` toggles favourite; sticker detail shows live **likes** count (`likes_count`).
 
 ---
 
@@ -688,7 +688,7 @@ Uploads use GLASS `PUT` (simple or multipart) with `prism_id` and SHA-256 checks
 
 v1: **aggregate counters only** on `stickers` (and pack-level later if needed). No eternal per-view event log.
 
-Increment on meaningful actions (view detail, download, like, share, search impression) with reasonable debouncing left to implementation—but do not build a full analytics warehouse.
+Increment on meaningful actions (view detail, download, favourite/like tally, share, search impression) with reasonable debouncing left to implementation—but do not build a full analytics warehouse.
 
 ---
 
@@ -696,7 +696,7 @@ Increment on meaningful actions (view detail, download, like, share, search impr
 
 ## 17. API surface
 
-Prefer **Server Components / Server Actions** for first-party UI reads and simple mutations. Expose the same domain through **Route Handlers** (`app/api/...`) as a JSON contract for uploads, composition save, likes, print generation, and any non-Next client (**npm web** and **Flutter**). Keep domain logic in shared server modules — not duplicated in pages and handlers. Composition **document ops** belong in the portable core package, not only in route handlers.
+Prefer **Server Components / Server Actions** for first-party UI reads and simple mutations. Expose the same domain through **Route Handlers** (`app/api/...`) as a JSON contract for uploads, composition save, favourites, print generation, and any non-Next client (**npm web** and **Flutter**). Keep domain logic in shared server modules — not duplicated in pages and handlers. Composition **document ops** belong in the portable core package, not only in route handlers.
 
 Intended HTTP API (JSON) for v1:
 
@@ -723,9 +723,6 @@ POST   /api/attribution-claims/{id}/reject    # admin; body: { note } required
 
 GET    /api/moderation/events             # admin; cursor pagination; filters subjectType/action
 
-POST   /api/stickers/{id}/like
-DELETE /api/stickers/{id}/like
-
 GET    /api/collections
 POST   /api/collections
 GET    /api/collections/{slug}
@@ -734,8 +731,8 @@ POST   /api/collections/{slug}/stickers
 DELETE /api/collections/{slug}/stickers/{stickerId}  # owner; refuse if would leave 0
 
 GET    /api/favourites
-PUT    /api/favourites
-DELETE /api/favourites
+PUT    /api/favourites   # favourite; sticker favourites bump likes_count
+DELETE /api/favourites   # unfavourite; sticker favourites decrement likes_count
 
 GET    /api/sheets
 POST   /api/sheets
@@ -785,29 +782,28 @@ GET    /api/packs/{id}/stickers
 
 ### Must have
 
-- [ ] Users with `role` + `account_status` (role mirrored from Zitadel)
-- [ ] Zitadel-only login/logout (no other Auth.js providers), local profile (`username` / `display_name`), blobatar avatars; profile edit via Management API
-- [ ] Admin member promotion (Zitadel grant via PAT) / local status management
-- [ ] Public browse + search (FTS + pg_trgm)
-- [ ] Stickers with tags + primary category
-- [ ] `assets` + composition + composition_revisions + composition_parents tables
-- [ ] Media assets derivatives: image (1024) / chat (128) / thumbnail (256) / mask / gif / video as needed
-- [ ] Editor-required create path; 1024² document; background transparent|color
-- [ ] Mobile-usable web composition editor (touch, three live previews)
-- [ ] Remix snapshot (deep-copy + shared assets + `remixed_from_sticker_id` + `composition_parents`)
-- [ ] Smart cutout (brush + polygon; no ML auto-BG)
-- [ ] Consume **`blob-editor`** npm (`react` client + `encode` worker)
-- [ ] Video ≤10s; audio preserved when present
-- [ ] Async render/processing + admin moderation (approve / request-edit / purge-reject)
-- [ ] Open-queue still diffs; discard non-current-revision derivatives on approve
-- [ ] Shared `moderation_events` history (paginated admin UI; no retained preview images)
-- [ ] Tag names ALL CAPS on save
-- [ ] Visibility public|unlisted|private
-- [ ] Ownership / attribution fields (required Yes/No on create; label + source URL)
-- [ ] Attribution claims (signed-in) + admin Claims queue + history
-- [ ] Likes (UI)
-- [ ] GLASS-backed storage via MediaStorage
-- [ ] Favorites + collections **tables** present
+- [x] Users with `role` + `account_status` (role mirrored from Zitadel)
+- [x] Zitadel-only login/logout (no other Auth.js providers), local profile (`username` / `display_name`), blobatar avatars; profile edit via Management API
+- [x] Admin member promotion (Zitadel grant via PAT) / local status management
+- [x] Public browse + search (cursor; contains / filters — FTS+pg_trgm hardening optional)
+- [x] Stickers with tags + primary category
+- [x] `assets` + composition + composition_revisions + composition_parents tables
+- [x] Media assets derivatives: image (1024) / chat (128) / thumbnail (256) / mask / gif / video as needed
+- [x] Editor-required create path; 1024² document; background transparent|color
+- [x] Mobile-usable web composition editor (touch, three live previews)
+- [x] Remix snapshot (deep-copy + shared assets + `remixed_from_sticker_id` + `composition_parents`)
+- [x] Smart cutout (brush + polygon; no ML auto-BG)
+- [x] Consume **`blob-editor`** npm (`react` client + `encode` worker)
+- [x] Video ≤10s; audio preserved when present
+- [x] Async render/processing + admin moderation (approve / request-edit / purge-reject)
+- [x] Open-queue still diffs; discard non-current-revision derivatives on approve
+- [x] Shared `moderation_events` history (paginated admin UI; no retained preview images)
+- [x] Tag names ALL CAPS on save
+- [x] Visibility public|unlisted|private
+- [x] Ownership / attribution fields (required Yes/No on create; label + source URL)
+- [x] Attribution claims (signed-in) + admin Claims queue + history
+- [x] GLASS-backed storage via glass-ts
+- [x] Favorites + collections tables; sticker `likes_count` = favourite tally (no `sticker_likes`)
 - [x] Favourites UI (`/profile/favourites`; polymorphic; stickers + collections + sheets + packs)
 - [x] Collections UI (`/collections`; public; unique name/slug; tags; 1–60 items; not deletable; search)
 - [x] Sticker sheets + packs (`PrintLayout` / `encodePrint` / combine) with async status
@@ -818,9 +814,7 @@ GET    /api/packs/{id}/stickers
 
 ### Should have (after Must)
 
-- [ ] Flutter editor shell consuming published Dart package
-- [ ] GIF/video layers + timeline UI
-- [ ] Keyframe animation on objects
+- [ ] Flutter editor shell consuming published Dart package and APIs exposed for Flutter app with Deeplink support
 - [ ] Filters beyond cutout; richer masks
 - [ ] Server composer parity hardening / golden-image tests across platforms
 - [ ] Tag aliases table + expansion in search
@@ -829,19 +823,6 @@ GET    /api/packs/{id}/stickers
 - [ ] Richer download stats / share tracking
 - [ ] Presigned / path-token media URLs where private
 - [ ] Collections moderation via shared `moderation_events`
-
-
-
-### Won’t (this version)
-
-- [ ] Elasticsearch/OpenSearch
-- [ ] AI recommendations
-- [ ] Comments / social graph / chat / realtime notifications
-- [ ] Event-level analytics warehouse
-- [ ] Replace-upload of original binaries
-- [ ] Commercial editor SDKs as document SoT (Polotno, CE.SDK, tldraw, …)
-- [ ] Live parent composition layers in remix
-- [ ] Non-Zitadel auth (Credentials, social IdPs, magic link, local passwords)
 
 ---
 

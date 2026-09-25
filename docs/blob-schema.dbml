@@ -193,7 +193,7 @@ Table stickers {
 
   views_count bigint [not null, default: 0]
   downloads_count bigint [not null, default: 0]
-  likes_count bigint [not null, default: 0]
+  likes_count bigint [not null, default: 0, note: 'Denormalized favourite count for this sticker (favorites where subject_type=sticker). Updated when users favourite/unfavourite.']
   shares_count bigint [not null, default: 0]
   search_appearances_count bigint [not null, default: 0]
 
@@ -314,18 +314,6 @@ Table media_assets {
   Note: 'Derivatives / cache only. Originals live in assets. Regenerated from current composition revision. Public outputs strip EXIF. mask = smart-cutout alpha.'
 }
 
-Table sticker_likes {
-  user_id bigint [not null, ref: > users.id]
-  sticker_id bigint [not null, ref: > stickers.id]
-  created_at timestamptz [not null]
-
-  indexes {
-    (user_id, sticker_id) [pk]
-  }
-
-  Note: 'Like = "I like this." Distinct from favorites.'
-}
-
 Table favorites {
   id bigserial [pk]
   user_id bigint [not null, ref: > users.id]
@@ -338,7 +326,7 @@ Table favorites {
     (user_id, created_at)
   }
 
-  Note: 'Private polymorphic bookmark. No subject FK.'
+  Note: 'Private polymorphic bookmark. No subject FK. For stickers, toggling favourite also maintains stickers.likes_count (public like tally).'
 }
 
 # ---------------------------------------------------------------------------

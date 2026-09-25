@@ -4,9 +4,12 @@ import { headers } from "next/headers";
 import { AddToCollectionButton } from "@/components/add-to-collection-button";
 import { FavouriteButton } from "@/components/favourite-button";
 import { PrintDownloadButtons } from "@/components/print-download-buttons";
+import { PrintFailedActions } from "@/components/print-failed-actions";
+import { PrintPendingRefresh } from "@/components/print-pending-refresh";
 import { PrintStickersInfiniteGrid } from "@/components/print-stickers-infinite-grid";
 import { getSession, signInUrl } from "@/lib/auth";
 import { FAVORITE_SUBJECT } from "@/lib/favorites";
+import { enqueuePackEncode } from "@/lib/print-encode";
 import { PRINT_STATUS, serializeSheet } from "@/lib/prints";
 import { prisma } from "@/lib/prisma";
 
@@ -34,6 +37,10 @@ export default async function PackDetailPage({
     },
   });
   if (!pack) notFound();
+
+  if (pack.status === PRINT_STATUS.pending) {
+    enqueuePackEncode(pack.id);
+  }
 
   const reqHeaders = await headers();
   const session = await getSession(
@@ -67,6 +74,7 @@ export default async function PackDetailPage({
 
   return (
     <section className="mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-16">
+      <PrintPendingRefresh active={pack.status === PRINT_STATUS.pending} />
       <p className="text-sm">
         <Link href="/prints" className="text-accent-pink hover:underline">
           ← Prints
@@ -131,10 +139,12 @@ export default async function PackDetailPage({
             id={pack.id.toString()}
             slug={pack.slug}
             kind="packs"
-            pngGlassObjectId={pack.pngGlassObjectId}
-            pdfGlassObjectId={pack.pdfGlassObjectId}
             ready={ready}
           />
+
+          {isCreator && pack.status === PRINT_STATUS.failed ? (
+            <PrintFailedActions kind="packs" id={pack.id.toString()} />
+          ) : null}
 
           <div className="mt-8">
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-secondary">

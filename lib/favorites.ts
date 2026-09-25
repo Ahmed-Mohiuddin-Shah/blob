@@ -56,3 +56,33 @@ export async function isFavourited(
   });
   return !!row;
 }
+
+/** Keep stickers.likes_count in sync with sticker favourites (public like tally). */
+export async function bumpStickerLikesCount(
+  stickerId: bigint,
+  delta: 1 | -1,
+): Promise<bigint> {
+  if (delta === 1) {
+    const row = await prisma.sticker.update({
+      where: { id: stickerId },
+      data: { likesCount: { increment: 1 } },
+      select: { likesCount: true },
+    });
+    return row.likesCount;
+  }
+  // Clamp at 0
+  const current = await prisma.sticker.findUnique({
+    where: { id: stickerId },
+    select: { likesCount: true },
+  });
+  const next =
+    current && current.likesCount > BigInt(0)
+      ? current.likesCount - BigInt(1)
+      : BigInt(0);
+  const row = await prisma.sticker.update({
+    where: { id: stickerId },
+    data: { likesCount: next },
+    select: { likesCount: true },
+  });
+  return row.likesCount;
+}

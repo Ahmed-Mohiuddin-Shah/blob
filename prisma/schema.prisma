@@ -168,6 +168,7 @@ model Sticker {
   processingError        String?   @map("processing_error")
   viewsCount             BigInt    @default(0) @map("views_count")
   downloadsCount         BigInt    @default(0) @map("downloads_count")
+  /// Denormalized count of favorites where subject_type=sticker. Updated on favourite toggle.
   likesCount             BigInt    @default(0) @map("likes_count")
   sharesCount            BigInt    @default(0) @map("shares_count")
   searchAppearancesCount BigInt    @default(0) @map("search_appearances_count")

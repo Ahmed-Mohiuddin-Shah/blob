@@ -10,6 +10,8 @@ type Props = {
   subjectType: FavoriteUiType;
   subjectId: string;
   initialFavourited?: boolean;
+  /** Public like tally (sticker favourites count). Shown on pill when set. */
+  initialLikesCount?: number;
   signedIn: boolean;
   signInHref?: string;
   /** Compact circular control (card overlay) vs pill (detail). */
@@ -21,6 +23,7 @@ export function FavouriteButton({
   subjectType,
   subjectId,
   initialFavourited = false,
+  initialLikesCount,
   signedIn,
   signInHref = "/auth/login",
   variant = "icon",
@@ -28,7 +31,9 @@ export function FavouriteButton({
 }: Props) {
   const router = useRouter();
   const [favourited, setFavourited] = useState(initialFavourited);
+  const [likesCount, setLikesCount] = useState(initialLikesCount);
   const [busy, setBusy] = useState(false);
+  const showLikes = initialLikesCount != null;
 
   async function toggle() {
     if (!signedIn) {
@@ -38,15 +43,39 @@ export function FavouriteButton({
     setBusy(true);
     const next = !favourited;
     setFavourited(next);
+    if (showLikes) {
+      setLikesCount((c) =>
+        c == null ? c : Math.max(0, c + (next ? 1 : -1)),
+      );
+    }
     try {
       const res = await fetch("/api/favourites", {
         method: next ? "PUT" : "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ subjectType, subjectId }),
       });
-      if (!res.ok) setFavourited(!next);
+      if (!res.ok) {
+        setFavourited(!next);
+        if (showLikes) {
+          setLikesCount((c) =>
+            c == null ? c : Math.max(0, c + (next ? -1 : 1)),
+          );
+        }
+      } else {
+        const json = (await res.json().catch(() => ({}))) as {
+          likesCount?: string;
+        };
+        if (json.likesCount != null) {
+          setLikesCount(Number(json.likesCount));
+        }
+      }
     } catch {
       setFavourited(!next);
+      if (showLikes) {
+        setLikesCount((c) =>
+          c == null ? c : Math.max(0, c + (next ? -1 : 1)),
+        );
+      }
     } finally {
       setBusy(false);
     }
@@ -69,6 +98,11 @@ export function FavouriteButton({
           aria-hidden
         />
         {favourited ? "Favourited" : "Favourite"}
+        {likesCount != null ? (
+          <span className="text-xs font-normal text-secondary">
+            · {likesCount} like{likesCount === 1 ? "" : "s"}
+          </span>
+        ) : null}
       </BusyButton>
     );
   }

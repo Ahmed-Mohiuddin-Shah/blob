@@ -119,10 +119,18 @@ export function PrintLayoutHost({
   }
 
   return (
-    <div className="relative min-h-[70vh] w-full overflow-hidden rounded-[1.5rem] border border-divider bg-surface">
+    // ponytail: explicit height — PrintLayout is height:100% + stage uses cqh; min-h alone collapses the page to 0
+    <div className="relative h-[70vh] w-full overflow-hidden rounded-[1.5rem] border border-divider bg-surface">
       {busy ? (
-        <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/60 text-sm font-semibold">
-          Saving sheet…
+        <div
+          className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-background/70 backdrop-blur-[2px]"
+          role="status"
+          aria-live="polite"
+          aria-busy
+        >
+          <div className="h-40 w-28 animate-pulse rounded-[1.5rem] bg-badge sm:h-52 sm:w-36" />
+          <p className="text-sm font-semibold">Exporting sheet…</p>
+          <p className="text-xs text-secondary">Building printable PNG + PDF</p>
         </div>
       ) : null}
       <PrintLayout
