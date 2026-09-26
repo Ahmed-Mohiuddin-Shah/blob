@@ -20,9 +20,11 @@ import { getSession } from "@/lib/auth";
 import { MODERATION_STATUS } from "@/lib/moderation";
 import { prisma } from "@/lib/prisma";
 import {
-  MEDIA_KIND,
   PROCESSING_STATUS,
   VISIBILITY,
+  stickerPreviewUrl,
+  stickerTypeFromKinds,
+  videoHasAudio,
 } from "@/lib/stickers";
 
 const CATEGORY_ICONS: Record<string, { icon: LucideIcon; className: string }> = {
@@ -36,12 +38,6 @@ const CATEGORY_ICONS: Record<string, { icon: LucideIcon; className: string }> = 
   internet: { icon: Globe, className: "bg-accent-pink" },
   miscellaneous: { icon: Dices, className: "bg-accent-orange" },
 };
-
-function typeFromMedia(kinds: string[]): string {
-  if (kinds.includes(MEDIA_KIND.video)) return "VIDEO";
-  if (kinds.includes(MEDIA_KIND.gif)) return "GIF";
-  return "IMAGE";
-}
 
 export default async function HomePage() {
   const reqHeaders = await headers();
@@ -62,7 +58,7 @@ export default async function HomePage() {
       take: 6,
       include: {
         createdBy: { select: { displayName: true, username: true } },
-        media: { select: { kind: true } },
+        media: { select: { kind: true, status: true, hasAudio: true } },
       },
     }),
   ]);
@@ -99,9 +95,10 @@ export default async function HomePage() {
           title: s.title,
           author: s.authorName || s.createdBy.displayName || s.createdBy.username,
           sourceUrl: s.sourceUrl,
-          type: typeFromMedia(s.media.map((m) => m.kind)),
+          type: stickerTypeFromKinds(s.media.map((m) => m.kind)),
           href: `/stickers/${s.slug}`,
-          thumbUrl: `/api/stickers/${s.id}/media/thumbnail`,
+          thumbUrl: stickerPreviewUrl(s.id, s.media),
+          hasAudio: videoHasAudio(s.media),
         }))}
       />
       <PrintsCta />

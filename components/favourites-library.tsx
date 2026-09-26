@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Search } from "lucide-react";
 import { FAVORITE_SUBJECT, type FavoriteUiType } from "@/lib/favorites";
-import { MEDIA_KIND, mediaTypeLabel } from "@/lib/stickers";
 import { FavouriteButton } from "./favourite-button";
 import { StickerMedia } from "./sticker-media";
 
@@ -19,6 +18,7 @@ type FavItem = {
   type: string;
   author: string;
   stickerCount?: number;
+  hasAudio?: boolean | null;
 };
 
 function countLabel(subjectType: FavoriteUiType, n: number) {
@@ -144,7 +144,6 @@ export function FavouritesLibrary({ initialQ }: { initialQ: string }) {
                     src={item.thumbUrl}
                     seed={item.title}
                     alt={item.title}
-                    video={item.type === mediaTypeLabel(MEDIA_KIND.video)}
                   />
                 ) : (
                   <span className="flex h-full items-center justify-center text-[10px] font-bold uppercase text-inactive">

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Blender } from "lucide-react";
+import { Blender, Volume2, VolumeX } from "lucide-react";
 import { FAVORITE_SUBJECT } from "@/lib/favorites";
 import { COLLECTION_ITEM } from "@/lib/collections";
 import { AttributionCredit } from "./attribution-credit";
@@ -16,6 +16,8 @@ export type StickerCardProps = {
   href: string;
   thumbUrl?: string | null;
   status?: string | null;
+  /** VIDEO only: whether downloadable mp4 has muxed audio. */
+  hasAudio?: boolean | null;
   /** When set, show Remix icon button (member+). */
   remixHref?: string | null;
   /** Sticker id for favourite / collection actions. */
@@ -38,6 +40,7 @@ export function StickerCard({
   href,
   thumbUrl,
   status,
+  hasAudio = null,
   remixHref,
   stickerId,
   favourited = false,
@@ -49,6 +52,8 @@ export function StickerCard({
   canRemoveFromCollection = false,
 }: StickerCardProps) {
   const actions = showActions && stickerId;
+  const showSound = type === "VIDEO" && hasAudio !== null && hasAudio !== undefined;
+  const SoundIcon = hasAudio ? Volume2 : VolumeX;
 
   return (
     <div className="group">
@@ -58,12 +63,22 @@ export function StickerCard({
             src={thumbUrl ?? null}
             seed={title}
             alt={title}
-            video={type === "VIDEO"}
           />
         </Link>
 
-        <div className="pointer-events-none absolute right-3 top-3 rounded-full bg-badge px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-foreground">
-          {type}
+        <div className="pointer-events-none absolute right-3 top-3 flex items-center gap-1.5">
+          {showSound ? (
+            <span
+              className="flex h-7 w-7 items-center justify-center rounded-full bg-badge text-foreground"
+              title={hasAudio ? "Sound" : "No sound"}
+              aria-label={hasAudio ? "Sound" : "No sound"}
+            >
+              <SoundIcon className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
+            </span>
+          ) : null}
+          <div className="rounded-full bg-badge px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-foreground">
+            {type}
+          </div>
         </div>
 
         {status ? (

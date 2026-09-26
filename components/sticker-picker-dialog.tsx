@@ -219,7 +219,6 @@ export function StickerPickerDialog({
                       src={s.thumbUrl}
                       seed={s.title}
                       alt=""
-                      video={s.type === "VIDEO"}
                       className="bg-badge"
                     />
                     <span className="absolute inset-x-0 bottom-0 truncate bg-black/50 px-2 py-1 text-[10px] text-white">

@@ -454,6 +454,7 @@ Composition save: client → API → `composition_revisions` + enqueue render. W
 - Audio: optional; **preserve when present**
 - Square output; standardized codec/container (**mp4**)
 - Always generate still previews (`thumbnail` / `chat` / `image` as applicable) for cards
+- Also emit a **silent GIF** lightweight derivative for video sources; **site card + detail preview uses that GIF** (faster load). Downloadable / API `video` (mp4) remains available; sound affordance on site reflects `media_assets.has_audio` on the video row (`Volume2` / `VolumeX`)
 - Client `prepareSourceMedia` compresses before upload; worker `encodeComposition` re-enforces budgets
 
 

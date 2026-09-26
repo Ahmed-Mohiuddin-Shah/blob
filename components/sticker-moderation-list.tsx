@@ -130,7 +130,6 @@ export function StickerModerationList({
                   src={item.prevThumbUrl}
                   seed={`${item.title}-prev`}
                   alt={`${item.title} previous`}
-                  video={false}
                 />
               </a>
             ) : null}
@@ -143,7 +142,6 @@ export function StickerModerationList({
                 src={item.thumbUrl}
                 seed={item.title}
                 alt={item.title}
-                video={item.type === "VIDEO"}
               />
             </a>
           </div>

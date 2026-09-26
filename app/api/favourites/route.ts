@@ -12,7 +12,9 @@ import { prisma } from "@/lib/prisma";
 import {
   CARD_MEDIA_KINDS,
   MEDIA_ASSET_STATUS,
-  MEDIA_KIND,
+  stickerPreviewUrl,
+  stickerTypeFromKinds,
+  videoHasAudio,
 } from "@/lib/stickers";
 
 const PAGE = 24;
@@ -115,7 +117,7 @@ export async function GET(request: Request) {
                 kind: { in: [...CARD_MEDIA_KINDS] },
                 status: MEDIA_ASSET_STATUS.ready,
               },
-              select: { kind: true },
+              select: { kind: true, hasAudio: true },
             },
           },
         })
@@ -154,12 +156,6 @@ export async function GET(request: Request) {
   const sheetMap = new Map(sheets.map((s) => [s.id.toString(), s]));
   const packMap = new Map(packs.map((p) => [p.id.toString(), p]));
 
-  function mediaLabel(kinds: string[]): string {
-    if (kinds.includes(MEDIA_KIND.video)) return "VIDEO";
-    if (kinds.includes(MEDIA_KIND.gif)) return "GIF";
-    return "IMAGE";
-  }
-
   const items = page
     .map((f) => {
       if (f.subjectType === FAVORITE_SUBJECT.sticker) {
@@ -171,8 +167,9 @@ export async function GET(request: Request) {
           subjectId: f.subjectId.toString(),
           title: s.title,
           href: `/stickers/${s.slug}`,
-          thumbUrl: `/api/stickers/${s.id}/media/${MEDIA_KIND.thumbnail}`,
-          type: mediaLabel(s.media.map((m) => m.kind)),
+          thumbUrl: stickerPreviewUrl(s.id, s.media),
+          type: stickerTypeFromKinds(s.media.map((m) => m.kind)),
+          hasAudio: videoHasAudio(s.media),
           author: s.authorName || s.createdBy.displayName || s.createdBy.username,
           createdAt: f.createdAt.toISOString(),
         };

@@ -27,9 +27,11 @@ import { FAVORITE_SUBJECT } from "@/lib/favorites";
 import {
   CARD_MEDIA_KINDS,
   MEDIA_ASSET_STATUS,
-  MEDIA_KIND,
   PROCESSING_STATUS,
   VISIBILITY,
+  stickerPreviewUrl,
+  stickerTypeFromKinds,
+  videoHasAudio,
 } from "@/lib/stickers";
 
 const PAGE = 24;
@@ -92,7 +94,7 @@ export async function GET(request: Request) {
       category: { select: { slug: true, name: true } },
       media: {
         where: { kind: { in: [...CARD_MEDIA_KINDS] }, status: MEDIA_ASSET_STATUS.ready },
-        select: { kind: true },
+        select: { kind: true, hasAudio: true },
       },
     },
   });
@@ -134,21 +136,16 @@ export async function GET(request: Request) {
       username: s.createdBy.username,
       category: s.category?.name ?? null,
       categorySlug: s.category?.slug ?? null,
-      type: mediaLabel(s.media.map((m) => m.kind)),
+      type: stickerTypeFromKinds(s.media.map((m) => m.kind)),
       href: `/stickers/${s.slug}`,
-      thumbUrl: `/api/stickers/${s.id}/media/thumbnail`,
+      thumbUrl: stickerPreviewUrl(s.id, s.media),
+      hasAudio: videoHasAudio(s.media),
       remixHref: `/stickers/${s.slug}/remix`,
       favourited: favouritedIds.has(s.id.toString()),
       inCollection: inCollectionIds.has(s.id.toString()),
     })),
     nextCursor,
   });
-}
-
-function mediaLabel(kinds: string[]): string {
-  if (kinds.includes(MEDIA_KIND.video)) return "VIDEO";
-  if (kinds.includes(MEDIA_KIND.gif)) return "GIF";
-  return "IMAGE";
 }
 
 /**

@@ -5,7 +5,9 @@ import { sessionUser } from "@/lib/session-user";
 import {
   CARD_MEDIA_KINDS,
   MEDIA_ASSET_STATUS,
-  MEDIA_KIND,
+  stickerPreviewUrl,
+  stickerTypeFromKinds,
+  videoHasAudio,
 } from "@/lib/stickers";
 
 const PAGE = 24;
@@ -89,17 +91,11 @@ export async function GET(request: Request, ctx: Ctx) {
           kind: { in: [...CARD_MEDIA_KINDS] },
           status: MEDIA_ASSET_STATUS.ready,
         },
-        select: { kind: true },
+        select: { kind: true, hasAudio: true },
       },
     },
   });
   const map = new Map(stickers.map((s) => [s.id.toString(), s]));
-
-  function mediaLabel(kinds: string[]): string {
-    if (kinds.includes(MEDIA_KIND.video)) return "VIDEO";
-    if (kinds.includes(MEDIA_KIND.gif)) return "GIF";
-    return "IMAGE";
-  }
 
   const items = pageIds
     .map((id) => map.get(id.toString()))
@@ -109,9 +105,10 @@ export async function GET(request: Request, ctx: Ctx) {
       title: s!.title,
       slug: s!.slug,
       author: s!.authorName || s!.createdBy.displayName || s!.createdBy.username,
-      type: mediaLabel(s!.media.map((m) => m.kind)),
+      type: stickerTypeFromKinds(s!.media.map((m) => m.kind)),
       href: `/stickers/${s!.slug}`,
-      thumbUrl: `/api/stickers/${s!.id}/media/thumbnail`,
+      thumbUrl: stickerPreviewUrl(s!.id, s!.media),
+      hasAudio: videoHasAudio(s!.media),
     }));
 
   return NextResponse.json({

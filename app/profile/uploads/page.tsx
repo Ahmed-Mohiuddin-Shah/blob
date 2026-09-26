@@ -1,13 +1,12 @@
 import { StickerGrid } from "@/components/sticker-grid";
 import { prisma } from "@/lib/prisma";
 import { requireSessionUser } from "@/lib/require-user";
-import { MEDIA_KIND, PROCESSING_STATUS } from "@/lib/stickers";
-
-function typeFromMedia(kinds: string[]): string {
-  if (kinds.includes(MEDIA_KIND.video)) return "VIDEO";
-  if (kinds.includes(MEDIA_KIND.gif)) return "GIF";
-  return "IMAGE";
-}
+import {
+  PROCESSING_STATUS,
+  stickerPreviewUrl,
+  stickerTypeFromKinds,
+  videoHasAudio,
+} from "@/lib/stickers";
 
 export default async function ProfileUploadsPage() {
   const { user } = await requireSessionUser();
@@ -18,7 +17,7 @@ export default async function ProfileUploadsPage() {
     take: 200,
     include: {
       createdBy: { select: { displayName: true, username: true } },
-      media: { select: { kind: true, status: true } },
+      media: { select: { kind: true, status: true, hasAudio: true } },
     },
   });
 
@@ -34,9 +33,10 @@ export default async function ProfileUploadsPage() {
             title: s.title,
             author: s.authorName || s.createdBy.displayName || s.createdBy.username,
             sourceUrl: s.sourceUrl,
-            type: typeFromMedia(s.media.map((m) => m.kind)),
+            type: stickerTypeFromKinds(s.media.map((m) => m.kind)),
             href: `/stickers/${s.slug}`,
-            thumbUrl: `/api/stickers/${s.id}/media/thumbnail`,
+            thumbUrl: stickerPreviewUrl(s.id, s.media),
+            hasAudio: videoHasAudio(s.media),
             remixHref: `/stickers/${s.slug}/remix`,
             status: `${s.moderationStatus}${s.processingStatus !== PROCESSING_STATUS.ready ? ` · ${s.processingStatus}` : ""}`,
           }))}

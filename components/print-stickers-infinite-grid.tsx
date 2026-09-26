@@ -12,6 +12,7 @@ type Item = {
   type: string;
   href: string;
   thumbUrl: string;
+  hasAudio?: boolean | null;
 };
 
 type Props = {
@@ -80,6 +81,7 @@ export function PrintStickersInfiniteGrid({
     thumbUrl: s.thumbUrl,
     author: s.author,
     type: s.type,
+    hasAudio: s.hasAudio ?? null,
     stickerId: s.id,
   }));
 

@@ -70,7 +70,6 @@ export default async function ProfileEditsPage() {
                       src={`/api/stickers/${s.id}/media/${MEDIA_KIND.thumbnail}`}
                       seed={s.title}
                       alt={s.title}
-                      video={type === "VIDEO"}
                     />
                   </Link>
                 </div>

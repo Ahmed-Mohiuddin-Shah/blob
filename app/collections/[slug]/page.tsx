@@ -14,7 +14,9 @@ import { prisma } from "@/lib/prisma";
 import {
   CARD_MEDIA_KINDS,
   MEDIA_ASSET_STATUS,
-  MEDIA_KIND,
+  stickerPreviewUrl,
+  stickerTypeFromKinds,
+  videoHasAudio,
 } from "@/lib/stickers";
 
 export default async function CollectionDetailPage({
@@ -68,7 +70,7 @@ export default async function CollectionDetailPage({
                 kind: { in: [...CARD_MEDIA_KINDS] },
                 status: MEDIA_ASSET_STATUS.ready,
               },
-              select: { kind: true },
+              select: { kind: true, hasAudio: true },
             },
           },
         })
@@ -140,12 +142,6 @@ export default async function CollectionDetailPage({
   });
   const canRemove = isOwner && collection.items.length > 1;
 
-  function mediaLabel(kinds: string[]): string {
-    if (kinds.includes(MEDIA_KIND.video)) return "VIDEO";
-    if (kinds.includes(MEDIA_KIND.gif)) return "GIF";
-    return "IMAGE";
-  }
-
   const stickerCards = collection.items
     .filter((i) => i.subjectType === COLLECTION_ITEM.sticker)
     .map((i) => stickerMap.get(i.subjectId.toString()))
@@ -156,9 +152,10 @@ export default async function CollectionDetailPage({
       author:
         s!.authorName || s!.createdBy.displayName || s!.createdBy.username,
       sourceUrl: s!.sourceUrl,
-      type: mediaLabel(s!.media.map((m) => m.kind)),
+      type: stickerTypeFromKinds(s!.media.map((m) => m.kind)),
       href: `/stickers/${s!.slug}`,
-      thumbUrl: `/api/stickers/${s!.id}/media/thumbnail`,
+      thumbUrl: stickerPreviewUrl(s!.id, s!.media),
+      hasAudio: videoHasAudio(s!.media),
       remixHref: `/stickers/${s!.slug}/remix`,
       favourited: favouritedStickerIds.has(s!.id.toString()),
       inCollection: inCollectionStickerIds.has(s!.id.toString()),

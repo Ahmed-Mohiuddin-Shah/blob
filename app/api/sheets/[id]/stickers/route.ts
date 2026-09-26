@@ -5,7 +5,9 @@ import { sessionUser } from "@/lib/session-user";
 import {
   CARD_MEDIA_KINDS,
   MEDIA_ASSET_STATUS,
-  MEDIA_KIND,
+  stickerPreviewUrl,
+  stickerTypeFromKinds,
+  videoHasAudio,
 } from "@/lib/stickers";
 
 const PAGE = 24;
@@ -63,7 +65,7 @@ export async function GET(request: Request, ctx: Ctx) {
               kind: { in: [...CARD_MEDIA_KINDS] },
               status: MEDIA_ASSET_STATUS.ready,
             },
-            select: { kind: true },
+            select: { kind: true, hasAudio: true },
           },
         },
       },
@@ -73,21 +75,16 @@ export async function GET(request: Request, ctx: Ctx) {
   const hasMore = rows.length > PAGE;
   const page = hasMore ? rows.slice(0, PAGE) : rows;
 
-  function mediaLabel(kinds: string[]): string {
-    if (kinds.includes(MEDIA_KIND.video)) return "VIDEO";
-    if (kinds.includes(MEDIA_KIND.gif)) return "GIF";
-    return "IMAGE";
-  }
-
   return NextResponse.json({
     items: page.map(({ sticker: s, sortOrder }) => ({
       id: s.id.toString(),
       title: s.title,
       slug: s.slug,
       author: s.authorName || s.createdBy.displayName || s.createdBy.username,
-      type: mediaLabel(s.media.map((m) => m.kind)),
+      type: stickerTypeFromKinds(s.media.map((m) => m.kind)),
       href: `/stickers/${s.slug}`,
-      thumbUrl: `/api/stickers/${s.id}/media/thumbnail`,
+      thumbUrl: stickerPreviewUrl(s.id, s.media),
+      hasAudio: videoHasAudio(s.media),
       sortOrder,
     })),
     nextCursor: hasMore

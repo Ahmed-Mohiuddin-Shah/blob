@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
-import { Blender } from "lucide-react";
+import { Blender, Volume2, VolumeX } from "lucide-react";
 import { AddToCollectionButton } from "@/components/add-to-collection-button";
 import { AttributionClaimForm } from "@/components/attribution-claim-form";
 import { AttributionCredit } from "@/components/attribution-credit";
@@ -17,20 +17,15 @@ import { FAVORITE_SUBJECT, isFavourited } from "@/lib/favorites";
 import { MODERATION_STATUS } from "@/lib/moderation";
 import { prisma } from "@/lib/prisma";
 import {
-  MEDIA_ASSET_STATUS,
-  MEDIA_KIND,
   PROCESSING_STATUS,
   VISIBILITY,
   canAccessSticker,
   canOwnerEditSticker,
   isPublicBrowseable,
+  previewMediaKind,
+  stickerTypeFromKinds,
+  videoHasAudio,
 } from "@/lib/stickers";
-
-function typeFromMedia(kinds: string[]): string {
-  if (kinds.includes(MEDIA_KIND.video)) return "VIDEO";
-  if (kinds.includes(MEDIA_KIND.gif)) return "GIF";
-  return "IMAGE";
-}
 
 export default async function StickerDetailPage({
   params,
@@ -113,17 +108,10 @@ export default async function StickerDetailPage({
     );
   }
 
-  const type = typeFromMedia(sticker.media.map((m) => m.kind));
-  const mediaKind =
-    type === "VIDEO"
-      ? MEDIA_KIND.video
-      : type === "GIF"
-        ? MEDIA_KIND.gif
-        : MEDIA_KIND.image;
-  const hasKind = sticker.media.some(
-    (m) => m.kind === mediaKind && m.status === MEDIA_ASSET_STATUS.ready,
-  );
-  const displayKind = hasKind ? mediaKind : MEDIA_KIND.thumbnail;
+  const type = stickerTypeFromKinds(sticker.media.map((m) => m.kind));
+  const displayKind = previewMediaKind(sticker.media);
+  const hasAudio = videoHasAudio(sticker.media);
+  const SoundIcon = hasAudio ? Volume2 : VolumeX;
 
   const creditLabel =
     sticker.authorName ||
@@ -144,15 +132,22 @@ export default async function StickerDetailPage({
             src={`/api/stickers/${sticker.id}/media/${displayKind}`}
             seed={sticker.title}
             alt={sticker.title}
-            video={type === "VIDEO"}
           />
         </div>
 
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-accent-pink">
-            {type}
-            {sticker.category ? ` · ${sticker.category.name}` : ""}
-          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-accent-pink">
+              {type}
+              {sticker.category ? ` · ${sticker.category.name}` : ""}
+            </p>
+            {hasAudio !== null ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-divider bg-surface px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-secondary">
+                <SoundIcon className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
+                {hasAudio ? "Sound" : "No sound"}
+              </span>
+            ) : null}
+          </div>
           <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">
             {sticker.title}
           </h1>

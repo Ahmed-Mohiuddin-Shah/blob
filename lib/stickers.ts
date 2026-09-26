@@ -186,6 +186,67 @@ export function mediaTypeLabel(kind: string | null | undefined): string {
   return "IMAGE";
 }
 
+export type StickerTypeLabel = "IMAGE" | "GIF" | "VIDEO";
+
+/** UI type from stored media kinds (video wins over gif). */
+export function stickerTypeFromKinds(
+  kinds: Iterable<string>,
+): StickerTypeLabel {
+  const set = kinds instanceof Set ? kinds : new Set(kinds);
+  if (set.has(MEDIA_KIND.video)) return "VIDEO";
+  if (set.has(MEDIA_KIND.gif)) return "GIF";
+  return "IMAGE";
+}
+
+type PreviewMediaRow = { kind: string; status?: string | null };
+
+function isReady(m: PreviewMediaRow): boolean {
+  return !m.status || m.status === MEDIA_ASSET_STATUS.ready;
+}
+
+/**
+ * Site detail preview kind: VIDEO → silent gif when ready; GIF → gif; else still.
+ * Never returns `video` (MP4 stays download/API-only).
+ */
+export function previewMediaKind(media: PreviewMediaRow[]): MediaKind {
+  const kinds = media.filter(isReady).map((m) => m.kind);
+  const type = stickerTypeFromKinds(kinds);
+  if (type === "VIDEO" && kinds.includes(MEDIA_KIND.gif)) return MEDIA_KIND.gif;
+  if (type === "GIF" && kinds.includes(MEDIA_KIND.gif)) return MEDIA_KIND.gif;
+  if (kinds.includes(MEDIA_KIND.thumbnail)) return MEDIA_KIND.thumbnail;
+  if (kinds.includes(MEDIA_KIND.image)) return MEDIA_KIND.image;
+  if (kinds.includes(MEDIA_KIND.chat)) return MEDIA_KIND.chat;
+  return MEDIA_KIND.thumbnail;
+}
+
+/** Card/list preview URL; VIDEO uses gif when ready, else still thumbnail. */
+export function stickerPreviewUrl(
+  stickerId: string | bigint,
+  media: PreviewMediaRow[],
+): string {
+  const kinds = media.filter(isReady).map((m) => m.kind);
+  const type = stickerTypeFromKinds(kinds);
+  const kind =
+    type === "VIDEO" && kinds.includes(MEDIA_KIND.gif)
+      ? MEDIA_KIND.gif
+      : kinds.includes(MEDIA_KIND.thumbnail)
+        ? MEDIA_KIND.thumbnail
+        : previewMediaKind(media);
+  return `/api/stickers/${stickerId}/media/${kind}`;
+}
+
+/** Whether the downloadable VIDEO has muxed audio; null if not a video sticker. */
+export function videoHasAudio(
+  media: { kind: string; hasAudio?: boolean | null; status?: string | null }[],
+): boolean | null {
+  if (stickerTypeFromKinds(media.map((m) => m.kind)) !== "VIDEO") return null;
+  const row = media.find(
+    (m) => m.kind === MEDIA_KIND.video && isReady(m),
+  );
+  if (!row) return null;
+  return !!row.hasAudio;
+}
+
 export function isPublicBrowseable(s: {
   visibility: string;
   moderationStatus: string;
