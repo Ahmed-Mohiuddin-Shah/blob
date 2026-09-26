@@ -17,9 +17,11 @@ import {
   MAX_GIF_BYTES,
   MAX_IMAGE_BYTES,
   MAX_VIDEO_BYTES,
+  maxDurationMsForKind,
   MEDIA_ASSET_STATUS,
   MEDIA_KIND,
   mimeToExt,
+  primaryMediaKind,
   PROCESSING_STATUS,
 } from "@/lib/stickers";
 
@@ -115,9 +117,15 @@ async function processComposition(stickerId: bigint): Promise<void> {
     return;
   }
 
+  const maxDurationMs = maxDurationMsForKind(
+    primaryMediaKind(revision.documentJson),
+  );
+  const durationOpts =
+    maxDurationMs != null ? { maxDurationMs } : undefined;
+
   let doc: CompositionDocument;
   try {
-    doc = validateDocument(revision.documentJson);
+    doc = validateDocument(revision.documentJson, durationOpts);
   } catch (err) {
     await fail(
       stickerId,
@@ -167,7 +175,12 @@ async function processComposition(stickerId: bigint): Promise<void> {
     const bytesResolver: AssetBytesResolver = async (assetId) =>
       bytesCache.get(assetId) ?? null;
 
-    const encoded = await encodeComposition(doc, frameResolver, bytesResolver);
+    const encoded = await encodeComposition(
+      doc,
+      frameResolver,
+      bytesResolver,
+      durationOpts,
+    );
 
     const mimes = encoded.meta.mimeTypes;
     assertDerivativeBudget("image", encoded.exports.full, MAX_IMAGE_BYTES);

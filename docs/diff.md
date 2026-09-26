@@ -26,7 +26,7 @@ Quick-edit only — image ⊃ gif ⊃ video. Complicated edits go elsewhere.
 | Field | Notes |
 |-------|--------|
 | `version` | `2` (v1 accepted and migrated) |
-| `duration_ms` | `0` static; ≤ **10000** for gif/video after trim |
+| `duration_ms` | `0` static; ≤ **10000** gif / ≤ **20000** video after trim (host `maxDurationMs`) |
 | `fps` | Encode/scrub hint (default 15 GIF / 24 video) |
 | `audio` | `null` or `{ "mute_source": boolean }` — video only |
 | `objects[].media.kind` | `"image" \| "gif" \| "video"` |
@@ -91,7 +91,7 @@ const result = await encodeComposition(doc, frameResolver, bytesResolver);
 | `chat` / `thumbnail` / `full` | Always PNG |
 | `mask` | Image cutout mask / outline present |
 | `gif` | `duration_ms > 0` and media `kind === "gif"` |
-| `video` | video kind; ≤10s square mp4; respects `mute_source` |
+| `video` | video kind; ≤20s square mp4; respects `mute_source` |
 
 Do **not** mux a replacement soundtrack in this pass.
 
@@ -113,7 +113,7 @@ No soundtrack asset role in this simplified pass.
 ## 5. Caps
 
 - Canvas: **1024×1024**
-- Animated duration: **≤ 10 000 ms** after trim
+- Animated duration: **≤ 10 000 ms** gif / **≤ 20 000 ms** video after trim
 - Still derivatives: chat / thumbnail / full
 - Remix: `remixDeepCopy` (document + same asset ids)
 

@@ -232,7 +232,7 @@ Sticker
         ├── thumbnail  (256×256)
         ├── mask       (cutout alpha when applicable)
         ├── gif        (when animation warrants)
-        └── video      (≤10s square mp4 when applicable)
+        └── video      (≤20s square mp4 when applicable)
 ```
 
 Schema kinds via `media_assets.kind`: `image` | `chat` | `thumbnail` | `mask` | `gif` | `video`. Immutable originals live in **`assets`** (not duplicated as SoT in `media_assets`). Which derived kinds are produced depends on the composition (static → image+chat+thumbnail; **gif source → gif**; **video source → video + gif** lightweight silent derivative + still previews).
@@ -449,7 +449,7 @@ Composition save: client → API → `composition_revisions` + enqueue render. W
 
 ### 9.1 Video
 
-- Max duration: **10 seconds**
+- Max duration: **20 seconds** (host `maxDurationMs`; GIF stays at library default 10 s)
 - Max prepared / derivative size: **12 MiB** (mp4)
 - Audio: optional; **preserve when present**
 - Square output; standardized codec/container (**mp4**)
@@ -804,7 +804,7 @@ GET    /api/packs/{id}/stickers
 - [x] Remix snapshot (edit deep-copy → bake own original + `remixed_from_sticker_id` + `composition_parents`)
 - [x] Smart cutout (brush + polygon; no ML auto-BG)
 - [x] Consume **`blob-editor`** npm (`react` client + `encode` worker)
-- [x] Video ≤10s; audio preserved when present
+- [x] Video ≤20s; audio preserved when present
 - [x] Async render/processing + admin moderation (approve / request-edit / purge-reject)
 - [x] Open-queue still diffs; discard non-current-revision derivatives on approve
 - [x] Shared `moderation_events` history (paginated admin UI; no retained preview images)

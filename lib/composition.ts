@@ -10,9 +10,11 @@ import { ensurePrivatePrism } from "@/lib/private-prism";
 import {
   detectUpload,
   maxBytesForKind,
+  maxDurationMsForKind,
   MEDIA_ASSET_STATUS,
   MEDIA_KIND,
   normalizeTagName,
+  primaryMediaKind,
   slugify,
   tagSlug,
   VISIBILITIES,
@@ -214,13 +216,17 @@ async function preservePreviousThumbnail(
 }
 
 export function parseDocumentJson(raw: unknown): CompositionDocument {
-  return validateDocument(raw);
+  const maxDurationMs = maxDurationMsForKind(primaryMediaKind(raw));
+  return validateDocument(
+    raw,
+    maxDurationMs != null ? { maxDurationMs } : undefined,
+  );
 }
 
 /** First media object's asset_id, for editor sourceAsset preload. */
 export function primaryAssetIdFromDocument(doc: unknown): string | null {
   try {
-    const validated = validateDocument(doc);
+    const validated = parseDocumentJson(doc);
     const media = validated.objects.find((o) => o.type === "media");
     if (media && media.type === "media" && /^\d+$/.test(media.asset_id)) {
       return media.asset_id;

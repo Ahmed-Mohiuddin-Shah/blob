@@ -3,6 +3,12 @@
 import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import type { CompositionDocument, ExportPayload } from "blob-editor/core";
+import {
+  isVideoSource,
+  MAX_VIDEO_DURATION_MS,
+  maxDurationMsForKind,
+  primaryMediaKind,
+} from "@/lib/stickers";
 import "blob-editor/react/blob-editor.css";
 
 const BlobEditor = dynamic(
@@ -115,6 +121,12 @@ export function BlobEditorHost({
   const [busy, setBusy] = useState(false);
   const { resolved, loading, error } = useResolvedSourceAsset(sourceAsset);
 
+  const maxDurationMs =
+    maxDurationMsForKind(primaryMediaKind(document)) ??
+    (isVideoSource(resolved) || isVideoSource(sourceAsset)
+      ? MAX_VIDEO_DURATION_MS
+      : undefined);
+
   if (typeof sourceAsset === "string" && loading) {
     return <EditorSkeleton label="Loading image…" />;
   }
@@ -145,6 +157,7 @@ export function BlobEditorHost({
         onSecondary="#fff"
         blocky={false}
         themeMode={themeMode}
+        maxDurationMs={maxDurationMs}
         onCancel={onCancel}
         onExport={(payload) => {
           setBusy(true);

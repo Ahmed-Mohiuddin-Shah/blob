@@ -8,7 +8,12 @@ import {
   type ExportPayload,
 } from "blob-editor/core";
 import { prepareSourceMedia } from "blob-editor/prepare";
-import { VISIBILITIES, VISIBILITY } from "@/lib/stickers";
+import {
+  isVideoSource,
+  MAX_VIDEO_DURATION_MS,
+  VISIBILITIES,
+  VISIBILITY,
+} from "@/lib/stickers";
 import { BlobEditorHost } from "./blob-editor-host";
 import { BusyButton } from "./busy-button";
 
@@ -89,7 +94,12 @@ export function StickerCreateForm({
     setPreparing(true);
     setError(null);
     try {
-      const prepared = await prepareSourceMedia(file);
+      const prepared = await prepareSourceMedia(
+        file,
+        isVideoSource(file)
+          ? { maxDurationMs: MAX_VIDEO_DURATION_MS }
+          : undefined,
+      );
       setSourceFile(prepared.file);
       setSourceMeta({
         width: prepared.width,

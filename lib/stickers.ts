@@ -59,6 +59,41 @@ export const MAX_GIF_BYTES = 3 * 1024 * 1024;
 export const MAX_VIDEO_BYTES = 12 * 1024 * 1024;
 /** Absolute ceiling for any single upload (video is largest). */
 export const MAX_UPLOAD_BYTES = MAX_VIDEO_BYTES;
+/** Host override for video; GIF/image keep blob-editor default (10s). */
+export const MAX_VIDEO_DURATION_MS = 20_000;
+
+export function maxDurationMsForKind(
+  kind: string | null | undefined,
+): number | undefined {
+  return kind === "video" ? MAX_VIDEO_DURATION_MS : undefined;
+}
+
+/** Peek primary media kind from unvalidated composition JSON. */
+export function primaryMediaKind(raw: unknown): DetectedKind | null {
+  if (!raw || typeof raw !== "object") return null;
+  const objects = (raw as { objects?: unknown }).objects;
+  if (!Array.isArray(objects)) return null;
+  for (const o of objects) {
+    if (!o || typeof o !== "object") continue;
+    const obj = o as { type?: string; kind?: string };
+    if (obj.type !== "media") continue;
+    if (obj.kind === "image" || obj.kind === "gif" || obj.kind === "video") {
+      return obj.kind;
+    }
+  }
+  return null;
+}
+
+/** True when File/Blob looks like video (prepare / editor override). */
+export function isVideoSource(source: File | Blob | string | undefined): boolean {
+  if (!source || typeof source === "string") return false;
+  const type = (source.type || "").toLowerCase();
+  if (type.startsWith("video/")) return true;
+  if (source instanceof File) {
+    return /\.(mp4|webm|mov|m4v)$/i.test(source.name);
+  }
+  return false;
+}
 
 const STATIC_MIMES = new Set([
   "image/png",
