@@ -1,12 +1,13 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   CANVAS_SIZE,
   createFromSource,
   type ExportPayload,
 } from "blob-editor/core";
+import { prepareSourceMedia } from "blob-editor/prepare";
 import { VISIBILITIES, VISIBILITY } from "@/lib/stickers";
 import { BlobEditorHost } from "./blob-editor-host";
 import { BusyButton } from "./busy-button";
@@ -55,17 +56,24 @@ export function StickerCreateForm({
 }) {
   const router = useRouter();
   const isRemix = !!initialDocument;
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState<Step>(isRemix ? "edit" : "pick");
   const [meta, setMeta] = useState<Meta>({
     ...emptyMeta,
     title: defaultTitle ?? "",
   });
   const [sourceFile, setSourceFile] = useState<File | null>(null);
+  const [sourceMeta, setSourceMeta] = useState<{
+    width: number;
+    height: number;
+    durationMs?: number;
+  } | null>(null);
   const [pendingExport, setPendingExport] = useState<ExportPayload | null>(
     null,
   );
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [preparing, setPreparing] = useState(false);
 
   function validateMeta(): string | null {
     if (!meta.title.trim()) return "Title required";
@@ -75,6 +83,26 @@ export function StickerCreateForm({
       if (!meta.sourceUrl.trim()) return "Source URL required";
     }
     return null;
+  }
+
+  async function onPickFile(file: File) {
+    setPreparing(true);
+    setError(null);
+    try {
+      const prepared = await prepareSourceMedia(file);
+      setSourceFile(prepared.file);
+      setSourceMeta({
+        width: prepared.width,
+        height: prepared.height,
+        durationMs: prepared.durationMs,
+      });
+      setStep("edit");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not prepare media");
+    } finally {
+      setPreparing(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
   }
 
   /** Editor Export → hold payload, go to metadata (create) or submit if remix already has title. */
@@ -104,6 +132,13 @@ export function StickerCreateForm({
       if (sourceFile) {
         const assetForm = new FormData();
         assetForm.set("file", sourceFile);
+        if (sourceMeta) {
+          assetForm.set("width", String(sourceMeta.width));
+          assetForm.set("height", String(sourceMeta.height));
+          if (sourceMeta.durationMs != null) {
+            assetForm.set("durationMs", String(sourceMeta.durationMs));
+          }
+        }
         const assetRes = await fetch("/api/assets", {
           method: "POST",
           body: assetForm,
@@ -214,25 +249,30 @@ export function StickerCreateForm({
             {error}
           </p>
         ) : null}
-        <label className="block">
-          <span className="text-secondary">Media file</span>
-          <input
-            type="file"
-            accept="image/png,image/jpeg,image/webp,image/gif,video/mp4"
-            className="mt-1 block w-full text-sm file:mr-3 file:rounded-full file:border-0 file:bg-accent-gradient file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (!file) return;
-              setSourceFile(file);
-              setError(null);
-              setStep("edit");
-            }}
-          />
-          <span className="mt-1 block text-xs text-secondary">
-            PNG, JPEG, WebP, GIF, or MP4 (max 20 MiB). Stays on your device until
-            you submit.
-          </span>
-        </label>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/gif,video/mp4"
+          className="sr-only"
+          disabled={preparing}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            void onPickFile(file);
+          }}
+        />
+        <BusyButton
+          type="button"
+          busy={preparing}
+          onClick={() => fileInputRef.current?.click()}
+          className="w-full rounded-full bg-accent-gradient px-6 py-3 text-sm font-semibold text-white"
+        >
+          {preparing ? "Preparing…" : "Choose media"}
+        </BusyButton>
+        <p className="text-xs text-secondary">
+          PNG, JPEG, WebP, GIF, or MP4. We compress automatically before
+          editing — stays on your device until you submit.
+        </p>
       </div>
     );
   }
@@ -281,6 +321,7 @@ export function StickerCreateForm({
               return;
             }
             setSourceFile(null);
+            setSourceMeta(null);
             setPendingExport(null);
             setStep("pick");
           }}

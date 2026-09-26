@@ -450,18 +450,25 @@ Composition save: client → API → `composition_revisions` + enqueue render. W
 ### 9.1 Video
 
 - Max duration: **10 seconds**
+- Max prepared / derivative size: **12 MiB** (mp4)
 - Audio: optional; **preserve when present**
 - Square output; standardized codec/container (**mp4**)
 - Always generate still previews (`thumbnail` / `chat` / `image` as applicable) for cards
-- Enforce file size and resolution caps (configure in app; document in env)
+- Client `prepareSourceMedia` compresses before upload; worker `encodeComposition` re-enforces budgets
 
 
 
 ### 9.2 GIF
 
-- Enforce max dimensions, frame count, file size, processing timeout, output size
+- Max prepared / derivative size: **3 MiB**; duration ≤ **10 s**
 - Prefer lightweight preview for browse grids (`thumbnail` / `chat`); retain downloadable GIF when that is the deliverable
 - Do not load dozens of full-size animated GIFs on a browse page without thumbnails
+
+
+
+### 9.2b Still images
+
+- Max prepared / derivative size: **2 MiB** (full / chat / thumbnail encodings)
 
 
 
@@ -471,6 +478,7 @@ Composition save: client → API → `composition_revisions` + enqueue render. W
 - Enforce size / resolution / duration / frame / timeout / worker memory / queue concurrency limits
 - Strip unnecessary EXIF/metadata from **generated public** assets
 - Process in isolated queue workers, not the Next.js Node process that serves HTTP
+- Upload path: browser `prepareSourceMedia` → capped original in `assets` → worker encode under the same budgets
 
 
 

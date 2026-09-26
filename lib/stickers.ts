@@ -53,7 +53,12 @@ export const MEDIA_ASSET_STATUS = {
 export type MediaAssetStatus =
   (typeof MEDIA_ASSET_STATUS)[keyof typeof MEDIA_ASSET_STATUS];
 
-export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
+/** Derivative / prepared-original budgets (match blob-editor). */
+export const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
+export const MAX_GIF_BYTES = 3 * 1024 * 1024;
+export const MAX_VIDEO_BYTES = 12 * 1024 * 1024;
+/** Absolute ceiling for any single upload (video is largest). */
+export const MAX_UPLOAD_BYTES = MAX_VIDEO_BYTES;
 
 const STATIC_MIMES = new Set([
   "image/png",
@@ -65,6 +70,21 @@ const GIF_MIME = "image/gif";
 const VIDEO_MIME = "video/mp4";
 
 export type DetectedKind = "image" | "gif" | "video";
+
+export function maxBytesForKind(kind: DetectedKind): number {
+  if (kind === "gif") return MAX_GIF_BYTES;
+  if (kind === "video") return MAX_VIDEO_BYTES;
+  return MAX_IMAGE_BYTES;
+}
+
+export function mimeToExt(mime: string): string {
+  const m = mime.toLowerCase().split(";")[0]!.trim();
+  if (m === "image/jpeg" || m === "image/jpg") return "jpg";
+  if (m === "image/webp") return "webp";
+  if (m === "image/gif") return "gif";
+  if (m === "video/mp4") return "mp4";
+  return "png";
+}
 
 export function slugify(value: string, max = 220): string {
   const base = value

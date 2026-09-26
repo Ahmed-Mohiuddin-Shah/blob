@@ -9,7 +9,7 @@ import { prisma } from "@/lib/prisma";
 import { ensurePrivatePrism } from "@/lib/private-prism";
 import {
   detectUpload,
-  MAX_UPLOAD_BYTES,
+  maxBytesForKind,
   MEDIA_ASSET_STATUS,
   MEDIA_KIND,
   normalizeTagName,
@@ -83,12 +83,17 @@ export async function createAssetFromBytes(opts: {
   height?: number | null;
   durationMs?: number | null;
 }): Promise<{ id: string; mime: string; kind: DetectedKind }> {
-  if (opts.bytes.length === 0 || opts.bytes.length > MAX_UPLOAD_BYTES) {
-    throw new Error("File empty or too large (max 20 MiB)");
+  if (opts.bytes.length === 0) {
+    throw new Error("File empty");
   }
   const detected = detectUpload(opts.bytes, opts.declaredMime);
   if (!detected) {
     throw new Error("Unsupported file type (png, jpeg, webp, gif, mp4)");
+  }
+  const max = maxBytesForKind(detected.kind);
+  if (opts.bytes.length > max) {
+    const mb = Math.round(max / (1024 * 1024));
+    throw new Error(`File too large (max ${mb} MiB for ${detected.kind})`);
   }
   const prismId = await ensurePrivatePrism(
     opts.userId,

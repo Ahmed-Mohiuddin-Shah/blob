@@ -6,7 +6,6 @@ import {
   type AssetBytesResolver,
 } from "blob-editor/encode";
 import { validateDocument, type CompositionDocument } from "blob-editor/core";
-import { encodeGifFromComposition } from "@/lib/encode-gif";
 import { getGlass } from "@/lib/glass";
 import { ensureNodeCanvas } from "@/lib/node-canvas";
 import { prisma } from "@/lib/prisma";
@@ -15,8 +14,12 @@ import {
   PROCESSING_SUBJECT,
 } from "@/lib/processing-log";
 import {
+  MAX_GIF_BYTES,
+  MAX_IMAGE_BYTES,
+  MAX_VIDEO_BYTES,
   MEDIA_ASSET_STATUS,
   MEDIA_KIND,
+  mimeToExt,
   PROCESSING_STATUS,
 } from "@/lib/stickers";
 
@@ -30,6 +33,18 @@ const STILL_KINDS = [
   MEDIA_KIND.thumbnail,
   MEDIA_KIND.image,
 ] as const;
+
+function assertDerivativeBudget(
+  label: string,
+  bytes: Uint8Array,
+  max: number,
+): void {
+  if (bytes.byteLength > max) {
+    throw new Error(
+      `${label} derivative ${bytes.byteLength} bytes exceeds budget ${max}`,
+    );
+  }
+}
 
 /**
  * ponytail: in-process encode instead of BullMQ.
@@ -154,9 +169,15 @@ async function processComposition(stickerId: bigint): Promise<void> {
 
     const encoded = await encodeComposition(doc, frameResolver, bytesResolver);
 
-    if (encoded.exports.video && !encoded.exports.gif) {
-      encoded.exports.gif = await encodeGifFromComposition(doc, frameResolver);
-      encoded.meta.mimeTypes.gif = "image/gif";
+    const mimes = encoded.meta.mimeTypes;
+    assertDerivativeBudget("image", encoded.exports.full, MAX_IMAGE_BYTES);
+    assertDerivativeBudget("chat", encoded.exports.chat, MAX_IMAGE_BYTES);
+    assertDerivativeBudget("thumbnail", encoded.exports.thumbnail, MAX_IMAGE_BYTES);
+    if (encoded.exports.gif) {
+      assertDerivativeBudget("gif", encoded.exports.gif, MAX_GIF_BYTES);
+    }
+    if (encoded.exports.video) {
+      assertDerivativeBudget("video", encoded.exports.video, MAX_VIDEO_BYTES);
     }
 
     const prismId =
@@ -190,20 +211,27 @@ async function processComposition(stickerId: bigint): Promise<void> {
       w?: number;
       h?: number;
     }[] = [
-      { kind: MEDIA_KIND.chat, bytes: encoded.exports.chat, mime: "image/png", ext: "png", w: 128, h: 128 },
+      {
+        kind: MEDIA_KIND.chat,
+        bytes: encoded.exports.chat,
+        mime: mimes.chat,
+        ext: mimeToExt(mimes.chat),
+        w: 128,
+        h: 128,
+      },
       {
         kind: MEDIA_KIND.thumbnail,
         bytes: encoded.exports.thumbnail,
-        mime: "image/png",
-        ext: "png",
+        mime: mimes.thumbnail,
+        ext: mimeToExt(mimes.thumbnail),
         w: 256,
         h: 256,
       },
       {
         kind: MEDIA_KIND.image,
         bytes: encoded.exports.full,
-        mime: "image/png",
-        ext: "png",
+        mime: mimes.full,
+        ext: mimeToExt(mimes.full),
         w: 1024,
         h: 1024,
       },
@@ -212,8 +240,8 @@ async function processComposition(stickerId: bigint): Promise<void> {
       kinds.push({
         kind: MEDIA_KIND.mask,
         bytes: encoded.exports.mask,
-        mime: "image/png",
-        ext: "png",
+        mime: mimes.mask ?? "image/png",
+        ext: mimeToExt(mimes.mask ?? "image/png"),
         w: 1024,
         h: 1024,
       });
@@ -222,7 +250,7 @@ async function processComposition(stickerId: bigint): Promise<void> {
       kinds.push({
         kind: MEDIA_KIND.gif,
         bytes: encoded.exports.gif,
-        mime: "image/gif",
+        mime: mimes.gif ?? "image/gif",
         ext: "gif",
       });
     }
@@ -230,7 +258,7 @@ async function processComposition(stickerId: bigint): Promise<void> {
       kinds.push({
         kind: MEDIA_KIND.video,
         bytes: encoded.exports.video,
-        mime: "video/mp4",
+        mime: mimes.video ?? "video/mp4",
         ext: "mp4",
       });
     }

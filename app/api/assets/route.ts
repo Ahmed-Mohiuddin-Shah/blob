@@ -39,7 +39,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "file required" }, { status: 400 });
   }
   if (file.size > MAX_UPLOAD_BYTES) {
-    return NextResponse.json({ error: "File too large (max 20 MiB)" }, { status: 400 });
+    return NextResponse.json(
+      { error: "File too large (max 12 MiB after prepare)" },
+      { status: 400 },
+    );
   }
 
   const widthRaw = String(form.get("width") ?? "").trim();
@@ -66,9 +69,10 @@ export async function POST(request: Request) {
     });
   } catch (err) {
     console.error("Asset upload failed:", err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Upload failed" },
-      { status: 502 },
-    );
+    const message = err instanceof Error ? err.message : "Upload failed";
+    const status = message.includes("too large") || message.includes("Unsupported")
+      ? 400
+      : 502;
+    return NextResponse.json({ error: message }, { status });
   }
 }

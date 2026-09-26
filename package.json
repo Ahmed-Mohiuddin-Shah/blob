@@ -22,7 +22,7 @@
     "@napi-rs/canvas": "^1.0.9",
     "@prisma/client": "^6.16.2",
     "@zitadel/next-auth": "^1.1.6",
-    "blob-editor": "^0.2.0",
+    "blob-editor": "^0.2.1",
     "blobatar": "^2.7.0",
     "glass-ts": "^0.1.0",
     "lucide-react": "^1.47.0",
