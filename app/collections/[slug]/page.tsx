@@ -7,7 +7,7 @@ import { CollectionPrintActions } from "@/components/collection-print-actions";
 import { RemoveFromCollectionButton } from "@/components/remove-from-collection-button";
 import { StickerGrid } from "@/components/sticker-grid";
 import { getSession, signInUrl } from "@/lib/auth";
-import { COLLECTION_ITEM } from "@/lib/collections";
+import { COLLECTION_ITEM, subjectsInUserCollections } from "@/lib/collections";
 import { FAVORITE_SUBJECT } from "@/lib/favorites";
 import { PRINT_STATUS } from "@/lib/prints";
 import { prisma } from "@/lib/prisma";
@@ -102,8 +102,9 @@ export default async function CollectionDetailPage({
 
   let favourited = false;
   let favouritedStickerIds = new Set<string>();
+  let inCollectionStickerIds = new Set<string>();
   if (viewerId) {
-    const [fav, stickerFavs] = await Promise.all([
+    const [fav, stickerFavs, inColl] = await Promise.all([
       prisma.favorite.findUnique({
         where: {
           userId_subjectType_subjectId: {
@@ -121,11 +122,17 @@ export default async function CollectionDetailPage({
         },
         select: { subjectId: true },
       }),
+      subjectsInUserCollections(
+        viewerId,
+        COLLECTION_ITEM.sticker,
+        stickerIds,
+      ),
     ]);
     favourited = !!fav;
     favouritedStickerIds = new Set(
       stickerFavs.map((f) => f.subjectId.toString()),
     );
+    inCollectionStickerIds = inColl;
   }
 
   const signInHref = signInUrl({
@@ -154,6 +161,7 @@ export default async function CollectionDetailPage({
       thumbUrl: `/api/stickers/${s!.id}/media/thumbnail`,
       remixHref: `/stickers/${s!.slug}/remix`,
       favourited: favouritedStickerIds.has(s!.id.toString()),
+      inCollection: inCollectionStickerIds.has(s!.id.toString()),
       signedIn,
       signInHref,
       showActions: true,

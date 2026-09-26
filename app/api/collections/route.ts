@@ -2,9 +2,11 @@ import { NextResponse } from "next/server";
 import {
   collectionCardPreviewInclude,
   COLLECTION_ITEM,
+  parseCollectionItemType,
   serializeCollection,
   uniqueCollectionSlug,
   upsertTagsForCollection,
+  userCollectionIdsContaining,
 } from "@/lib/collections";
 import { parseTagNames } from "@/lib/composition";
 import { FAVORITE_SUBJECT } from "@/lib/favorites";
@@ -41,9 +43,24 @@ export async function GET(request: Request) {
     });
     const hasMore = rows.length > PAGE;
     const page = hasMore ? rows.slice(0, PAGE) : rows;
+
+    const containsType = parseCollectionItemType(
+      url.searchParams.get("containsType"),
+    );
+    const containsIdRaw = (url.searchParams.get("containsId") ?? "").trim();
+    let memberCollectionIds: string[] | undefined;
+    if (containsType && /^\d+$/.test(containsIdRaw)) {
+      memberCollectionIds = await userCollectionIdsContaining(
+        user.id,
+        containsType,
+        BigInt(containsIdRaw),
+      );
+    }
+
     return NextResponse.json({
       items: page.map(serializeCollection),
       nextCursor: hasMore ? page[page.length - 1]!.id.toString() : null,
+      ...(memberCollectionIds ? { memberCollectionIds } : {}),
     });
   }
 

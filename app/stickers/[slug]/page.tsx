@@ -12,6 +12,7 @@ import { StickerMedia } from "@/components/sticker-media";
 import { getSession, signInUrl } from "@/lib/auth";
 import { CLAIM_STATUS } from "@/lib/attribution";
 import { canModerate, canUpload } from "@/lib/capabilities";
+import { COLLECTION_ITEM, isInUserCollection } from "@/lib/collections";
 import { FAVORITE_SUBJECT, isFavourited } from "@/lib/favorites";
 import { MODERATION_STATUS } from "@/lib/moderation";
 import { prisma } from "@/lib/prisma";
@@ -98,10 +99,16 @@ export default async function StickerDetailPage({
       : null;
 
   let favourited = false;
+  let inCollection = false;
   if (viewerId) {
     favourited = await isFavourited(
       viewerId,
       FAVORITE_SUBJECT.sticker,
+      sticker.id,
+    );
+    inCollection = await isInUserCollection(
+      viewerId,
+      COLLECTION_ITEM.sticker,
       sticker.id,
     );
   }
@@ -233,6 +240,7 @@ export default async function StickerDetailPage({
             />
             <AddToCollectionButton
               stickerId={sticker.id.toString()}
+              initialInCollection={inCollection}
               signedIn={!!viewerId}
               signInHref={signInUrl({ redirectTo: `/stickers/${sticker.slug}` })}
               variant="pill"

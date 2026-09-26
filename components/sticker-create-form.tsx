@@ -2,7 +2,11 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import type { ExportPayload } from "blob-editor/core";
+import {
+  CANVAS_SIZE,
+  createFromSource,
+  type ExportPayload,
+} from "blob-editor/core";
 import { VISIBILITIES, VISIBILITY } from "@/lib/stickers";
 import { BlobEditorHost } from "./blob-editor-host";
 import { BusyButton } from "./busy-button";
@@ -122,9 +126,30 @@ export function StickerCreateForm({
             return o;
           }),
         };
+      } else if (remixedFromStickerId) {
+        // Remix: bake composed export as this sticker's own original (parent untouched).
+        const assetForm = new FormData();
+        assetForm.set("file", pendingExport.exports.full, "full.png");
+        const assetRes = await fetch("/api/assets", {
+          method: "POST",
+          body: assetForm,
+        });
+        const assetJson = (await assetRes.json()) as {
+          id?: string;
+          error?: string;
+        };
+        if (!assetRes.ok) {
+          throw new Error(assetJson.error ?? "Original upload failed");
+        }
+        document = createFromSource(
+          assetJson.id!,
+          CANVAS_SIZE,
+          CANVAS_SIZE,
+        );
       }
 
-      if (pendingExport.mask) {
+      // Mask only for create — remix bake already includes cutout in the full export.
+      if (pendingExport.mask && !remixedFromStickerId) {
         const maskForm = new FormData();
         maskForm.set("file", pendingExport.mask, "mask.png");
         const maskRes = await fetch("/api/assets", {

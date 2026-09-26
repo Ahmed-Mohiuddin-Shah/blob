@@ -19,6 +19,10 @@ import {
 import { prisma } from "@/lib/prisma";
 import { ensurePrivatePrism } from "@/lib/private-prism";
 import { sessionUser } from "@/lib/session-user";
+import {
+  COLLECTION_ITEM,
+  subjectsInUserCollections,
+} from "@/lib/collections";
 import { FAVORITE_SUBJECT } from "@/lib/favorites";
 import {
   CARD_MEDIA_KINDS,
@@ -99,16 +103,23 @@ export async function GET(request: Request) {
 
   const user = await sessionUser();
   let favouritedIds = new Set<string>();
+  let inCollectionIds = new Set<string>();
   if (user && page.length) {
+    const ids = page.map((s) => s.id);
     const favs = await prisma.favorite.findMany({
       where: {
         userId: user.id,
         subjectType: FAVORITE_SUBJECT.sticker,
-        subjectId: { in: page.map((s) => s.id) },
+        subjectId: { in: ids },
       },
       select: { subjectId: true },
     });
     favouritedIds = new Set(favs.map((f) => f.subjectId.toString()));
+    inCollectionIds = await subjectsInUserCollections(
+      user.id,
+      COLLECTION_ITEM.sticker,
+      ids,
+    );
   }
 
   return NextResponse.json({
@@ -128,6 +139,7 @@ export async function GET(request: Request) {
       thumbUrl: `/api/stickers/${s.id}/media/thumbnail`,
       remixHref: `/stickers/${s.slug}/remix`,
       favourited: favouritedIds.has(s.id.toString()),
+      inCollection: inCollectionIds.has(s.id.toString()),
     })),
     nextCursor,
   });

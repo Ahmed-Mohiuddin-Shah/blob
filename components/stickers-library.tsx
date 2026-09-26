@@ -10,7 +10,11 @@ import {
 } from "./library-search";
 import type { CategoryPill } from "./category-pills";
 
-type ApiItem = StickerCardProps & { id: string; favourited?: boolean };
+type ApiItem = StickerCardProps & {
+  id: string;
+  favourited?: boolean;
+  inCollection?: boolean;
+};
 
 export function StickersLibrary({
   categories,
@@ -52,6 +56,7 @@ export function StickersLibrary({
         ...item,
         stickerId: item.id,
         favourited: !!item.favourited,
+        inCollection: !!item.inCollection,
         signedIn,
         signInHref,
         showActions: true,

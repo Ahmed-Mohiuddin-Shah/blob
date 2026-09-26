@@ -4,6 +4,9 @@ import {
   MIN_COLLECTION_ITEMS,
   parseCollectionItemType,
   COLLECTION_ITEM,
+  isInUserCollection,
+  subjectsInUserCollections,
+  userCollectionIdsContaining,
 } from "@/lib/collections";
 import {
   FAVORITE_SUBJECT,
@@ -39,6 +42,12 @@ describe("collections + favourites locks", () => {
       COLLECTION_ITEM.stickerPack,
     );
     expect(parseCollectionItemType("nope")).toBeNull();
+  });
+
+  it("exports collection membership helpers", () => {
+    expect(typeof isInUserCollection).toBe("function");
+    expect(typeof subjectsInUserCollections).toBe("function");
+    expect(typeof userCollectionIdsContaining).toBe("function");
   });
 
   it("parses favourite subject types including sheet/pack UI", () => {

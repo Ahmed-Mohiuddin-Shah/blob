@@ -131,7 +131,7 @@ model Tag {
   @@map("tags")
 }
 
-/// Immutable original media. Composition documents reference asset id. Remixes reuse rows.
+/// Immutable original media. Composition documents reference asset id. Remixes bake a new row on save.
 model Asset {
   id             BigInt   @id @default(autoincrement())
   uploadedById   BigInt   @map("uploaded_by")

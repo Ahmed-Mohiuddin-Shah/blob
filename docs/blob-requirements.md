@@ -7,7 +7,7 @@
 
 This document freezes v1. Implement against this file and the DBML. Do not reopen decisions listed under **Locked decisions** without an explicit requirements revision.
 
-**Revision note:** Create-time `fit_mode` / pad-only upload is superseded by an **editor-required BLOB Composition** model (deterministic document → derivatives). Original binaries remain immutable; composition revisions regenerate cache. Remix deep-copies the edit document. Composition core must be extractable as npm + Flutter packages; editor UX is mobile-first.
+**Revision note:** Create-time `fit_mode` / pad-only upload is superseded by an **editor-required BLOB Composition** model (deterministic document → derivatives). Original binaries remain immutable; composition revisions regenerate cache. Remix edits from a deep-copy then bakes a new original on save. Composition core must be extractable as npm + Flutter packages; editor UX is mobile-first.
 
 ---
 
@@ -49,7 +49,7 @@ Search must find what the user typed (title, aliases, tags, categories, keywords
 | Editor required                       | Every create and remix goes through the composition editor. No quick `fit_mode`-only upload path. Framing = document crop/transform + canvas background (`transparent` or `#RRGGBB`). |
 | Preview ≡ export                      | One composition engine / draw contract; browser preview, Flutter preview, and server derivatives share the same document semantics. |
 | Preview sizes                         | Live previews and stored derivatives: **chat** 128×128, **thumbnail** 256×256, **full** (`image`) 1024×1024. |
-| Remix                                 | Deep-copy source `document_json` (all edits) + reuse the same original **asset** identities. Dual provenance: set `stickers.remixed_from_sticker_id` (UI) **and** insert `composition_parents` (composition lineage). Parent later edits must not affect children (no live parent composition layers). |
+| Remix                                 | Edit from a deep-copy of the parent composition; on save bake the composed export into a **new** original `assets` row (`createFromSource`). Dual provenance: `stickers.remixed_from_sticker_id` (immediate parent, UI) **and** `composition_parents`. Parent binaries and later edits stay untouched. |
 | Portable packages                     | Consume published **`blob-editor`** (npm) / Flutter package — do not vend or fork. Schema + core ops + React `BlobEditor`; Node worker uses `blob-editor/encode` only (never in client bundles). Host docs: [`docs/diff.md`](diff.md), [`docs/print-layout-host.md`](print-layout-host.md). |
 | Moderation previews                   | Open queues (pending / needs_edit) may show still diffs (previous vs current revision). **No** JSON document-diff UI. On **approve**, discard `media_assets` (and GLASS objects) for non-current revisions. Admin history is action + note only — no retained preview images. |
 | Prints UI                             | Sheets-first: `PrintLayout` create flow, packs of sheets, PDF/PNG downloads, favourites + collections membership. |
@@ -225,7 +225,7 @@ Published face of a sticker = derivatives of the composition’s **current revis
 Sticker
   ├── remixed_from_sticker_id (optional UI provenance)
   ├── Composition → current revision (document_json) → parents (remix provenance)
-  ├── assets (immutable originals referenced by document; shared across remixes)
+  ├── assets (immutable originals referenced by document; each remix bakes its own)
   └── media_assets (derivatives / cache; only current revision kept after approve)
         ├── image      (full 1024×1024)
         ├── chat       (128×128)
@@ -303,10 +303,11 @@ A sticker is one published/rendered composition. The **document** stores intent 
 ### 7.3 Remix (snapshot)
 
 1. Load parent composition’s **current** `document_json`.
-2. Deep-copy the document (`remixDeepCopy` from `blob-editor/core`) into a new sticker’s composition (revision 1). Edits are duplicated; originals stay the same `asset_id`s (from-scratch media, not flattened derivatives).
-3. Dual provenance: set `remixed_from_sticker_id` on the new sticker **and** insert `composition_parents` (composition → parent composition). Provenance only — **not** live layer binding.
-4. Enqueue derivative render for the new sticker.
-5. Later parent saves must not change child documents.
+2. Deep-copy the document (`remixDeepCopy` from `blob-editor/core`) for editing in the composition editor.
+3. On save: upload the composed full export as a **new** immutable `assets` row and set revision 1 to `createFromSource` of that asset (remix owns its original; parent assets unchanged).
+4. Dual provenance: set `remixed_from_sticker_id` on the new sticker (immediate parent) **and** insert `composition_parents`. Provenance only — **not** live layer binding.
+5. Enqueue derivative render for the new sticker.
+6. Later parent saves must not change child documents.
 
 Do **not** store objects as `type: "reference"` to a parent composition for rendering.
 
@@ -758,7 +759,7 @@ GET    /api/packs/{id}/stickers
 1. Retain originals in `assets` → GLASS; do not keep only processed derivatives.
 2. Use `media_assets` for derivatives; never three hardcoded media path columns on `stickers`.
 3. Composition **document** is the SoT for framing/edits; never store Konva/Fabric/Polotno canvas JSON as the document.
-4. Remix = deep-copy document + shared asset ids + provenance rows — never live parent composition layers.
+4. Remix = edit from deep-copy, bake new original asset on save + provenance rows — never live parent composition layers; never mutate parent assets.
 5. One composition draw contract: preview ≡ export (web / Flutter / worker).
 6. Composition core must remain extractable as **npm** + **Flutter** packages; do not trap semantics in Next-only modules.
 7. Editor UX is **mobile-first** (touch, large targets, no hover-only).
@@ -791,7 +792,7 @@ GET    /api/packs/{id}/stickers
 - [x] Media assets derivatives: image (1024) / chat (128) / thumbnail (256) / mask / gif / video as needed
 - [x] Editor-required create path; 1024² document; background transparent|color
 - [x] Mobile-usable web composition editor (touch, three live previews)
-- [x] Remix snapshot (deep-copy + shared assets + `remixed_from_sticker_id` + `composition_parents`)
+- [x] Remix snapshot (edit deep-copy → bake own original + `remixed_from_sticker_id` + `composition_parents`)
 - [x] Smart cutout (brush + polygon; no ML auto-BG)
 - [x] Consume **`blob-editor`** npm (`react` client + `encode` worker)
 - [x] Video ≤10s; audio preserved when present
@@ -822,7 +823,6 @@ GET    /api/packs/{id}/stickers
 - [ ] Related stickers
 - [ ] Richer download stats / share tracking
 - [ ] Presigned / path-token media URLs where private
-- [ ] Collections moderation via shared `moderation_events`
 
 ---
 

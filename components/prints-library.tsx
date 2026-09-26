@@ -18,6 +18,7 @@ type SheetItem = {
   previewUrl: string | null;
   author?: string;
   favourited?: boolean;
+  inCollection?: boolean;
   stickerCount?: number;
   status?: string;
 };
@@ -30,6 +31,7 @@ type PackItem = {
   previewUrl: string | null;
   author?: string;
   favourited?: boolean;
+  inCollection?: boolean;
   sheetCount?: number;
   status?: string;
 };
@@ -254,6 +256,7 @@ export function PrintsLibrary({
                   collectionType={COLLECTION_ITEM.stickerSheet}
                   subjectId={s.id}
                   favourited={!!s.favourited}
+                  inCollection={!!s.inCollection}
                   signedIn={signedIn}
                   signInHref={signInHref}
                 />
@@ -274,6 +277,7 @@ export function PrintsLibrary({
                   collectionType={COLLECTION_ITEM.stickerPack}
                   subjectId={p.id}
                   favourited={!!p.favourited}
+                  inCollection={!!p.inCollection}
                   signedIn={signedIn}
                   signInHref={signInHref}
                 />
@@ -295,6 +299,7 @@ function PrintCard({
   collectionType,
   subjectId,
   favourited,
+  inCollection,
   signedIn,
   signInHref,
 }: {
@@ -311,6 +316,7 @@ function PrintCard({
     | typeof COLLECTION_ITEM.stickerPack;
   subjectId: string;
   favourited: boolean;
+  inCollection: boolean;
   signedIn: boolean;
   signInHref: string;
 }) {
@@ -359,6 +365,7 @@ function PrintCard({
           <AddToCollectionButton
             subjectType={collectionType}
             subjectId={subjectId}
+            initialInCollection={inCollection}
             signedIn={signedIn}
             signInHref={signInHref}
             variant="icon"

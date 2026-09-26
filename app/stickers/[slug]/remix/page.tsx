@@ -55,8 +55,8 @@ export default async function RemixPage({
           Remix {source.title}
         </h1>
         <p className="mt-2 text-sm text-secondary">
-          Deep-copies the composition and reuses the same originals. Your edits
-          become a new sticker.
+          Starts from this sticker&apos;s composition. On save, your remix gets
+          its own original; the parent stays linked as Remixed from.
         </p>
       </div>
       <div className="mt-10">

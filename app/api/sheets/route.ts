@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 import { canUpload } from "@/lib/capabilities";
+import {
+  COLLECTION_ITEM,
+  subjectsInUserCollections,
+} from "@/lib/collections";
 import { FAVORITE_SUBJECT } from "@/lib/favorites";
 import { runSheetEncode } from "@/lib/print-encode";
 import {
@@ -59,8 +63,18 @@ export async function GET(request: Request) {
     });
     const hasMore = rows.length > PAGE;
     const page = hasMore ? rows.slice(0, PAGE) : rows;
+    const inCollectionIds = page.length
+      ? await subjectsInUserCollections(
+          user.id,
+          COLLECTION_ITEM.stickerSheet,
+          page.map((s) => s.id),
+        )
+      : new Set<string>();
     return NextResponse.json({
-      items: page.map(serializeSheet),
+      items: page.map((s) => ({
+        ...serializeSheet(s),
+        inCollection: inCollectionIds.has(s.id.toString()),
+      })),
       nextCursor: hasMore ? page[page.length - 1]!.id.toString() : null,
     });
   }
@@ -93,22 +107,30 @@ export async function GET(request: Request) {
 
   const user = await sessionUser();
   let favouritedIds = new Set<string>();
+  let inCollectionIds = new Set<string>();
   if (user && page.length) {
+    const ids = page.map((s) => s.id);
     const favs = await prisma.favorite.findMany({
       where: {
         userId: user.id,
         subjectType: FAVORITE_SUBJECT.stickerSheet,
-        subjectId: { in: page.map((s) => s.id) },
+        subjectId: { in: ids },
       },
       select: { subjectId: true },
     });
     favouritedIds = new Set(favs.map((f) => f.subjectId.toString()));
+    inCollectionIds = await subjectsInUserCollections(
+      user.id,
+      COLLECTION_ITEM.stickerSheet,
+      ids,
+    );
   }
 
   return NextResponse.json({
     items: page.map((s) => ({
       ...serializeSheet(s),
       favourited: favouritedIds.has(s.id.toString()),
+      inCollection: inCollectionIds.has(s.id.toString()),
     })),
     nextCursor: hasMore ? page[page.length - 1]!.id.toString() : null,
   });

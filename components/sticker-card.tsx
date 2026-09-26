@@ -21,6 +21,7 @@ export type StickerCardProps = {
   /** Sticker id for favourite / collection actions. */
   stickerId?: string | null;
   favourited?: boolean;
+  inCollection?: boolean;
   signedIn?: boolean;
   signInHref?: string;
   showActions?: boolean;
@@ -40,6 +41,7 @@ export function StickerCard({
   remixHref,
   stickerId,
   favourited = false,
+  inCollection = false,
   signedIn = false,
   signInHref,
   showActions = false,
@@ -92,6 +94,7 @@ export function StickerCard({
               />
               <AddToCollectionButton
                 stickerId={stickerId}
+                initialInCollection={inCollection}
                 signedIn={signedIn}
                 signInHref={signInHref}
                 variant="icon"

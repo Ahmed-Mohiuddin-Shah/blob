@@ -8,6 +8,7 @@ import { PrintFailedActions } from "@/components/print-failed-actions";
 import { PrintPendingRefresh } from "@/components/print-pending-refresh";
 import { PrintStickersInfiniteGrid } from "@/components/print-stickers-infinite-grid";
 import { getSession, signInUrl } from "@/lib/auth";
+import { COLLECTION_ITEM, isInUserCollection } from "@/lib/collections";
 import { FAVORITE_SUBJECT } from "@/lib/favorites";
 import { enqueuePackEncode } from "@/lib/print-encode";
 import { PRINT_STATUS, serializeSheet } from "@/lib/prints";
@@ -55,6 +56,7 @@ export default async function PackDetailPage({
   }
 
   let favourited = false;
+  let inCollection = false;
   if (viewerId) {
     const fav = await prisma.favorite.findUnique({
       where: {
@@ -66,6 +68,11 @@ export default async function PackDetailPage({
       },
     });
     favourited = !!fav;
+    inCollection = await isInUserCollection(
+      viewerId,
+      COLLECTION_ITEM.stickerPack,
+      pack.id,
+    );
   }
 
   const signInHref = signInUrl({
@@ -129,8 +136,9 @@ export default async function PackDetailPage({
               variant="pill"
             />
             <AddToCollectionButton
-              subjectType={FAVORITE_SUBJECT.stickerPack}
+              subjectType={COLLECTION_ITEM.stickerPack}
               subjectId={pack.id.toString()}
+              initialInCollection={inCollection}
               signedIn={!!viewerId}
               signInHref={signInHref}
               variant="pill"

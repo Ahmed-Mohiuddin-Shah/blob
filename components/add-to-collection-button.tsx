@@ -1,6 +1,6 @@
 "use client";
 
-import { PlayingCardsFan, Plus, X } from "lucide-react";
+import { Check, PlayingCardsFan, Plus, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
@@ -20,6 +20,7 @@ type Props = {
   stickerId?: string;
   subjectType?: string;
   subjectId?: string;
+  initialInCollection?: boolean;
   signedIn: boolean;
   signInHref?: string;
   variant?: "icon" | "pill";
@@ -30,6 +31,7 @@ export function AddToCollectionButton({
   stickerId,
   subjectType: subjectTypeProp,
   subjectId: subjectIdProp,
+  initialInCollection = false,
   signedIn,
   signInHref = "/auth/login",
   variant = "icon",
@@ -41,9 +43,11 @@ export function AddToCollectionButton({
   const subjectId = subjectIdProp ?? stickerId ?? "";
 
   const router = useRouter();
+  const [inCollection, setInCollection] = useState(initialInCollection);
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [items, setItems] = useState<CollectionOption[]>([]);
+  const [memberIds, setMemberIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [busySlug, setBusySlug] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -54,20 +58,35 @@ export function AddToCollectionButton({
     setMounted(true);
   }, []);
 
+  useEffect(() => {
+    setInCollection(initialInCollection);
+  }, [initialInCollection]);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/collections?mine=1");
+      const params = new URLSearchParams({ mine: "1" });
+      if (subjectId) {
+        params.set("containsType", subjectType);
+        params.set("containsId", subjectId);
+      }
+      const res = await fetch(`/api/collections?${params}`);
       if (!res.ok) throw new Error("Failed to load");
-      const json = (await res.json()) as { items: CollectionOption[] };
+      const json = (await res.json()) as {
+        items: CollectionOption[];
+        memberCollectionIds?: string[];
+      };
       setItems(json.items);
+      const members = new Set(json.memberCollectionIds ?? []);
+      setMemberIds(members);
+      if (members.size > 0) setInCollection(true);
     } catch {
       setError("Could not load your collections");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [subjectType, subjectId]);
 
   useEffect(() => {
     if (open) void load();
@@ -95,6 +114,7 @@ export function AddToCollectionButton({
         setError(json.error ?? "Could not add");
         return;
       }
+      setInCollection(true);
       setOpen(false);
     } catch {
       setError("Could not add");
@@ -122,6 +142,7 @@ export function AddToCollectionButton({
         setError(json.error ?? "Could not create");
         return;
       }
+      setInCollection(true);
       setOpen(false);
       setNewName("");
       if (json.slug) router.push(`/collections/${json.slug}`);
@@ -137,18 +158,25 @@ export function AddToCollectionButton({
       <BusyButton
         type="button"
         onClick={openModal}
-        className={`inline-flex items-center gap-2 rounded-full border border-divider bg-surface px-5 py-2.5 text-sm font-semibold hover:border-accent-pink/40 ${className}`}
+        className={`inline-flex items-center gap-2 rounded-full border border-divider bg-surface px-5 py-2.5 text-sm font-semibold hover:border-accent-pink/40 ${
+          inCollection ? "text-accent-pink" : ""
+        } ${className}`}
+        aria-pressed={inCollection}
+        title={inCollection ? "In a collection" : "Add to collection"}
       >
         <PlayingCardsFan className="h-4 w-4" strokeWidth={1.75} aria-hidden />
-        Collection
+        {inCollection ? "Saved" : "Collection"}
       </BusyButton>
     ) : (
       <BusyButton
         type="button"
         onClick={openModal}
-        className={`flex h-10 w-10 items-center justify-center rounded-full bg-badge text-foreground shadow-lg transition hover:scale-105 ${className}`}
-        aria-label="Add to collection"
-        title="Add to collection"
+        className={`flex h-10 w-10 items-center justify-center rounded-full bg-badge text-foreground shadow-lg transition hover:scale-105 ${
+          inCollection ? "text-accent-pink" : ""
+        } ${className}`}
+        aria-pressed={inCollection}
+        aria-label={inCollection ? "In a collection" : "Add to collection"}
+        title={inCollection ? "In a collection" : "Add to collection"}
       >
         <PlayingCardsFan className="h-5 w-5" strokeWidth={1.75} aria-hidden />
       </BusyButton>
@@ -194,20 +222,37 @@ export function AddToCollectionButton({
                     No collections yet — create one below.
                   </p>
                 ) : (
-                  items.map((c) => (
-                    <BusyButton
-                      key={c.id}
-                      type="button"
-                      busy={busySlug === c.slug}
-                      onClick={() => void addTo(c.slug)}
-                      className="flex w-full items-center justify-between rounded-2xl border border-divider bg-surface px-4 py-3 text-left text-sm font-semibold hover:border-accent-pink/40"
-                    >
-                      <span className="truncate">{c.name}</span>
-                      <span className="shrink-0 text-xs text-secondary">
-                        {c.itemCount ?? c.stickerCount}/60
-                      </span>
-                    </BusyButton>
-                  ))
+                  items.map((c) => {
+                    const already = memberIds.has(c.id);
+                    return (
+                      <BusyButton
+                        key={c.id}
+                        type="button"
+                        busy={busySlug === c.slug}
+                        disabled={already}
+                        onClick={() => void addTo(c.slug)}
+                        className={`flex w-full items-center justify-between rounded-2xl border border-divider bg-surface px-4 py-3 text-left text-sm font-semibold hover:border-accent-pink/40 disabled:opacity-70 ${
+                          already ? "text-accent-pink" : ""
+                        }`}
+                      >
+                        <span className="flex min-w-0 items-center gap-2 truncate">
+                          {already ? (
+                            <Check
+                              className="h-4 w-4 shrink-0"
+                              strokeWidth={1.75}
+                              aria-hidden
+                            />
+                          ) : null}
+                          <span className="truncate">{c.name}</span>
+                        </span>
+                        <span className="shrink-0 text-xs text-secondary">
+                          {already
+                            ? "Saved"
+                            : `${c.itemCount ?? c.stickerCount}/60`}
+                        </span>
+                      </BusyButton>
+                    );
+                  })
                 )}
               </div>
 

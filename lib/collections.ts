@@ -35,6 +35,59 @@ export function parseCollectionItemType(
     : null;
 }
 
+/** True if any of the user's collections already contain this subject. */
+export async function isInUserCollection(
+  userId: bigint,
+  subjectType: CollectionItemType,
+  subjectId: bigint,
+): Promise<boolean> {
+  const row = await prisma.collectionItem.findFirst({
+    where: {
+      subjectType,
+      subjectId,
+      collection: { userId },
+    },
+    select: { collectionId: true },
+  });
+  return !!row;
+}
+
+/** Subject ids (as strings) present in any of the user's collections. */
+export async function subjectsInUserCollections(
+  userId: bigint,
+  subjectType: CollectionItemType,
+  subjectIds: bigint[],
+): Promise<Set<string>> {
+  if (!subjectIds.length) return new Set();
+  const rows = await prisma.collectionItem.findMany({
+    where: {
+      subjectType,
+      subjectId: { in: subjectIds },
+      collection: { userId },
+    },
+    select: { subjectId: true },
+    distinct: ["subjectId"],
+  });
+  return new Set(rows.map((r) => r.subjectId.toString()));
+}
+
+/** Collection ids (as strings) of the user that contain this subject. */
+export async function userCollectionIdsContaining(
+  userId: bigint,
+  subjectType: CollectionItemType,
+  subjectId: bigint,
+): Promise<string[]> {
+  const rows = await prisma.collectionItem.findMany({
+    where: {
+      subjectType,
+      subjectId,
+      collection: { userId },
+    },
+    select: { collectionId: true },
+  });
+  return rows.map((r) => r.collectionId.toString());
+}
+
 export async function uniqueCollectionSlug(name: string): Promise<string> {
   const baseSlug = slugify(name, 140);
   let slug = baseSlug;
