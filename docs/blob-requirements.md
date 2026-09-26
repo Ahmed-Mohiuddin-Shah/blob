@@ -821,8 +821,6 @@ GET    /api/packs/{id}/stickers
 - [ ] Tag aliases table + expansion in search
 - [ ] **Meilisearch** search (replace/augment PG FTS)
 - [ ] Related stickers
-- [ ] Richer download stats / share tracking
-- [ ] Presigned / path-token media URLs where private
 
 ---
 
