@@ -1,0 +1,33 @@
+# CLIP embed server for Meilisearch multimodal — run on the Ollama/GPU host.
+#
+#   cp .env.clip.example .env.clip
+#   docker compose -f docker-compose.clip.yml up -d --build
+#
+# Requires NVIDIA Container Toolkit for GPU. For CPU-only: set CLIP_DEVICE=cpu in .env.clip
+# and remove the deploy/gpus section if your compose rejects it.
+
+name: blob-clip
+
+services:
+  clip:
+    build: ./clip-server
+    restart: unless-stopped
+    env_file: .env.clip
+    ports:
+      - "${CLIP_PUBLISH_PORT:-8081}:8080"
+    volumes:
+      # HuggingFace / open_clip weight cache
+      - blob_clip_cache:/root/.cache
+    environment:
+      NVIDIA_VISIBLE_DEVICES: ${NVIDIA_VISIBLE_DEVICES:-all}
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+    gpus: all
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 90s
+
+volumes:
+  blob_clip_cache:

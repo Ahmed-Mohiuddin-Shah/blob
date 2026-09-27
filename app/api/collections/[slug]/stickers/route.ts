@@ -105,5 +105,14 @@ export async function POST(request: Request, ctx: Ctx) {
     data: { updatedAt: new Date() },
   });
 
+  if (subjectType === COLLECTION_ITEM.sticker) {
+    const { recomputeStickerPopularity } = await import(
+      "@/lib/search/popularity"
+    );
+    const { syncCollectionSearch } = await import("@/lib/search/sync");
+    void recomputeStickerPopularity(subjectId);
+    syncCollectionSearch(collection.id);
+  }
+
   return NextResponse.json({ ok: true }, { status: 201 });
 }

@@ -1,4 +1,4 @@
-# BLOB stack: Next.js + Postgres + daily DB backups.
+# BLOB stack: Next.js + Postgres + Meilisearch + daily DB backups.
 # Run: docker compose up -d --build
 # Backups: ./storage/backups/postgres/
 # Restore: npm run db:restore -- <backup.sql.gz>
@@ -26,11 +26,43 @@ services:
       ZITADEL_PROJECT_ID: ${ZITADEL_PROJECT_ID:-}
       GLASS_API_URL: ${GLASS_API_URL:-}
       GLASS_API_KEY: ${GLASS_API_KEY:-}
+      MEILI_HOST: ${MEILI_HOST:-http://meilisearch:7700}
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-}
+      MEILI_SEARCH_KEY: ${MEILI_SEARCH_KEY:-}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-}
+      OLLAMA_API_KEY: ${OLLAMA_API_KEY:-}
+      OLLAMA_EMBED_MODEL: ${OLLAMA_EMBED_MODEL:-nomic-embed-text}
+      OLLAMA_VISION_MODEL: ${OLLAMA_VISION_MODEL:-moondream}
+      OLLAMA_AGENT_MODEL: ${OLLAMA_AGENT_MODEL:-qwen2.5:3b}
+      MEILI_MULTIMODAL_URL: ${MEILI_MULTIMODAL_URL:-}
+      MEILI_MULTIMODAL_MODEL: ${MEILI_MULTIMODAL_MODEL:-}
+      MEILI_MULTIMODAL_API_KEY: ${MEILI_MULTIMODAL_API_KEY:-}
     ports:
       - "${APP_PORT:-8080}:3000"
     depends_on:
       db:
         condition: service_healthy
+      meilisearch:
+        condition: service_healthy
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.16
+    restart: unless-stopped
+    environment:
+      MEILI_ENV: production
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:?set MEILI_MASTER_KEY}
+      MEILI_NO_ANALYTICS: "true"
+    ports:
+      - "${MEILI_PUBLISH_PORT:-7700}:7700"
+    volumes:
+      - blob_meili_data:/meili_data
+    healthcheck:
+      # Meili image ships wget; /health returns 200 when ready.
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:7700/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
 
   db:
     image: postgres:16-alpine
@@ -70,3 +102,4 @@ services:
 
 volumes:
   blob_pgdata:
+  blob_meili_data:

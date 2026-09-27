@@ -4,6 +4,7 @@ export const JOB_TYPE = {
   compositionEncode: "composition_encode",
   sheetEncode: "sheet_encode",
   packEncode: "pack_encode",
+  searchEnrich: "search_enrich",
 } as const;
 
 export type JobType = (typeof JOB_TYPE)[keyof typeof JOB_TYPE];
@@ -12,6 +13,7 @@ export const JOB_TYPES = [
   JOB_TYPE.compositionEncode,
   JOB_TYPE.sheetEncode,
   JOB_TYPE.packEncode,
+  JOB_TYPE.searchEnrich,
 ] as const;
 
 export const JOB_STATUS = {

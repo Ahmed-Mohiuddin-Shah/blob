@@ -9,7 +9,7 @@ type Props = {
 };
 
 export function SearchForm({
-  action = "/stickers",
+  action = "/search",
   placeholder = "Search cats, reactions, memes...",
   popular = [],
   className = "",
@@ -43,7 +43,7 @@ export function SearchForm({
           {popular.map((term) => (
             <Link
               key={term}
-              href={`${action}?q=${encodeURIComponent(term)}`}
+              href={`/search?q=${encodeURIComponent(term)}`}
               className="rounded-full border border-divider bg-surface px-3 py-1.5 text-secondary transition-colors hover:border-accent-pink/40 hover:text-accent-pink"
             >
               {term}

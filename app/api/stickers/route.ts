@@ -70,7 +70,40 @@ export async function GET(request: Request) {
   if (category) {
     where.category = { slug: category };
   }
-  if (q) {
+
+  // Prefer Meili for public text search (Prisma fallback inside meiliScopedSearch).
+  let meiliIds: bigint[] | null = null;
+  if (q && !mine && !cursor) {
+    try {
+      const { meiliScopedSearch } = await import("@/lib/search/query");
+      const { isMeiliConfigured } = await import("@/lib/meili/client");
+      if (isMeiliConfigured()) {
+        const filter = category ? `categorySlug = "${category}"` : undefined;
+        const found = await meiliScopedSearch({
+          index: "stickers",
+          q,
+          mode: "hybrid",
+          limit: PAGE + 1,
+          filter,
+        });
+        if (found.engine === "meili") {
+          meiliIds = found.hits
+            .map((h) => {
+              try {
+                return BigInt(h.id);
+              } catch {
+                return null;
+              }
+            })
+            .filter((x): x is bigint => x != null);
+        }
+      }
+    } catch {
+      meiliIds = null;
+    }
+  }
+
+  if (q && meiliIds === null) {
     where.OR = [
       { title: { contains: q, mode: "insensitive" } },
       { description: { contains: q, mode: "insensitive" } },
@@ -84,25 +117,57 @@ export async function GET(request: Request) {
     ];
   }
 
-  const rows = await prisma.sticker.findMany({
-    where,
-    take: PAGE + 1,
-    ...(cursor ? { cursor: { id: BigInt(cursor) }, skip: 1 } : {}),
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    include: {
-      createdBy: { select: { username: true, displayName: true } },
-      blobber: { select: { id: true, displayName: true } },
-      category: { select: { slug: true, name: true } },
-      media: {
-        where: { kind: { in: [...CARD_MEDIA_KINDS] }, status: MEDIA_ASSET_STATUS.ready },
-        select: { kind: true, hasAudio: true },
-      },
-    },
-  });
+  const rows =
+    meiliIds != null
+      ? meiliIds.length
+        ? await prisma.sticker.findMany({
+            where: { ...where, id: { in: meiliIds } },
+            include: {
+              createdBy: { select: { username: true, displayName: true } },
+              blobber: { select: { id: true, displayName: true } },
+              category: { select: { slug: true, name: true } },
+              media: {
+                where: {
+                  kind: { in: [...CARD_MEDIA_KINDS] },
+                  status: MEDIA_ASSET_STATUS.ready,
+                },
+                select: { kind: true, hasAudio: true },
+              },
+            },
+          }).then((list) => {
+            const order = new Map(meiliIds!.map((id, i) => [id.toString(), i]));
+            return list.sort(
+              (a, b) =>
+                (order.get(a.id.toString()) ?? 0) -
+                (order.get(b.id.toString()) ?? 0),
+            );
+          })
+        : Promise.resolve([])
+      : prisma.sticker.findMany({
+          where,
+          take: PAGE + 1,
+          ...(cursor ? { cursor: { id: BigInt(cursor) }, skip: 1 } : {}),
+          orderBy: [{ popularityScore: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+          include: {
+            createdBy: { select: { username: true, displayName: true } },
+            blobber: { select: { id: true, displayName: true } },
+            category: { select: { slug: true, name: true } },
+            media: {
+              where: {
+                kind: { in: [...CARD_MEDIA_KINDS] },
+                status: MEDIA_ASSET_STATUS.ready,
+              },
+              select: { kind: true, hasAudio: true },
+            },
+          },
+        });
 
-  const hasMore = rows.length > PAGE;
-  const page = hasMore ? rows.slice(0, PAGE) : rows;
-  const nextCursor = hasMore ? page[page.length - 1]!.id.toString() : null;
+  const resolvedRows = await rows;
+
+  const hasMore = meiliIds != null ? false : resolvedRows.length > PAGE;
+  const page = hasMore ? resolvedRows.slice(0, PAGE) : resolvedRows;
+  const nextCursor =
+    hasMore && page.length ? page[page.length - 1]!.id.toString() : null;
 
   const user = await sessionUser();
   let favouritedIds = new Set<string>();

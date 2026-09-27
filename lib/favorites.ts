@@ -1,6 +1,8 @@
 /** Polymorphic favourites. UI: sticker | collection | sticker_sheet | sticker_pack. */
 
 import { prisma } from "@/lib/prisma";
+import { refreshStickerPopularityFromLikes } from "@/lib/search/popularity";
+import { syncCollectionSearch, syncPrintSearch } from "@/lib/search/sync";
 
 export const FAVORITE_SUBJECT = {
   sticker: "sticker",
@@ -64,7 +66,7 @@ export async function bumpLikesCount(
   delta: 1 | -1,
 ): Promise<bigint> {
   if (subjectType === FAVORITE_SUBJECT.sticker) {
-    return bumpModelLikes(
+    const likes = await bumpModelLikes(
       () =>
         prisma.sticker.update({
           where: { id: subjectId },
@@ -88,9 +90,11 @@ export async function bumpLikesCount(
       },
       delta,
     );
+    void refreshStickerPopularityFromLikes(subjectId);
+    return likes;
   }
   if (subjectType === FAVORITE_SUBJECT.collection) {
-    return bumpModelLikes(
+    const likes = await bumpModelLikes(
       () =>
         prisma.collection.update({
           where: { id: subjectId },
@@ -114,9 +118,11 @@ export async function bumpLikesCount(
       },
       delta,
     );
+    syncCollectionSearch(subjectId);
+    return likes;
   }
   if (subjectType === FAVORITE_SUBJECT.stickerSheet) {
-    return bumpModelLikes(
+    const likes = await bumpModelLikes(
       () =>
         prisma.stickerSheet.update({
           where: { id: subjectId },
@@ -140,8 +146,10 @@ export async function bumpLikesCount(
       },
       delta,
     );
+    syncPrintSearch("sheet", subjectId);
+    return likes;
   }
-  return bumpModelLikes(
+  const likes = await bumpModelLikes(
     () =>
       prisma.stickerPack.update({
         where: { id: subjectId },
@@ -165,6 +173,8 @@ export async function bumpLikesCount(
     },
     delta,
   );
+  syncPrintSearch("pack", subjectId);
+  return likes;
 }
 
 /** @deprecated use bumpLikesCount(FAVORITE_SUBJECT.sticker, …) */

@@ -8,6 +8,11 @@ import {
 import { PRINT_STATUS } from "@/lib/prints";
 import { prisma } from "@/lib/prisma";
 import {
+  applySearchEnrichResult,
+  type EnrichResult,
+} from "@/lib/search/enrich";
+import { SEARCH_META_STATUS } from "@/lib/search/constants";
+import {
   MEDIA_ASSET_STATUS,
   MEDIA_KIND,
   PROCESSING_STATUS,
@@ -74,6 +79,8 @@ export async function completeJob(opts: {
       await applySheetResult(job.subjectId, opts.result as SheetJobResult);
     } else if (job.type === JOB_TYPE.packEncode) {
       await applyPackResult(job.subjectId, opts.result as PackJobResult);
+    } else if (job.type === JOB_TYPE.searchEnrich) {
+      await applySearchEnrichResult(job.subjectId, opts.result as EnrichResult);
     }
 
     await prisma.job.update({
@@ -141,6 +148,11 @@ export async function failJob(opts: {
       subjectId: job.subjectId,
       subjectTitle: sheet.name,
       message: opts.message,
+    });
+  } else if (job.type === JOB_TYPE.searchEnrich) {
+    await prisma.sticker.update({
+      where: { id: job.subjectId },
+      data: { searchMetaStatus: SEARCH_META_STATUS.none },
     });
   } else if (job.type === JOB_TYPE.packEncode) {
     const pack = await prisma.stickerPack.update({
@@ -266,6 +278,9 @@ async function applySheetResult(
     },
   });
 
+  const { syncPrintSearch } = await import("@/lib/search/sync");
+  syncPrintSearch("sheet", sheetId);
+
   const waiting = await prisma.packSheet.findMany({
     where: { sheetId },
     select: { packId: true },
@@ -304,6 +319,18 @@ async function applyPackResult(
       pdfSizeBytes: BigInt(result.pdfSizeBytes ?? 0),
     },
   });
+
+  const { syncPrintSearch } = await import("@/lib/search/sync");
+  const { recomputeStickerPopularity } = await import("@/lib/search/popularity");
+  syncPrintSearch("pack", packId);
+  const packStickers = await prisma.sheetSticker.findMany({
+    where: { sheet: { packs: { some: { packId } } } },
+    select: { stickerId: true },
+    distinct: ["stickerId"],
+  });
+  for (const { stickerId } of packStickers) {
+    void recomputeStickerPopularity(stickerId);
+  }
 }
 
 export function sha256Hex(buf: Uint8Array): string {

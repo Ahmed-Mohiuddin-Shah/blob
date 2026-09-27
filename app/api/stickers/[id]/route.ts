@@ -9,6 +9,7 @@ import {
   recordModerationEvent,
 } from "@/lib/moderation";
 import { prisma } from "@/lib/prisma";
+import { SEARCH_META_STATUS } from "@/lib/search/constants";
 import {
   canAccessSticker,
   canOwnerEditSticker,
@@ -157,7 +158,11 @@ export async function PATCH(
         ...(categoryId !== undefined ? { categoryId } : {}),
         ...(blobberId !== undefined ? { blobberId, sourceUrl } : {}),
         ...(requeueReview
-          ? { moderationStatus: MODERATION_STATUS.pendingReview, moderationNote: null }
+          ? {
+              moderationStatus: MODERATION_STATUS.pendingReview,
+              moderationNote: null,
+              searchMetaStatus: SEARCH_META_STATUS.stale,
+            }
           : {}),
       },
     });

@@ -26,6 +26,9 @@ Thumbs.db
 
 # env
 .env
+.env.clip
+.env.proxy
+.env.worker
 .env*.local
 .env.backup
 .env.production

@@ -70,25 +70,77 @@ export async function GET(request: Request) {
   const where: { status: string; OR?: object[] } = {
     status: PRINT_STATUS.ready,
   };
-  if (q) {
+
+  let meiliIds: bigint[] | null = null;
+  if (q && !cursor) {
+    try {
+      const { meiliScopedSearch } = await import("@/lib/search/query");
+      const { isMeiliConfigured } = await import("@/lib/meili/client");
+      if (isMeiliConfigured()) {
+        const found = await meiliScopedSearch({
+          index: "prints",
+          q,
+          mode: "hybrid",
+          limit: PAGE + 1,
+          filter: 'kind = "pack"',
+        });
+        if (found.engine === "meili") {
+          meiliIds = found.hits
+            .map((h) => {
+              const raw = h.id.startsWith("pack:") ? h.id.slice(5) : h.id;
+              try {
+                return BigInt(raw);
+              } catch {
+                return null;
+              }
+            })
+            .filter((x): x is bigint => x != null);
+        }
+      }
+    } catch {
+      meiliIds = null;
+    }
+  }
+
+  if (q && meiliIds === null) {
     where.OR = [
       { name: { contains: q, mode: "insensitive" } },
       { description: { contains: q, mode: "insensitive" } },
     ];
   }
 
-  const rows = await prisma.stickerPack.findMany({
-    where,
-    take: PAGE + 1,
-    ...(cursor ? { cursor: { id: BigInt(cursor) }, skip: 1 } : {}),
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    include: {
-      createdBy: { select: { username: true, displayName: true } },
-      sheets: { select: { sheetId: true } },
-    },
-  });
+  const rows =
+    meiliIds != null
+      ? meiliIds.length
+        ? await prisma.stickerPack
+            .findMany({
+              where: { ...where, id: { in: meiliIds } },
+              include: {
+                createdBy: { select: { username: true, displayName: true } },
+                sheets: { select: { sheetId: true } },
+              },
+            })
+            .then((list) => {
+              const order = new Map(meiliIds!.map((id, i) => [id.toString(), i]));
+              return list.sort(
+                (a, b) =>
+                  (order.get(a.id.toString()) ?? 0) -
+                  (order.get(b.id.toString()) ?? 0),
+              );
+            })
+        : []
+      : await prisma.stickerPack.findMany({
+          where,
+          take: PAGE + 1,
+          ...(cursor ? { cursor: { id: BigInt(cursor) }, skip: 1 } : {}),
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          include: {
+            createdBy: { select: { username: true, displayName: true } },
+            sheets: { select: { sheetId: true } },
+          },
+        });
 
-  const hasMore = rows.length > PAGE;
+  const hasMore = meiliIds != null ? false : rows.length > PAGE;
   const page = hasMore ? rows.slice(0, PAGE) : rows;
 
   const user = await sessionUser();

@@ -3,6 +3,7 @@ import {
   type CompositionJobPayload,
   type JobPayload,
   type PackJobPayload,
+  type SearchEnrichJobPayload,
   type SheetJobPayload,
 } from "@/lib/jobs/payload-types";
 import { JOB_TYPE, type JobType } from "@/lib/jobs/types";
@@ -18,6 +19,7 @@ export type {
   CompositionJobPayload,
   JobPayload,
   PackJobPayload,
+  SearchEnrichJobPayload,
   SheetJobPayload,
 } from "@/lib/jobs/payload-types";
 
@@ -31,7 +33,35 @@ export async function buildJobPayload(
   if (type === JOB_TYPE.sheetEncode) {
     return buildSheetPayload(subjectId);
   }
+  if (type === JOB_TYPE.searchEnrich) {
+    return buildSearchEnrichPayload(subjectId);
+  }
   return buildPackPayload(subjectId);
+}
+
+async function buildSearchEnrichPayload(
+  stickerId: bigint,
+): Promise<SearchEnrichJobPayload> {
+  const sticker = await prisma.sticker.findUnique({
+    where: { id: stickerId },
+    include: { media: true },
+  });
+  if (!sticker) throw new Error("Missing sticker");
+  const media = sticker.media.filter((m) => m.status === MEDIA_ASSET_STATUS.ready);
+  const asset =
+    media.find((m) => m.kind === MEDIA_KIND.thumbnail) ||
+    media.find((m) => m.kind === MEDIA_KIND.image) ||
+    media.find((m) => m.kind === MEDIA_KIND.chat) ||
+    media.find((m) => m.kind === MEDIA_KIND.gif);
+  if (!asset) throw new Error("No preview media for search_enrich");
+  return {
+    kind: JOB_TYPE.searchEnrich,
+    stickerId: sticker.id.toString(),
+    slug: sticker.slug,
+    title: sticker.title,
+    glassObjectId: asset.glassObjectId,
+    mimeType: asset.mimeType,
+  };
 }
 
 async function buildCompositionPayload(

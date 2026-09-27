@@ -1,8 +1,10 @@
+import { SearchMetaModerationList } from "@/components/search-meta-moderation-list";
 import { StickerModerationList } from "@/components/sticker-moderation-list";
 import { canManageUsers } from "@/lib/capabilities";
 import { MODERATION_STATUS } from "@/lib/moderation";
 import { prisma } from "@/lib/prisma";
 import { requireSessionUser } from "@/lib/require-user";
+import { SEARCH_META_STATUS } from "@/lib/search/constants";
 import { MEDIA_KIND } from "@/lib/stickers";
 
 function typeFromMedia(kinds: string[]): string {
@@ -30,6 +32,23 @@ export default async function ProfilePendingPage() {
       media: { select: { kind: true } },
     },
   });
+
+  const searchMeta =
+    isAdmin
+      ? await prisma.sticker.findMany({
+          where: { searchMetaStatus: SEARCH_META_STATUS.pendingSearchMeta },
+          orderBy: { updatedAt: "desc" },
+          take: 100,
+          select: {
+            id: true,
+            title: true,
+            slug: true,
+            aiCaption: true,
+            aiScenario: true,
+            aiVisualTags: true,
+          },
+        })
+      : [];
 
   return (
     <div>
@@ -64,6 +83,40 @@ export default async function ProfilePendingPage() {
           })}
         />
       </div>
+
+      {isAdmin ? (
+        <div className="mt-14">
+          <h2 className="text-xl font-semibold tracking-tight">
+            Search meta review
+          </h2>
+          <p className="mt-1 text-sm text-secondary">
+            Edit AI captions from Ollama, then approve to index in Meilisearch.
+          </p>
+          <div className="mt-6">
+            <SearchMetaModerationList
+              items={searchMeta.map((s) => {
+                let tags: string[] = [];
+                try {
+                  tags = s.aiVisualTags
+                    ? (JSON.parse(s.aiVisualTags) as string[])
+                    : [];
+                } catch {
+                  tags = [];
+                }
+                return {
+                  id: s.id.toString(),
+                  title: s.title,
+                  slug: s.slug,
+                  thumbUrl: `/api/stickers/${s.id}/media/thumbnail`,
+                  aiCaption: s.aiCaption ?? "",
+                  aiScenario: s.aiScenario ?? "",
+                  aiVisualTags: tags,
+                };
+              })}
+            />
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -16,6 +16,7 @@ import { COLLECTION_ITEM, isInUserCollection } from "@/lib/collections";
 import { FAVORITE_SUBJECT, isFavourited } from "@/lib/favorites";
 import { MODERATION_STATUS } from "@/lib/moderation";
 import { prisma } from "@/lib/prisma";
+import { relatedStickers } from "@/lib/search/query";
 import {
   PROCESSING_STATUS,
   VISIBILITY,
@@ -127,6 +128,10 @@ export default async function StickerDetailPage({
 
   const creditLabel = sticker.blobber?.displayName ?? "";
   const blobberHref = sticker.blobber ? `/blobbers/${sticker.blobber.id}` : null;
+
+  const related = isPublicBrowseable(sticker)
+    ? await relatedStickers(sticker.id, 8)
+    : [];
 
   return (
     <section className="mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-16">
@@ -294,8 +299,38 @@ export default async function StickerDetailPage({
             initialBlobber={claimBlobber}
             alreadyPending={!!pendingClaim}
           />
+
+          <p className="mt-4 text-xs text-inactive">
+            Popularity {sticker.popularityScore.toString()} ·{" "}
+            {sticker.likesCount.toString()} likes ·{" "}
+            {sticker.collectionMembershipCount.toString()} collections ·{" "}
+            {sticker.printMembershipCount.toString()} prints
+          </p>
         </div>
       </div>
+
+      {related.length > 0 ? (
+        <div className="mt-16">
+          <p className="text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-accent-pink">
+            related
+          </p>
+          <h2 className="zune-header mt-1 text-3xl font-light lowercase tracking-tight">
+            more like this
+          </h2>
+          <ul className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {related.map((r) => (
+              <li key={r.id}>
+                <Link
+                  href={`/stickers/${r.slug}`}
+                  className="block rounded-[28px] border border-divider bg-surface p-3 transition hover:border-accent-pink/40"
+                >
+                  <p className="truncate font-medium">{r.title}</p>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </section>
   );
 }

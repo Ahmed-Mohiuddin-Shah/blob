@@ -49,7 +49,17 @@ export type PackJobPayload = {
   }>;
 };
 
+export type SearchEnrichJobPayload = {
+  kind: typeof JOB_TYPE.searchEnrich;
+  stickerId: string;
+  slug: string;
+  title: string;
+  glassObjectId: string;
+  mimeType: string;
+};
+
 export type JobPayload =
   | CompositionJobPayload
   | SheetJobPayload
-  | PackJobPayload;
+  | PackJobPayload
+  | SearchEnrichJobPayload;

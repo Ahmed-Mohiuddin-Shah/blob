@@ -4,6 +4,8 @@ import { getSession } from "@/lib/auth";
 import { canModerate } from "@/lib/capabilities";
 import { discardNonCurrentRevisionMedia } from "@/lib/composition-encode";
 import { getGlass, getPublicPrismId } from "@/lib/glass";
+import { enqueueJob } from "@/lib/jobs/enqueue";
+import { JOB_TYPE } from "@/lib/jobs/types";
 import {
   MODERATION_ACTION,
   MODERATION_STATUS,
@@ -11,6 +13,7 @@ import {
   recordModerationEvent,
 } from "@/lib/moderation";
 import { prisma } from "@/lib/prisma";
+import { SEARCH_META_STATUS } from "@/lib/search/constants";
 import { PROCESSING_STATUS, VISIBILITY } from "@/lib/stickers";
 
 async function requireAdminUser() {
@@ -79,12 +82,20 @@ export async function POST(
       }
     }
 
+    const needsEnrich =
+      sticker.searchMetaStatus === SEARCH_META_STATUS.none ||
+      sticker.searchMetaStatus === SEARCH_META_STATUS.stale ||
+      sticker.searchMetaStatus === SEARCH_META_STATUS.approved;
+
     await prisma.sticker.update({
       where: { id: sticker.id },
       data: {
         moderationStatus: MODERATION_STATUS.approved,
         moderationNote: null,
         publishedAt: sticker.publishedAt ?? new Date(),
+        ...(needsEnrich
+          ? { searchMetaStatus: SEARCH_META_STATUS.enriching }
+          : {}),
       },
     });
 
@@ -98,6 +109,10 @@ export async function POST(
       action: MODERATION_ACTION.approved,
       actorId: admin.id,
     });
+
+    if (needsEnrich) {
+      enqueueJob(JOB_TYPE.searchEnrich, sticker.id);
+    }
 
     return NextResponse.json({ ok: true, status: MODERATION_STATUS.approved });
   } catch (err) {

@@ -64,40 +64,68 @@ export async function GET(request: Request) {
     });
   }
 
-  const where: {
-    OR?: object[];
-  } = {};
-
-  if (q) {
-    where.OR = [
-      { name: { contains: q, mode: "insensitive" } },
-      {
-        items: {
-          some: {
-            subjectType: COLLECTION_ITEM.sticker,
-            // title search via sticker join not available polymorphically — name only for non-stickers
-          },
-        },
-      },
-    ];
+  let meiliIds: bigint[] | null = null;
+  if (q && !cursor) {
+    try {
+      const { meiliScopedSearch } = await import("@/lib/search/query");
+      const { isMeiliConfigured } = await import("@/lib/meili/client");
+      if (isMeiliConfigured()) {
+        const found = await meiliScopedSearch({
+          index: "collections",
+          q,
+          mode: "hybrid",
+          limit: PAGE + 1,
+        });
+        if (found.engine === "meili") {
+          meiliIds = found.hits
+            .map((h) => {
+              try {
+                return BigInt(h.id);
+              } catch {
+                return null;
+              }
+            })
+            .filter((x): x is bigint => x != null);
+        }
+      }
+    } catch {
+      meiliIds = null;
+    }
   }
 
-  const rows = await prisma.collection.findMany({
-    where: q
-      ? {
-          OR: [
-            { name: { contains: q, mode: "insensitive" } },
-            { description: { contains: q, mode: "insensitive" } },
-          ],
-        }
-      : {},
-    take: PAGE + 1,
-    ...(cursor ? { cursor: { id: BigInt(cursor) }, skip: 1 } : {}),
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    include: listInclude,
-  });
+  const rows =
+    meiliIds != null
+      ? meiliIds.length
+        ? await prisma.collection
+            .findMany({
+              where: { id: { in: meiliIds } },
+              include: listInclude,
+            })
+            .then((list) => {
+              const order = new Map(meiliIds!.map((id, i) => [id.toString(), i]));
+              return list.sort(
+                (a, b) =>
+                  (order.get(a.id.toString()) ?? 0) -
+                  (order.get(b.id.toString()) ?? 0),
+              );
+            })
+        : []
+      : await prisma.collection.findMany({
+          where: q
+            ? {
+                OR: [
+                  { name: { contains: q, mode: "insensitive" } },
+                  { description: { contains: q, mode: "insensitive" } },
+                ],
+              }
+            : {},
+          take: PAGE + 1,
+          ...(cursor ? { cursor: { id: BigInt(cursor) }, skip: 1 } : {}),
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          include: listInclude,
+        });
 
-  const hasMore = rows.length > PAGE;
+  const hasMore = meiliIds != null ? false : rows.length > PAGE;
   const page = hasMore ? rows.slice(0, PAGE) : rows;
   const nextCursor = hasMore ? page[page.length - 1]!.id.toString() : null;
 

@@ -278,8 +278,21 @@ model Sticker {
   downloadsCount         BigInt    @default(0) @map("downloads_count")
   /// Denormalized count of favorites where subject_type=sticker. Updated on favourite toggle.
   likesCount             BigInt    @default(0) @map("likes_count")
+  /// Collections that include this sticker (subject_type=sticker).
+  collectionMembershipCount BigInt @default(0) @map("collection_membership_count")
+  /// Sheets + packs that include this sticker.
+  printMembershipCount   BigInt    @default(0) @map("print_membership_count")
+  /// likesCount + collectionMembershipCount + printMembershipCount
+  popularityScore        BigInt    @default(0) @map("popularity_score")
   sharesCount            BigInt    @default(0) @map("shares_count")
   searchAppearancesCount BigInt    @default(0) @map("search_appearances_count")
+  /// none | enriching | pending_search_meta | approved | stale
+  searchMetaStatus       String    @default("none") @map("search_meta_status") @db.VarChar(30)
+  aiCaption              String?   @map("ai_caption")
+  aiScenario             String?   @map("ai_scenario")
+  /// JSON string array of visual tags from vision caption.
+  aiVisualTags           String?   @map("ai_visual_tags")
+  searchIndexedAt        DateTime? @map("search_indexed_at") @db.Timestamptz(6)
   publishedAt            DateTime? @map("published_at") @db.Timestamptz(6)
   createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt              DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)

@@ -15,6 +15,7 @@ import type {
   CompositionJobPayload,
   JobPayload,
   PackJobPayload,
+  SearchEnrichJobPayload,
   SheetJobPayload,
 } from "../lib/jobs/payload-types";
 import { JOB_TYPE } from "../lib/jobs/types";
@@ -54,6 +55,10 @@ export async function runWorkerJob(
   glassUrl: string,
   glassKey: string,
 ): Promise<unknown> {
+  if (payload.kind === JOB_TYPE.searchEnrich) {
+    return runSearchEnrich(payload, glassUrl, glassKey);
+  }
+
   ensureNodeCanvas();
   const glass = glassClient(glassUrl, glassKey);
 
@@ -64,6 +69,71 @@ export async function runWorkerJob(
     return runSheet(payload, glass);
   }
   return runPack(payload, glass);
+}
+
+async function runSearchEnrich(
+  payload: SearchEnrichJobPayload,
+  glassUrl: string,
+  glassKey: string,
+): Promise<{
+  aiCaption: string;
+  aiScenario: string;
+  aiVisualTags: string[];
+}> {
+  const ollamaBase = (process.env.OLLAMA_BASE_URL || "").replace(/\/$/, "");
+  if (!ollamaBase) throw new Error("OLLAMA_BASE_URL is not set on worker");
+  const model = process.env.OLLAMA_VISION_MODEL?.trim() || "moondream";
+
+  const glass = glassClient(glassUrl, glassKey);
+  const res = await glass.objects.download(payload.glassObjectId);
+  const b64 = Buffer.from(await res.arrayBuffer()).toString("base64");
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  const key = process.env.OLLAMA_API_KEY?.trim();
+  if (key) headers.Authorization = `Bearer ${key}`;
+
+  const chatRes = await fetch(`${ollamaBase}/api/chat`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      model,
+      stream: false,
+      messages: [
+        {
+          role: "user",
+          content: `Describe this sticker for search. Reply with ONLY JSON:
+{"caption":"one sentence visual description","scenario":"when someone would use this sticker","tags":["SHORT","TAGS"]}`,
+          images: [b64],
+        },
+      ],
+    }),
+  });
+  if (!chatRes.ok) {
+    throw new Error(`Ollama chat ${chatRes.status}: ${await chatRes.text()}`);
+  }
+  const data = (await chatRes.json()) as { message?: { content?: string } };
+  const raw = data.message?.content?.trim() ?? "";
+  const start = raw.indexOf("{");
+  const end = raw.lastIndexOf("}");
+  const slice = start >= 0 && end > start ? raw.slice(start, end + 1) : raw;
+  try {
+    const parsed = JSON.parse(slice) as {
+      caption?: string;
+      scenario?: string;
+      tags?: string[];
+    };
+    return {
+      aiCaption: (parsed.caption ?? "").toString().slice(0, 1000),
+      aiScenario: (parsed.scenario ?? "").toString().slice(0, 1000),
+      aiVisualTags: Array.isArray(parsed.tags)
+        ? parsed.tags.map((t) => String(t).slice(0, 60)).slice(0, 24)
+        : [],
+    };
+  } catch {
+    return { aiCaption: raw.slice(0, 500), aiScenario: "", aiVisualTags: [] };
+  }
 }
 
 async function runComposition(

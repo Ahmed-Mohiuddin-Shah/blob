@@ -84,25 +84,76 @@ export async function GET(request: Request) {
     OR?: object[];
   } = { status: PRINT_STATUS.ready };
 
-  if (q) {
+  let meiliIds: bigint[] | null = null;
+  if (q && !cursor) {
+    try {
+      const { meiliScopedSearch } = await import("@/lib/search/query");
+      const { isMeiliConfigured } = await import("@/lib/meili/client");
+      if (isMeiliConfigured()) {
+        const found = await meiliScopedSearch({
+          index: "prints",
+          q,
+          mode: "hybrid",
+          limit: PAGE + 1,
+          filter: 'kind = "sheet"',
+        });
+        if (found.engine === "meili") {
+          meiliIds = found.hits
+            .map((h) => {
+              const raw = h.id.startsWith("sheet:") ? h.id.slice(6) : h.id;
+              try {
+                return BigInt(raw);
+              } catch {
+                return null;
+              }
+            })
+            .filter((x): x is bigint => x != null);
+        }
+      }
+    } catch {
+      meiliIds = null;
+    }
+  }
+
+  if (q && meiliIds === null) {
     where.OR = [
       { name: { contains: q, mode: "insensitive" } },
       { description: { contains: q, mode: "insensitive" } },
     ];
   }
 
-  const rows = await prisma.stickerSheet.findMany({
-    where,
-    take: PAGE + 1,
-    ...(cursor ? { cursor: { id: BigInt(cursor) }, skip: 1 } : {}),
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    include: {
-      createdBy: { select: { username: true, displayName: true } },
-      stickers: { select: { stickerId: true } },
-    },
-  });
+  const rows =
+    meiliIds != null
+      ? meiliIds.length
+        ? await prisma.stickerSheet
+            .findMany({
+              where: { ...where, id: { in: meiliIds } },
+              include: {
+                createdBy: { select: { username: true, displayName: true } },
+                stickers: { select: { stickerId: true } },
+              },
+            })
+            .then((list) => {
+              const order = new Map(meiliIds!.map((id, i) => [id.toString(), i]));
+              return list.sort(
+                (a, b) =>
+                  (order.get(a.id.toString()) ?? 0) -
+                  (order.get(b.id.toString()) ?? 0),
+              );
+            })
+        : []
+      : await prisma.stickerSheet.findMany({
+          where,
+          take: PAGE + 1,
+          ...(cursor ? { cursor: { id: BigInt(cursor) }, skip: 1 } : {}),
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          include: {
+            createdBy: { select: { username: true, displayName: true } },
+            stickers: { select: { stickerId: true } },
+          },
+        });
 
-  const hasMore = rows.length > PAGE;
+  const hasMore = meiliIds != null ? false : rows.length > PAGE;
   const page = hasMore ? rows.slice(0, PAGE) : rows;
 
   const user = await sessionUser();
@@ -269,6 +320,13 @@ export async function POST(request: Request) {
       stickers: { select: { stickerId: true } },
     },
   });
+
+  for (const stickerId of stickerIds) {
+    const { recomputeStickerPopularity } = await import(
+      "@/lib/search/popularity"
+    );
+    void recomputeStickerPopularity(stickerId);
+  }
 
   // Await encode in-request — void enqueue was dropped by Next after the response,
   // leaving sheets stuck on pending (and invisible on the ready-only /prints list).

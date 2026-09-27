@@ -82,5 +82,13 @@ export async function DELETE(request: Request, ctx: Ctx) {
       },
     },
   });
+  if (subjectType === COLLECTION_ITEM.sticker) {
+    const { recomputeStickerPopularity } = await import(
+      "@/lib/search/popularity"
+    );
+    const { syncCollectionSearch } = await import("@/lib/search/sync");
+    void recomputeStickerPopularity(subjectId);
+    syncCollectionSearch(collection.id);
+  }
   return NextResponse.json({ ok: true });
 }

@@ -1,6 +1,6 @@
 # Docker
 
-`docker compose up -d --build` starts the Next.js app (+ worker WSS), Postgres, and daily DB backups.
+`docker compose up -d --build` starts the Next.js app (+ worker WSS), Postgres, Meilisearch, and daily DB backups.
 
 Remote encode workers use a **separate** compose file and env — see [Worker compose](#worker-compose) below.
 
@@ -9,12 +9,14 @@ Remote encode workers use a **separate** compose file and env — see [Worker co
 | Service | Role |
 |---------|------|
 | `app` | Next.js + worker WSS (`tsx server.ts` on :3000), runs `prisma migrate deploy` on boot |
+| `meilisearch` | Keyword + hybrid + multimodal search (v1.16+) |
 | `db` | Postgres 16 |
 | `pgbackups` | Daily gzipped dumps into `./storage/backups/postgres/` (14 days) |
 
 Host ports (from `.env`):
 
 - App: `APP_PORT` → container 3000 (default 8080)
+- Meili: `MEILI_PUBLISH_PORT` → 7700 (default 7700)
 - DB: `DB_PUBLISH_PORT` → 5432 (default 5433)
 
 ## Env
@@ -28,6 +30,32 @@ Copy `.env.example` → `.env`. Required:
 - `ZITADEL_SERVICE_PAT`, `ZITADEL_ORG_ID`, `ZITADEL_PROJECT_ID` (Management API)
 - For Glass uploads: `GLASS_API_URL`, `GLASS_API_KEY` (public PRISM is created by the app into `public_prism`)
 - Optional: `WORKER_LEASE_SECONDS` (default 120) — how long a claimed job stays leased before reclaim
+- Search: `MEILI_HOST`, `MEILI_MASTER_KEY` (required for compose `meilisearch`), optional `MEILI_SEARCH_KEY`
+- Ollama: `OLLAMA_BASE_URL`, optional `OLLAMA_API_KEY` (required if using `docker-compose.proxy.yml` / `ollama-auth-proxy`), `OLLAMA_EMBED_MODEL`, `OLLAMA_VISION_MODEL`, `OLLAMA_AGENT_MODEL`
+- Multimodal CLIP REST (self-hosted beside Ollama): `MEILI_MULTIMODAL_URL`, `MEILI_MULTIMODAL_MODEL`, optional `MEILI_MULTIMODAL_API_KEY`
+
+### Self-hosted CLIP (`docker-compose.clip.yml`)
+
+Meilisearch multimodal calls OpenAI-shaped `POST /v1/embeddings`. This repo ships a small OpenCLIP server under `clip-server/` — run it on the **same GPU host as Ollama** (not on the blob app host unless that machine has the GPU).
+
+```bash
+# On the Ollama / GPU machine
+cp .env.clip.example .env.clip
+docker compose -f docker-compose.clip.yml up -d --build
+curl -s http://127.0.0.1:8081/health
+```
+
+Needs [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html). For CPU-only testing set `CLIP_DEVICE=cpu` in `.env.clip` (slow).
+
+Put TLS in front (Caddy/nginx) like Ollama, e.g. `https://clip.mamajees.com`, then on the **blob** `.env`:
+
+```bash
+MEILI_MULTIMODAL_URL=https://clip.mamajees.com   # no path; app appends /v1/embeddings
+MEILI_MULTIMODAL_MODEL=openclip-vit-b-32         # must match CLIP_MODEL_ID
+# MEILI_MULTIMODAL_API_KEY=...                  # same as CLIP_API_KEY if set
+```
+
+Default weights are `ViT-B-32` / `laion2b_s34b_b79k` (~1–2GB VRAM). Idle unload (`CLIP_IDLE_UNLOAD_SECONDS=300`) frees the 1060 for Ollama. Meili must reach the CLIP URL **and** sticker `previewUrl`s (`AUTH_URL`) when indexing images. Without `MEILI_MULTIMODAL_*`, keyword + Ollama text hybrid still work; Image mode stays off.
 
 Zitadel app settings (must match exactly):
 

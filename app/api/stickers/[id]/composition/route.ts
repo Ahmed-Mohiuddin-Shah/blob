@@ -15,6 +15,7 @@ import {
 } from "@/lib/moderation";
 import { prisma } from "@/lib/prisma";
 import { ensurePrivatePrism } from "@/lib/private-prism";
+import { SEARCH_META_STATUS } from "@/lib/search/constants";
 import { canOwnerEditSticker, PROCESSING_STATUS } from "@/lib/stickers";
 
 async function sessionUser() {
@@ -111,7 +112,11 @@ export async function POST(
           processingStatus: PROCESSING_STATUS.processing,
           processingError: null,
           ...(requeueReview
-            ? { moderationStatus: MODERATION_STATUS.pendingReview, moderationNote: null }
+            ? {
+                moderationStatus: MODERATION_STATUS.pendingReview,
+                moderationNote: null,
+                searchMetaStatus: SEARCH_META_STATUS.stale,
+              }
             : {}),
         },
       });

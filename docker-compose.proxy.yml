@@ -1,0 +1,28 @@
+# Auth gate in front of local Ollama — run on the GPU/Ollama host.
+#
+# 1. Bind Ollama to loopback :11435 only (so the open API is not public):
+#      OLLAMA_HOST=127.0.0.1:11435 ollama serve
+#    or systemd: Environment=OLLAMA_HOST=127.0.0.1:11435
+#
+# 2. Mint keys + start proxy (publishes 0.0.0.0:11434 → 127.0.0.1:11435):
+#      cp ollama-auth-proxy/.env.proxy.example .env.proxy
+#      node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+#      # paste into OLLAMA_PROXY_API_KEYS (comma-separate for multiple)
+#      docker compose -f docker-compose.proxy.yml up -d --build
+#
+# 3. Clients hit http://host:11434 with Authorization: Bearer <key>
+#    (Blob: OLLAMA_BASE_URL + OLLAMA_API_KEY)
+
+name: blob-ollama-proxy
+
+services:
+  ollama-auth-proxy:
+    build: ./ollama-auth-proxy
+    restart: unless-stopped
+    # host network so 0.0.0.0:11434 and 127.0.0.1:11435 are the host's ports
+    network_mode: host
+    env_file: .env.proxy
+    environment:
+      LISTEN_PORT: ${LISTEN_PORT:-11434}
+      UPSTREAM_HOST: ${UPSTREAM_HOST:-127.0.0.1}
+      UPSTREAM_PORT: ${UPSTREAM_PORT:-11435}

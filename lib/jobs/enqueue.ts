@@ -12,7 +12,12 @@ import {
 import { prisma } from "@/lib/prisma";
 
 function subjectTypeFor(type: JobType) {
-  if (type === JOB_TYPE.compositionEncode) return JOB_SUBJECT.sticker;
+  if (
+    type === JOB_TYPE.compositionEncode ||
+    type === JOB_TYPE.searchEnrich
+  ) {
+    return JOB_SUBJECT.sticker;
+  }
   if (type === JOB_TYPE.sheetEncode) return JOB_SUBJECT.stickerSheet;
   return JOB_SUBJECT.stickerPack;
 }
