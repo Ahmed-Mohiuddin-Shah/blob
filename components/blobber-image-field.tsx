@@ -2,6 +2,8 @@
 
 import { useRef, useState } from "react";
 import { BusyButton } from "./busy-button";
+import { blobberImageHint } from "@/lib/blobber-image-spec";
+import { prepareBlobberImageClient } from "@/lib/prepare-blobber-image-client";
 
 type Props = {
   label: string;
@@ -35,11 +37,19 @@ export function BlobberImageField({
     if (!file || disabled) return;
     setBusy(true);
     setError(null);
-    const local = URL.createObjectURL(file);
+    let prepared: File;
+    try {
+      prepared = await prepareBlobberImageClient(file, kind);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not process image");
+      setBusy(false);
+      return;
+    }
+    const local = URL.createObjectURL(prepared);
     setLocalPreview(local);
     try {
       const form = new FormData();
-      form.set("file", file);
+      form.set("file", prepared);
       form.set("kind", kind);
       form.set("mode", mode);
       if (blobberId) form.set("blobberId", blobberId);
@@ -67,6 +77,7 @@ export function BlobberImageField({
   return (
     <div className="space-y-2">
       <span className="text-secondary">{label}</span>
+      <p className="text-xs text-inactive">{blobberImageHint(kind)}</p>
       <div
         className={`relative overflow-hidden rounded-[1.5rem] border border-divider bg-surface ${
           kind === "banner" ? "h-28" : "h-24 w-24"

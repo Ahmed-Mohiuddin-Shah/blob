@@ -55,3 +55,35 @@ describe("isHttpUrl", () => {
     expect(isHttpUrl("ftp://x")).toBe(false);
   });
 });
+
+describe("prepareBlobberImage", () => {
+  it("cover-crops and stays under size caps", async () => {
+    const { default: sharp } = await import("sharp");
+    const { prepareBlobberImage } = await import("@/lib/prepare-blobber-image");
+    const { BLOBBER_IMAGE } = await import("@/lib/blobber-image-spec");
+
+    const raw = await sharp({
+      create: {
+        width: 2400,
+        height: 1600,
+        channels: 3,
+        background: { r: 240, g: 20, b: 160 },
+      },
+    })
+      .png()
+      .toBuffer();
+
+    const banner = await prepareBlobberImage(raw, "banner");
+    expect(banner.mime).toBe("image/jpeg");
+    expect(banner.bytes.length).toBeLessThanOrEqual(BLOBBER_IMAGE.banner.maxBytes);
+    const bMeta = await sharp(Buffer.from(banner.bytes)).metadata();
+    expect(bMeta.width).toBe(BLOBBER_IMAGE.banner.width);
+    expect(bMeta.height).toBe(BLOBBER_IMAGE.banner.height);
+
+    const avatar = await prepareBlobberImage(raw, "avatar");
+    expect(avatar.bytes.length).toBeLessThanOrEqual(BLOBBER_IMAGE.avatar.maxBytes);
+    const aMeta = await sharp(Buffer.from(avatar.bytes)).metadata();
+    expect(aMeta.width).toBe(BLOBBER_IMAGE.avatar.width);
+    expect(aMeta.height).toBe(BLOBBER_IMAGE.avatar.height);
+  });
+});

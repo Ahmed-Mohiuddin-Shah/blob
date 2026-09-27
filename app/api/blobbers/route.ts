@@ -36,10 +36,23 @@ export async function GET(request: Request) {
     });
   }
 
+  const hasPublicSticker = {
+    stickers: {
+      some: {
+        visibility: VISIBILITY.public,
+        moderationStatus: MODERATION_STATUS.approved,
+        processingStatus: PROCESSING_STATUS.ready,
+      },
+    },
+  } as const;
+
   const rows = await prisma.blobber.findMany({
     where: q
-      ? { displayName: { contains: q, mode: "insensitive" } }
-      : undefined,
+      ? {
+          displayName: { contains: q, mode: "insensitive" },
+          ...hasPublicSticker,
+        }
+      : { ...hasPublicSticker },
     take: PAGE + 1,
     ...(cursor ? { cursor: { id: BigInt(cursor) }, skip: 1 } : {}),
     orderBy: [{ updatedAt: "desc" }, { id: "desc" }],

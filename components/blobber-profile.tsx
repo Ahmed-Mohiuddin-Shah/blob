@@ -101,9 +101,9 @@ export function BlobberProfile({ profile }: { profile: Profile }) {
 
   return (
     <div>
-      <div className="relative overflow-hidden rounded-[2rem] border border-divider bg-surface">
+      <div className="relative rounded-[2rem] border border-divider bg-surface">
         <div
-          className="h-36 bg-accent-gradient sm:h-48"
+          className="h-36 overflow-hidden rounded-t-[2rem] bg-accent-gradient sm:h-48"
           style={
             bannerUrl
               ? {
@@ -131,11 +131,12 @@ export function BlobberProfile({ profile }: { profile: Profile }) {
                 />
               )}
             </div>
-            <div className="min-w-0 flex-1 pb-1">
+            <div className="min-w-0 flex-1 overflow-visible pb-1">
               <p className="text-xs font-bold uppercase tracking-wider text-inactive">
                 Blobber
               </p>
-              <h1 className="truncate text-3xl font-light lowercase tracking-tight sm:text-4xl">
+              {/* Zune: oversized title sits on margin; overflow visible so descenders aren't clipped */}
+              <h1 className="overflow-visible break-words py-0.5 text-3xl font-light lowercase leading-tight tracking-tight sm:text-4xl">
                 {profile.displayName}
               </h1>
             </div>

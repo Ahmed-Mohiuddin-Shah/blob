@@ -1,30 +1,51 @@
 import { createHash } from "crypto";
 import { getGlass, getPublicPrismId } from "@/lib/glass";
+import { BLOBBER_IMAGE_UPLOAD_MAX_BYTES } from "@/lib/blobber-image-spec";
+import { prepareBlobberImage } from "@/lib/prepare-blobber-image";
 
 export type BlobberMediaKind = "banner" | "avatar";
 
-const MAX_BYTES = 8 * 1024 * 1024;
 const ALLOWED = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 
-export function validateBlobberImage(
-  bytes: Uint8Array,
-  mime: string,
-): { error: string } | { mime: string; ext: string } {
-  if (bytes.length === 0) return { error: "Empty file" };
-  if (bytes.length > MAX_BYTES) return { error: "Image too large (max 8 MiB)" };
-  const m = mime.toLowerCase();
-  if (!ALLOWED.has(m)) {
-    return { error: "Use PNG, JPEG, WebP, or GIF" };
+function assertUploadable(bytes: Uint8Array, mime: string) {
+  if (bytes.length === 0) throw new Error("Empty file");
+  if (bytes.length > BLOBBER_IMAGE_UPLOAD_MAX_BYTES) {
+    throw new Error("File too large (max 20 MiB before processing)");
   }
-  const ext =
-    m === "image/png"
-      ? "png"
-      : m === "image/webp"
-        ? "webp"
-        : m === "image/gif"
-          ? "gif"
-          : "jpg";
-  return { mime: m, ext };
+  const m = mime.toLowerCase();
+  if (!ALLOWED.has(m) && m !== "application/octet-stream") {
+    throw new Error("Use PNG, JPEG, WebP, or GIF");
+  }
+}
+
+async function storePrepared(opts: {
+  bytes: Uint8Array;
+  kind: BlobberMediaKind;
+  title?: string;
+  objectId?: string;
+}): Promise<string> {
+  const glass = getGlass();
+  const checksum = createHash("sha256").update(opts.bytes).digest("hex");
+
+  if (opts.objectId) {
+    await glass.objects.putBytes({
+      objectId: opts.objectId,
+      file: opts.bytes,
+      checksum,
+      filename: `${opts.kind}.jpg`,
+    });
+    return opts.objectId;
+  }
+
+  const prismId = await getPublicPrismId();
+  const uploaded = await glass.objects.upload({
+    prismId,
+    file: opts.bytes,
+    title: opts.title ?? `blobber-${opts.kind}`,
+    filename: `${opts.kind}.jpg`,
+    fileExtension: "jpg",
+  });
+  return uploaded.object_id;
 }
 
 /** Upload a new object into the public PRISM (for staging / first image). */
@@ -34,19 +55,13 @@ export async function uploadBlobberImage(opts: {
   kind: BlobberMediaKind;
   title?: string;
 }): Promise<string> {
-  const checked = validateBlobberImage(opts.bytes, opts.mime);
-  if ("error" in checked) throw new Error(checked.error);
-
-  const prismId = await getPublicPrismId();
-  const glass = getGlass();
-  const uploaded = await glass.objects.upload({
-    prismId,
-    file: opts.bytes,
-    title: opts.title ?? `blobber-${opts.kind}`,
-    filename: `${opts.kind}.${checked.ext}`,
-    fileExtension: checked.ext,
+  assertUploadable(opts.bytes, opts.mime);
+  const prepared = await prepareBlobberImage(opts.bytes, opts.kind);
+  return storePrepared({
+    bytes: prepared.bytes,
+    kind: opts.kind,
+    title: opts.title,
   });
-  return uploaded.object_id;
 }
 
 /** Overwrite bytes of an existing Glass object (same UUID). */
@@ -56,16 +71,12 @@ export async function overwriteBlobberImage(opts: {
   mime: string;
   kind: BlobberMediaKind;
 }): Promise<void> {
-  const checked = validateBlobberImage(opts.bytes, opts.mime);
-  if ("error" in checked) throw new Error(checked.error);
-
-  const glass = getGlass();
-  const checksum = createHash("sha256").update(opts.bytes).digest("hex");
-  await glass.objects.putBytes({
+  assertUploadable(opts.bytes, opts.mime);
+  const prepared = await prepareBlobberImage(opts.bytes, opts.kind);
+  await storePrepared({
+    bytes: prepared.bytes,
+    kind: opts.kind,
     objectId: opts.objectId,
-    file: opts.bytes,
-    checksum,
-    filename: `${opts.kind}.${checked.ext}`,
   });
 }
 
@@ -107,8 +118,8 @@ async function mergeOne(
     throw new Error(`Failed to read proposed ${kind} image`);
   }
   const bytes = new Uint8Array(await res.arrayBuffer());
-  const mime = res.headers.get("content-type") || "image/png";
-  await overwriteBlobberImage({ objectId: liveId, bytes, mime, kind });
+  // Already processed at upload — copy bytes as-is into live UUID.
+  await storePrepared({ objectId: liveId, bytes, kind });
   try {
     await glass.objects.delete(proposedId);
   } catch {
