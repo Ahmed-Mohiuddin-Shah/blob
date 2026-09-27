@@ -18,7 +18,7 @@ media_asset_status: pending | ready | failed
 attribution_claim_reason: missing | mislabeled
 attribution_claim_status: pending | approved | rejected
 blobber_request_status: pending | approved | rejected | needs_edit
-social_link_type: youtube | instagram | internet | other
+social_link_type: youtube | instagram | internet | merch | other
 print_format: pdf | png
 print_status: pending | ready | failed
 collection_item_type: sticker | sticker_sheet | sticker_pack

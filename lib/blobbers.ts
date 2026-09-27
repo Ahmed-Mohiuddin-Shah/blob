@@ -6,6 +6,7 @@ export const SOCIAL_LINK_TYPES = [
   "youtube",
   "instagram",
   "internet",
+  "merch",
   "other",
 ] as const;
 export type SocialLinkType = (typeof SOCIAL_LINK_TYPES)[number];

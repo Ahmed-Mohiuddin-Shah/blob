@@ -47,6 +47,22 @@ describe("parseCmsPayload", () => {
       }),
     ).toEqual({ error: "Each social link needs a handle and http(s) URL" });
   });
+
+  it("accepts merch store links", () => {
+    const parsed = parseCmsPayload({
+      displayName: "Ada",
+      socialLinks: [
+        {
+          linkType: "merch",
+          handle: "shop",
+          url: "https://shop.example.com/ada",
+        },
+      ],
+    });
+    expect(parsed).toMatchObject({
+      socialLinks: [{ linkType: "merch", handle: "shop" }],
+    });
+  });
 });
 
 describe("isHttpUrl", () => {
