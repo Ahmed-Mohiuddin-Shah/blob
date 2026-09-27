@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { UnlinkedBlobberEditForm } from "@/components/unlinked-blobber-edit-form";
+import { liveCmsSnapshot } from "@/lib/blobbers";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/require-user";
 
@@ -20,6 +21,7 @@ export default async function UnlinkedBlobberEditPage({
 
   const blobber = await prisma.blobber.findUnique({
     where: { id: blobberId },
+    include: { socialLinks: { include: { socialLink: true } } },
   });
   if (!blobber || blobber.userId != null) notFound();
 
@@ -39,9 +41,7 @@ export default async function UnlinkedBlobberEditPage({
       <div className="mt-8">
         <UnlinkedBlobberEditForm
           blobberId={blobber.id.toString()}
-          displayName={blobber.displayName}
-          bannerGlassObjectId={blobber.bannerGlassObjectId}
-          avatarGlassObjectId={blobber.avatarGlassObjectId}
+          initial={liveCmsSnapshot(blobber)}
         />
       </div>
     </div>

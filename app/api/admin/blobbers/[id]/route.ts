@@ -1,12 +1,8 @@
 import { NextResponse } from "next/server";
 import {
-  findBlobberByName,
-  normalizeBlobberName,
+  applyCmsPayload,
+  parseCmsPayload,
 } from "@/lib/blobbers";
-import {
-  overwriteBlobberImage,
-  uploadBlobberImage,
-} from "@/lib/blobber-media";
 import { canModerate } from "@/lib/capabilities";
 import {
   MODERATION_ACTION,
@@ -27,7 +23,7 @@ async function requireAdminUser() {
   return user;
 }
 
-/** Direct admin edit of an unlinked Blobber (no change request). */
+/** Direct admin edit of an unlinked Blobber (full CMS, no change request). */
 export async function PATCH(
   request: Request,
   context: { params: Promise<{ id: string }> },
@@ -53,129 +49,63 @@ export async function PATCH(
 
   const contentType = request.headers.get("content-type") || "";
 
-  // Multipart: optional displayName + banner/avatar files
+  // Multipart: clear banner/avatar only (image replace uses /api/blobbers/media)
   if (contentType.includes("multipart/form-data")) {
     const form = await request.formData();
-    const displayNameRaw = String(form.get("displayName") ?? "").trim();
     const clearBanner = String(form.get("clearBanner") ?? "") === "1";
     const clearAvatar = String(form.get("clearAvatar") ?? "") === "1";
-    const bannerFile = form.get("banner");
-    const avatarFile = form.get("avatar");
-
-    let displayName = blobber.displayName;
-    if (displayNameRaw) {
-      displayName = normalizeBlobberName(displayNameRaw);
-      const clash = await findBlobberByName(displayName);
-      if (clash && clash.id !== blobber.id) {
-        return NextResponse.json(
-          { error: "Display name already taken" },
-          { status: 409 },
-        );
-      }
-    }
-
-    let bannerGlassObjectId = blobber.bannerGlassObjectId;
-    let avatarGlassObjectId = blobber.avatarGlassObjectId;
-
-    try {
-      if (clearBanner) bannerGlassObjectId = null;
-      if (clearAvatar) avatarGlassObjectId = null;
-
-      if (bannerFile instanceof File && bannerFile.size > 0) {
-        const bytes = new Uint8Array(await bannerFile.arrayBuffer());
-        const mime = bannerFile.type || "image/png";
-        if (bannerGlassObjectId) {
-          await overwriteBlobberImage({
-            objectId: bannerGlassObjectId,
-            bytes,
-            mime,
-            kind: "banner",
-          });
-        } else {
-          bannerGlassObjectId = await uploadBlobberImage({
-            bytes,
-            mime,
-            kind: "banner",
-          });
-        }
-      }
-
-      if (avatarFile instanceof File && avatarFile.size > 0) {
-        const bytes = new Uint8Array(await avatarFile.arrayBuffer());
-        const mime = avatarFile.type || "image/png";
-        if (avatarGlassObjectId) {
-          await overwriteBlobberImage({
-            objectId: avatarGlassObjectId,
-            bytes,
-            mime,
-            kind: "avatar",
-          });
-        } else {
-          avatarGlassObjectId = await uploadBlobberImage({
-            bytes,
-            mime,
-            kind: "avatar",
-          });
-        }
-      }
-    } catch (err) {
-      return NextResponse.json(
-        { error: err instanceof Error ? err.message : "Media update failed" },
-        { status: 502 },
-      );
+    if (!clearBanner && !clearAvatar) {
+      return NextResponse.json({ error: "Nothing to clear" }, { status: 400 });
     }
 
     await prisma.blobber.update({
       where: { id: blobber.id },
-      data: { displayName, bannerGlassObjectId, avatarGlassObjectId },
+      data: {
+        ...(clearBanner ? { bannerGlassObjectId: null } : {}),
+        ...(clearAvatar ? { avatarGlassObjectId: null } : {}),
+      },
     });
 
     await recordModerationEvent({
       subjectType: MODERATION_SUBJECT.blobber,
       subjectId: blobber.id,
-      subjectTitle: displayName,
+      subjectTitle: blobber.displayName,
       action: MODERATION_ACTION.edited,
       actorId: admin.id,
-      note: "Admin direct edit (unlinked Blobber)",
+      note: `Admin cleared ${[clearBanner && "banner", clearAvatar && "avatar"].filter(Boolean).join(" & ")} (unlinked Blobber)`,
     });
 
     return NextResponse.json({ ok: true });
   }
 
-  // JSON: displayName only
-  let body: Record<string, unknown>;
+  let body: unknown;
   try {
-    body = (await request.json()) as Record<string, unknown>;
+    body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid body" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const displayName = normalizeBlobberName(
-    typeof body.displayName === "string" ? body.displayName : "",
-  );
-  if (!displayName) {
-    return NextResponse.json({ error: "Display name required" }, { status: 400 });
+  const payload = parseCmsPayload(body);
+  if ("error" in payload) {
+    return NextResponse.json({ error: payload.error }, { status: 400 });
   }
-  const clash = await findBlobberByName(displayName);
-  if (clash && clash.id !== blobber.id) {
+
+  try {
+    await applyCmsPayload(blobber.id, payload);
+  } catch (err) {
     return NextResponse.json(
-      { error: "Display name already taken" },
-      { status: 409 },
+      { error: err instanceof Error ? err.message : "Save failed" },
+      { status: 400 },
     );
   }
-
-  await prisma.blobber.update({
-    where: { id: blobber.id },
-    data: { displayName },
-  });
 
   await recordModerationEvent({
     subjectType: MODERATION_SUBJECT.blobber,
     subjectId: blobber.id,
-    subjectTitle: displayName,
+    subjectTitle: payload.displayName,
     action: MODERATION_ACTION.edited,
     actorId: admin.id,
-    note: "Admin direct rename (unlinked Blobber)",
+    note: "Admin direct full edit (unlinked Blobber)",
   });
 
   return NextResponse.json({ ok: true });
