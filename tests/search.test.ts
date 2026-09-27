@@ -31,7 +31,7 @@ describe("search constants", () => {
   });
 
   it("uses hyphen print doc ids (Meili-safe)", () => {
-    expect(printSearchDocId("sheet", 7n)).toBe("sheet-7");
+    expect(printSearchDocId("sheet", BigInt(7))).toBe("sheet-7");
     expect(printSearchDocId("pack", "3")).toBe("pack-3");
   });
 
