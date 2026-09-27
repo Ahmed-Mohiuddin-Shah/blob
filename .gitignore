@@ -24,14 +24,11 @@
 *.log
 Thumbs.db
 
-# env
+# env — ignore every real dotenv; keep only *.example templates
 .env
-.env.clip
-.env.proxy
-.env.worker
-.env*.local
-.env.backup
-.env.production
+.env.*
+!.env.example
+!.env.*.example
 
 # vercel
 .vercel
