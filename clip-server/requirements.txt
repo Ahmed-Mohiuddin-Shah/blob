@@ -4,4 +4,5 @@ open-clip-torch==2.32.0
 Pillow==11.2.1
 httpx==0.28.1
 pydantic==2.11.4
-numpy==2.2.5
+# torch 2.1.x in the base image is built against NumPy 1.x
+numpy==1.26.4

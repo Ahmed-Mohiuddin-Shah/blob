@@ -45,7 +45,24 @@ docker compose -f docker-compose.clip.yml up -d --build
 curl -s http://127.0.0.1:8081/health
 ```
 
-Needs [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html). For CPU-only testing set `CLIP_DEVICE=cpu` in `.env.clip` (slow).
+Needs [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html). Compose uses `runtime: nvidia` (not `gpus: all`) to avoid CDI “no known GPU vendor” failures on older toolkit setups.
+
+If start fails with `unknown runtime nvidia` or GPU not visible inside the container:
+
+```bash
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo systemctl restart docker
+# optional CDI specs (newer Docker):
+# sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml
+nvidia-smi   # driver ok on host?
+docker compose -f docker-compose.clip.yml up -d --build
+```
+
+CPU-only (slow; no toolkit): set `CLIP_DEVICE=cpu` in `.env.clip`, then:
+
+```bash
+docker compose -f docker-compose.clip.yml -f docker-compose.clip.cpu.yml up -d --build
+```
 
 Put TLS in front (Caddy/nginx) like Ollama, e.g. `https://clip.mamajees.com`, then on the **blob** `.env`:
 

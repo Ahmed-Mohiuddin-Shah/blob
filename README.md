@@ -98,6 +98,13 @@ ollama pull moondream
 ollama pull qwen2.5:3b
 
 # CLIP server from this repo (copy clip-server + compose file, or clone the repo)
+# Needs NVIDIA Container Toolkit + driver (compose uses runtime: nvidia, not gpus: all —
+# avoids "failed to discover GPU vendor from CDI" on older toolkit setups).
+# Install: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo systemctl restart docker
+nvidia-smi   # host driver ok?
+
 cp .env.clip.example .env.clip
 docker compose -f docker-compose.clip.yml up -d --build
 curl -s http://127.0.0.1:8081/health
@@ -106,6 +113,8 @@ curl -s http://127.0.0.1:8081/v1/embeddings \
   -H 'Content-Type: application/json' \
   -d '{"model":"openclip-vit-b-32","input":[{"text":"angry cat sticker"}]}'
 ```
+
+If CLIP still fails with `unknown runtime nvidia` or CDI/GPU vendor errors, re-run the `nvidia-ctk` + Docker restart above. CPU-only fallback (slow): set `CLIP_DEVICE=cpu` in `.env.clip`, then `docker compose -f docker-compose.clip.yml -f docker-compose.clip.cpu.yml up -d --build`.
 
 Put HTTPS in front of services on that host, e.g. `https://ollama.example.com` → `127.0.0.1:11434`, `https://clip.example.com` → `127.0.0.1:8081`.
 

@@ -1,0 +1,10 @@
+# Override: no NVIDIA runtime (pair with docker-compose.clip.yml).
+#   CLIP_DEVICE=cpu in .env.clip
+#   docker compose -f docker-compose.clip.yml -f docker-compose.clip.cpu.yml up -d --build
+
+services:
+  clip:
+    runtime: runc
+    environment:
+      CLIP_DEVICE: cpu
+      NVIDIA_VISIBLE_DEVICES: ""
