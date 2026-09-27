@@ -15,25 +15,34 @@ export default async function ProfileLayout({
   const isAdmin = canManageUsers(caps);
   const isSuperadmin = canManageAdmins(caps);
 
-  const [pendingCount, needsEditCount, claimsCount] = await Promise.all([
-    prisma.sticker.count({
-      where: {
-        moderationStatus: MODERATION_STATUS.pendingReview,
-        ...(isAdmin ? {} : { uploadedById: user.id }),
-      },
-    }),
-    prisma.sticker.count({
-      where: {
-        moderationStatus: MODERATION_STATUS.needsEdit,
-        uploadedById: user.id,
-      },
-    }),
-    isAdmin
-      ? prisma.attributionClaim.count({
-          where: { status: CLAIM_STATUS.pending },
-        })
-      : Promise.resolve(0),
-  ]);
+  const [pendingCount, needsEditCount, claimsCount, blobberEditsCount, blobberAssocCount] =
+    await Promise.all([
+      prisma.sticker.count({
+        where: {
+          moderationStatus: MODERATION_STATUS.pendingReview,
+          ...(isAdmin ? {} : { uploadedById: user.id }),
+        },
+      }),
+      prisma.sticker.count({
+        where: {
+          moderationStatus: MODERATION_STATUS.needsEdit,
+          uploadedById: user.id,
+        },
+      }),
+      isAdmin
+        ? prisma.attributionClaim.count({
+            where: { status: CLAIM_STATUS.pending },
+          })
+        : Promise.resolve(0),
+      isAdmin
+        ? prisma.blobberEditRequest.count({ where: { status: "pending" } })
+        : Promise.resolve(0),
+      isAdmin
+        ? prisma.blobberAssociationRequest.count({
+            where: { status: "pending" },
+          })
+        : Promise.resolve(0),
+    ]);
 
   return (
     <section className="mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-16">
@@ -45,6 +54,8 @@ export default async function ProfileLayout({
           pendingCount={pendingCount}
           needsEditCount={needsEditCount}
           claimsCount={claimsCount}
+          blobberEditsCount={blobberEditsCount}
+          blobberAssocCount={blobberAssocCount}
           username={user.username}
         />
         <div className="min-w-0 flex-1">{children}</div>

@@ -3,7 +3,9 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { BusyButton } from "./busy-button";
+import { BlobberCombobox, type BlobberPick } from "./blobber-combobox";
 import type { CategoryOption } from "./sticker-create-form";
+import { TagPillsInput } from "./tag-pills-input";
 import { MODERATION_STATUS } from "@/lib/moderation";
 import { VISIBILITIES, VISIBILITY } from "@/lib/stickers";
 
@@ -13,9 +15,9 @@ export type StickerEditInitial = {
   description: string;
   visibility: string;
   categoryId: string;
-  tags: string;
-  hasAttribution: "yes" | "no";
-  authorName: string;
+  tags: string[];
+  attributionMode: "self" | "none" | "other";
+  blobber: BlobberPick | null;
   sourceUrl: string;
   moderationNote?: string | null;
   moderationStatus: string;
@@ -31,7 +33,10 @@ export function StickerEditForm({
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [hasAttribution, setHasAttribution] = useState(initial.hasAttribution);
+  const [attributionMode, setAttributionMode] = useState(initial.attributionMode);
+  const [blobber, setBlobber] = useState<BlobberPick | null>(initial.blobber);
+  const [tags, setTags] = useState<string[]>(initial.tags);
+  const [sourceUrl, setSourceUrl] = useState(initial.sourceUrl);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -44,10 +49,11 @@ export function StickerEditForm({
       description: String(fd.get("description") ?? "").trim(),
       visibility: String(fd.get("visibility") ?? VISIBILITY.public),
       categoryId: String(fd.get("categoryId") ?? ""),
-      tags: String(fd.get("tags") ?? ""),
-      hasAttribution: String(fd.get("hasAttribution") ?? ""),
-      authorName: String(fd.get("authorName") ?? ""),
-      sourceUrl: String(fd.get("sourceUrl") ?? ""),
+      tags: tags.join(", "),
+      attributionMode,
+      blobberId: blobber?.id ?? "",
+      blobberDisplayName: blobber?.displayName ?? "",
+      sourceUrl,
     };
     try {
       const res = await fetch(`/api/stickers/${initial.id}`, {
@@ -106,40 +112,39 @@ export function StickerEditForm({
       </label>
 
       <label className="block">
-        <span className="text-secondary">Has attribution?</span>
+        <span className="text-secondary">Attribution</span>
         <select
-          name="hasAttribution"
           required
-          value={hasAttribution}
-          onChange={(e) => setHasAttribution(e.target.value as "yes" | "no")}
+          value={attributionMode}
+          onChange={(e) => {
+            const mode = e.target.value as "self" | "none" | "other";
+            setAttributionMode(mode);
+            if (mode !== "other") {
+              setBlobber(null);
+              setSourceUrl("");
+            }
+          }}
           className="mt-1 w-full rounded-2xl border border-divider bg-surface px-4 py-2.5 outline-none"
         >
-          <option value="yes">Yes — credit a source</option>
-          <option value="no">No attribution</option>
+          <option value="self">Me (my Blobber)</option>
+          <option value="none">Unknown / no credit</option>
+          <option value="other">Another Blobber</option>
         </select>
       </label>
 
-      {hasAttribution === "yes" ? (
+      {attributionMode === "other" ? (
         <>
           <label className="block">
-            <span className="text-secondary">Attribution label</span>
-            <input
-              name="authorName"
-              required
-              maxLength={200}
-              defaultValue={initial.authorName}
-              placeholder="Artist or source name"
-              className="mt-1 w-full rounded-2xl border border-divider bg-surface px-4 py-2.5 outline-none transition focus:border-accent-pink/50"
-            />
+            <span className="text-secondary">Blobber</span>
+            <BlobberCombobox value={blobber} onChange={setBlobber} />
           </label>
           <label className="block">
-            <span className="text-secondary">Source link</span>
+            <span className="text-secondary">Source link (optional)</span>
             <input
-              name="sourceUrl"
               type="url"
-              required
               maxLength={2048}
-              defaultValue={initial.sourceUrl}
+              value={sourceUrl}
+              onChange={(e) => setSourceUrl(e.target.value)}
               placeholder="https://"
               className="mt-1 w-full rounded-2xl border border-divider bg-surface px-4 py-2.5 outline-none transition focus:border-accent-pink/50"
             />
@@ -183,15 +188,9 @@ export function StickerEditForm({
 
       <label className="block">
         <span className="text-secondary">Tags</span>
-        <input
-          name="tags"
-          defaultValue={initial.tags}
-          placeholder="CAT, ANGRY, MEME"
-          className="mt-1 w-full rounded-2xl border border-divider bg-surface px-4 py-2.5 outline-none transition focus:border-accent-pink/50"
-        />
-        <span className="mt-1 block text-xs text-secondary">
-          Comma-separated · saved as ALL CAPS
-        </span>
+        <div className="mt-1">
+          <TagPillsInput value={tags} onChange={setTags} />
+        </div>
       </label>
 
       {error ? (

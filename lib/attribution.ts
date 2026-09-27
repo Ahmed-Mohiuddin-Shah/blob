@@ -1,33 +1,4 @@
-/** Shared parse/validate for upload + edit attribution fields. */
-
-export type AttributionFields = {
-  authorName: string | null;
-  sourceUrl: string | null;
-};
-
-export function parseAttributionInput(input: {
-  hasAttribution: string;
-  authorName?: string;
-  sourceUrl?: string;
-}): AttributionFields | { error: string } {
-  const flag = input.hasAttribution.trim().toLowerCase();
-  if (flag !== "yes" && flag !== "no") {
-    return { error: "Has attribution must be Yes or No" };
-  }
-  if (flag === "no") {
-    return { authorName: null, sourceUrl: null };
-  }
-
-  const authorName = (input.authorName ?? "").trim().slice(0, 200);
-  const sourceUrl = (input.sourceUrl ?? "").trim().slice(0, 2048);
-  if (!authorName) {
-    return { error: "Attribution label required" };
-  }
-  if (!isHttpUrl(sourceUrl)) {
-    return { error: "Source link must be an http(s) URL" };
-  }
-  return { authorName, sourceUrl };
-}
+/** Shared claim constants + URL helper. Attribution parse lives in lib/blobbers.ts. */
 
 export function isHttpUrl(value: string): boolean {
   try {

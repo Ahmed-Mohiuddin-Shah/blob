@@ -11,12 +11,14 @@ account_status: active | pending | suspended | banned
 visibility: public | unlisted | private
 moderation_status: draft | pending_review | needs_edit | approved | rejected | hidden | deleted
 moderation_action: submitted | approved | rejected | edit_requested | resubmitted | edited | hidden | deleted | claim_submitted | claim_approved | claim_rejected
-moderation_subject_type: sticker | collection | attribution_claim
+moderation_subject_type: sticker | collection | attribution_claim | blobber_edit_request | blobber_association_request
 processing_status: processing | ready | failed
 media_kind: image | chat | thumbnail | mask | gif | video
 media_asset_status: pending | ready | failed
 attribution_claim_reason: missing | mislabeled
 attribution_claim_status: pending | approved | rejected
+blobber_request_status: pending | approved | rejected | needs_edit
+social_link_type: youtube | instagram | internet | other
 print_format: pdf | png
 print_status: pending | ready | failed
 collection_item_type: sticker | sticker_sheet | sticker_pack
@@ -99,12 +101,90 @@ Table tags {
 }
 
 # ---------------------------------------------------------------------------
+# Blobbers (public credit identity + CMS)
+# ---------------------------------------------------------------------------
+
+Table blobbers {
+  id bigserial [pk]
+  user_id bigint [null, unique, ref: > users.id, note: 'Linked account; null = unlinked external Blobber']
+  display_name varchar(200) [not null, note: 'Unique case-insensitive (lower(display_name) unique index)']
+  description text [null]
+  banner_glass_object_id uuid [null]
+  avatar_glass_object_id uuid [null]
+  show_stickers boolean [not null, default: true]
+  show_collections boolean [not null, default: true]
+  show_sticker_sheets boolean [not null, default: true]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  Note: 'Public profile at /blobbers/{id}. Live row = approved CMS state. Edits go through blobber_edit_requests.'
+}
+
+Table social_links {
+  id bigserial [pk]
+  link_type varchar(20) [not null, note: 'youtube | instagram | internet | other']
+  handle varchar(200) [not null]
+  url varchar(2048) [not null]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+}
+
+Table blobber_social_links {
+  blobber_id bigint [not null, ref: > blobbers.id]
+  social_link_id bigint [not null, ref: > social_links.id]
+
+  indexes {
+    (blobber_id, social_link_id) [pk]
+  }
+}
+
+Table blobber_edit_requests {
+  id bigserial [pk]
+  blobber_id bigint [not null, ref: > blobbers.id]
+  requester_id bigint [not null, ref: > users.id]
+  proposed_payload jsonb [not null, note: 'display_name, description, banner/avatar, section bools, social_links[]']
+  status varchar(20) [not null, default: 'pending', note: 'pending | approved | rejected | needs_edit']
+  admin_note text [null]
+  reviewed_by bigint [null, ref: > users.id]
+  reviewed_at timestamptz [null]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  indexes {
+    (status, created_at) [name: 'idx_blobber_edit_requests_queue']
+    blobber_id [name: 'idx_blobber_edit_requests_blobber']
+  }
+
+  Note: 'Public profile unchanged until approve. Admin UI shows live vs proposed side-by-side.'
+}
+
+Table blobber_association_requests {
+  id bigserial [pk]
+  requester_id bigint [not null, ref: > users.id]
+  target_blobber_id bigint [not null, ref: > blobbers.id]
+  message text [null]
+  status varchar(20) [not null, default: 'pending', note: 'pending | approved | rejected']
+  admin_note text [null]
+  reviewed_by bigint [null, ref: > users.id]
+  reviewed_at timestamptz [null]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  indexes {
+    (status, created_at) [name: 'idx_blobber_association_requests_queue']
+    (requester_id, target_blobber_id, status) [name: 'idx_blobber_association_requests_requester']
+  }
+
+  Note: 'On approve: clear old linked blobber.user_id (row kept), set target.user_id, re-point stickers from old → target.'
+}
+
+# ---------------------------------------------------------------------------
 # Shared moderation audit (stickers now; collections / packs / layouts later)
 # ---------------------------------------------------------------------------
 
 Table moderation_events {
   id bigserial [pk]
-  subject_type varchar(40) [not null, note: 'sticker | collection | sticker_pack | print_layout | attribution_claim']
+  subject_type varchar(40) [not null, note: 'sticker | collection | sticker_pack | print_layout | attribution_claim | blobber_edit_request | blobber_association_request']
   subject_id bigint [not null, note: 'No FK — survives hard delete of subject']
   subject_title varchar(220) [not null, note: 'Snapshot title for history after purge']
   action varchar(40) [not null, note: 'submitted | approved | rejected | edit_requested | resubmitted | edited | hidden | deleted | claim_submitted | claim_approved | claim_rejected']
@@ -192,9 +272,8 @@ Table stickers {
 
   category_id bigint [null, ref: > categories.id, note: 'Single primary category']
 
-  author_name varchar(200) [null, note: 'Credit label when Has attribution = Yes; null when No']
-  attribution text [null, note: 'Optional freeform credit text; v1 UI uses author_name + source_url']
-  source_url varchar(2048) [null, note: 'Source link when Has attribution = Yes; null when No']
+  blobber_id bigint [null, ref: > blobbers.id, note: 'Credit Blobber; null = unknown / no credit']
+  source_url varchar(2048) [null, note: 'External source link; null = muted credit (link to /blobbers/{id} only)']
   license varchar(100) [null]
   copyright_status varchar(50) [null]
 
@@ -221,9 +300,10 @@ Table stickers {
 
   indexes {
     remixed_from_sticker_id [name: 'idx_stickers_remixed_from']
+    blobber_id [name: 'idx_stickers_blobber']
   }
 
-  Note: 'Primary library object. Framing/edits live in compositions.document_json (1024²). fit_mode/pad_background removed. Published face = media_assets from current composition revision. Remix dual provenance: remixed_from_sticker_id (UI) + composition_parents (composition lineage). Reject = hard purge sticker (+ composition cascade); shared assets retained if still referenced. On approve, discard media_assets whose composition_revision_id ≠ current revision.'
+  Note: 'Primary library object. Framing/edits live in compositions.document_json (1024²). fit_mode/pad_background removed. Published face = media_assets from current composition revision. Remix dual provenance: remixed_from_sticker_id (UI) + composition_parents (composition lineage). Reject = hard purge sticker (+ composition cascade); shared assets retained if still referenced. On approve, discard media_assets whose composition_revision_id ≠ current revision. Credit via blobber_id + source_url.'
 }
 
 Table compositions {
@@ -272,8 +352,9 @@ Table attribution_claims {
   contact_name varchar(200) [not null]
   contact_email varchar(255) [not null]
   message text [null]
-  proposed_author_name varchar(200) [not null]
-  proposed_source_url varchar(2048) [not null]
+  proposed_blobber_id bigint [null, ref: > blobbers.id, note: 'Existing Blobber pick']
+  proposed_blobber_display_name varchar(200) [null, note: 'Create/find-or-merge unlinked on approve when id null']
+  proposed_source_url varchar(2048) [null]
   status varchar(20) [not null, default: 'pending', note: 'pending | approved | rejected']
   admin_note text [null, note: 'Required on approve/reject']
   reviewed_by bigint [null, ref: > users.id]
@@ -287,7 +368,7 @@ Table attribution_claims {
     (claimant_id, sticker_id, status) [name: 'idx_attribution_claims_claimant']
   }
 
-  Note: 'Signed-in claim that source is missing or mislabeled. Approve auto-applies proposed_author_name + proposed_source_url onto the sticker. Events also land in moderation_events (subject_type=attribution_claim).'
+  Note: 'Signed-in claim that source is missing or mislabeled. Approve resolves Blobber (id or find-or-merge by display name) and applies blobber_id + source_url on the sticker. Events also land in moderation_events (subject_type=attribution_claim).'
 }
 
 Table sticker_tags {

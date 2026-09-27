@@ -17,7 +17,7 @@ import {
   VISIBILITIES,
   type Visibility,
 } from "@/lib/stickers";
-import { parseAttributionInput } from "@/lib/attribution";
+import { parseBlobberAttributionInput } from "@/lib/blobbers";
 
 async function sessionUser() {
   const reqHeaders = await headers();
@@ -122,18 +122,23 @@ export async function PATCH(
           .slice(0, 20)
       : undefined;
 
-  let authorName: string | null | undefined;
+  let blobberId: bigint | null | undefined;
   let sourceUrl: string | null | undefined;
-  if (typeof body.hasAttribution === "string") {
-    const attribution = parseAttributionInput({
-      hasAttribution: body.hasAttribution,
-      authorName: typeof body.authorName === "string" ? body.authorName : "",
+  if (typeof body.attributionMode === "string") {
+    const attribution = await parseBlobberAttributionInput({
+      mode: body.attributionMode,
+      blobberId: typeof body.blobberId === "string" ? body.blobberId : "",
+      blobberDisplayName:
+        typeof body.blobberDisplayName === "string" ? body.blobberDisplayName : "",
       sourceUrl: typeof body.sourceUrl === "string" ? body.sourceUrl : "",
+      userId: user.id,
+      userDisplayName: user.displayName,
+      username: user.username,
     });
     if ("error" in attribution) {
       return NextResponse.json({ error: attribution.error }, { status: 400 });
     }
-    authorName = attribution.authorName;
+    blobberId = attribution.blobberId;
     sourceUrl = attribution.sourceUrl;
   }
 
@@ -150,7 +155,7 @@ export async function PATCH(
         ...(description !== undefined ? { description } : {}),
         ...(visibility !== undefined ? { visibility } : {}),
         ...(categoryId !== undefined ? { categoryId } : {}),
-        ...(authorName !== undefined ? { authorName, sourceUrl } : {}),
+        ...(blobberId !== undefined ? { blobberId, sourceUrl } : {}),
         ...(requeueReview
           ? { moderationStatus: MODERATION_STATUS.pendingReview, moderationNote: null }
           : {}),

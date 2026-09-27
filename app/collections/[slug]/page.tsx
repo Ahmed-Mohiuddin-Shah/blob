@@ -65,6 +65,7 @@ export default async function CollectionDetailPage({
           where: { id: { in: stickerIds } },
           include: {
             createdBy: { select: { username: true, displayName: true } },
+            blobber: { select: { id: true, displayName: true } },
             media: {
               where: {
                 kind: { in: [...CARD_MEDIA_KINDS] },
@@ -149,9 +150,9 @@ export default async function CollectionDetailPage({
     .map((s) => ({
       stickerId: s!.id.toString(),
       title: s!.title,
-      author:
-        s!.authorName || s!.createdBy.displayName || s!.createdBy.username,
+      author: s!.blobber?.displayName ?? "",
       sourceUrl: s!.sourceUrl,
+      blobberHref: s!.blobber ? `/blobbers/${s!.blobber.id}` : null,
       type: stickerTypeFromKinds(s!.media.map((m) => m.kind)),
       href: `/stickers/${s!.slug}`,
       thumbUrl: stickerPreviewUrl(s!.id, s!.media),

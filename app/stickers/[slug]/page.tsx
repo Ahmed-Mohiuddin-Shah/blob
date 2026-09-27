@@ -37,6 +37,7 @@ export default async function StickerDetailPage({
     where: { slug },
     include: {
       createdBy: { select: { username: true, displayName: true } },
+      blobber: { select: { id: true, displayName: true } },
       category: { select: { name: true, slug: true } },
       tags: { include: { tag: true } },
       media: true,
@@ -53,6 +54,7 @@ export default async function StickerDetailPage({
   let isAdmin = false;
   let canRemix = false;
   let contactDefaults: { contactName: string; contactEmail: string } | undefined;
+  let claimBlobber: { id: string; displayName: string } | null = null;
   if (session?.user?.id) {
     const u = await prisma.user.findUnique({
       where: { id: BigInt(session.user.id) },
@@ -71,6 +73,16 @@ export default async function StickerDetailPage({
         contactName: u.displayName,
         contactEmail: u.email,
       };
+      const linked = await prisma.blobber.findUnique({
+        where: { userId: u.id },
+        select: { id: true, displayName: true },
+      });
+      if (linked) {
+        claimBlobber = {
+          id: linked.id.toString(),
+          displayName: linked.displayName,
+        };
+      }
     }
   }
 
@@ -113,10 +125,8 @@ export default async function StickerDetailPage({
   const hasAudio = videoHasAudio(sticker.media);
   const SoundIcon = hasAudio ? Volume2 : VolumeX;
 
-  const creditLabel =
-    sticker.authorName ||
-    sticker.createdBy.displayName ||
-    sticker.createdBy.username;
+  const creditLabel = sticker.blobber?.displayName ?? "";
+  const blobberHref = sticker.blobber ? `/blobbers/${sticker.blobber.id}` : null;
 
   return (
     <section className="mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-16">
@@ -155,6 +165,7 @@ export default async function StickerDetailPage({
             <AttributionCredit
               label={creditLabel}
               sourceUrl={sticker.sourceUrl}
+              blobberHref={blobberHref}
               showInfo={!!sticker.sourceUrl}
               className="text-sm [&_span]:text-sm"
             />
@@ -280,6 +291,7 @@ export default async function StickerDetailPage({
             signedIn={viewerId != null}
             signInHref={signInUrl({ redirectTo: `/stickers/${sticker.slug}` })}
             defaults={contactDefaults}
+            initialBlobber={claimBlobber}
             alreadyPending={!!pendingClaim}
           />
         </div>

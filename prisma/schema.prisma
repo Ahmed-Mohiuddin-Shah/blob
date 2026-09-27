@@ -34,8 +34,103 @@ model User {
   favorites                 Favorite[]
   stickerSheetsCreated      StickerSheet[]
   stickerPacksCreated       StickerPack[]
+  blobber                   Blobber?
+  blobberEditRequests       BlobberEditRequest[]
+  blobberAssociationRequests BlobberAssociationRequest[] @relation("BlobberAssociationRequester")
+  blobberAssociationsReviewed BlobberAssociationRequest[] @relation("BlobberAssociationReviewer")
+  blobberEditsReviewed      BlobberEditRequest[] @relation("BlobberEditReviewer")
 
   @@map("users")
+}
+
+/// Public credit identity. Linked (user_id set) or unlinked (external). display_name unique CI in DB.
+model Blobber {
+  id                   BigInt    @id @default(autoincrement())
+  userId               BigInt?   @unique @map("user_id")
+  displayName          String    @map("display_name") @db.VarChar(200)
+  description          String?
+  bannerGlassObjectId  String?   @map("banner_glass_object_id") @db.Uuid
+  avatarGlassObjectId  String?   @map("avatar_glass_object_id") @db.Uuid
+  showStickers         Boolean   @default(true) @map("show_stickers")
+  showCollections      Boolean   @default(true) @map("show_collections")
+  showStickerSheets    Boolean   @default(true) @map("show_sticker_sheets")
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user                 User?                       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  stickers             Sticker[]
+  socialLinks          BlobberSocialLink[]
+  editRequests         BlobberEditRequest[]
+  associationRequests  BlobberAssociationRequest[]
+  attributionClaims    AttributionClaim[]
+
+  @@map("blobbers")
+}
+
+model SocialLink {
+  id        BigInt   @id @default(autoincrement())
+  linkType  String   @map("link_type") @db.VarChar(20) // youtube | instagram | internet | other
+  handle    String   @db.VarChar(200)
+  url       String   @db.VarChar(2048)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  blobbers BlobberSocialLink[]
+
+  @@map("social_links")
+}
+
+model BlobberSocialLink {
+  blobberId    BigInt @map("blobber_id")
+  socialLinkId BigInt @map("social_link_id")
+
+  blobber    Blobber    @relation(fields: [blobberId], references: [id], onDelete: Cascade)
+  socialLink SocialLink @relation(fields: [socialLinkId], references: [id], onDelete: Cascade)
+
+  @@id([blobberId, socialLinkId])
+  @@map("blobber_social_links")
+}
+
+model BlobberEditRequest {
+  id              BigInt    @id @default(autoincrement())
+  blobberId       BigInt    @map("blobber_id")
+  requesterId     BigInt    @map("requester_id")
+  proposedPayload Json      @map("proposed_payload")
+  status          String    @default("pending") @db.VarChar(20)
+  adminNote       String?   @map("admin_note")
+  reviewedById    BigInt?   @map("reviewed_by")
+  reviewedAt      DateTime? @map("reviewed_at") @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  blobber    Blobber @relation(fields: [blobberId], references: [id], onDelete: Cascade)
+  requester  User    @relation(fields: [requesterId], references: [id])
+  reviewedBy User?   @relation("BlobberEditReviewer", fields: [reviewedById], references: [id])
+
+  @@index([status, createdAt(sort: Desc)])
+  @@index([blobberId])
+  @@map("blobber_edit_requests")
+}
+
+model BlobberAssociationRequest {
+  id              BigInt    @id @default(autoincrement())
+  requesterId     BigInt    @map("requester_id")
+  targetBlobberId BigInt    @map("target_blobber_id")
+  message         String?
+  status          String    @default("pending") @db.VarChar(20)
+  adminNote       String?   @map("admin_note")
+  reviewedById    BigInt?   @map("reviewed_by")
+  reviewedAt      DateTime? @map("reviewed_at") @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  requester     User    @relation("BlobberAssociationRequester", fields: [requesterId], references: [id])
+  targetBlobber Blobber @relation(fields: [targetBlobberId], references: [id], onDelete: Cascade)
+  reviewedBy    User?   @relation("BlobberAssociationReviewer", fields: [reviewedById], references: [id])
+
+  @@index([status, createdAt(sort: Desc)])
+  @@index([requesterId, targetBlobberId, status])
+  @@map("blobber_association_requests")
 }
 
 /// Polymorphic moderation audit log. No subject FK so events survive hard deletes.
@@ -166,10 +261,9 @@ model Sticker {
   uploadedById           BigInt    @map("uploaded_by")
   remixedFromStickerId   BigInt?   @map("remixed_from_sticker_id")
   categoryId             BigInt?   @map("category_id")
-  /// Credit label when attribution is present (upload/claim). Null = no attribution.
-  authorName             String?   @map("author_name") @db.VarChar(200)
-  attribution            String?
-  /// Source link when attribution is present. Null = no attribution.
+  /// Nullable credit — null = unknown / no Blobber. Label from blobber.display_name.
+  blobberId              BigInt?   @map("blobber_id")
+  /// External source link. Null = muted credit (no pink external link).
   sourceUrl              String?   @map("source_url") @db.VarChar(2048)
   license                String?   @db.VarChar(100)
   copyrightStatus        String?   @map("copyright_status") @db.VarChar(50)
@@ -195,6 +289,7 @@ model Sticker {
   remixedFrom        Sticker?           @relation("StickerRemixes", fields: [remixedFromStickerId], references: [id], onDelete: SetNull)
   remixes            Sticker[]          @relation("StickerRemixes")
   category           Category?          @relation(fields: [categoryId], references: [id])
+  blobber            Blobber?           @relation(fields: [blobberId], references: [id], onDelete: SetNull)
   tags               StickerTag[]
   media              MediaAsset[]
   composition        Composition?
@@ -205,6 +300,7 @@ model Sticker {
   @@index([uploadedById])
   @@index([categoryId])
   @@index([remixedFromStickerId])
+  @@index([blobberId])
   @@map("stickers")
 }
 
@@ -255,25 +351,27 @@ model CompositionParent {
 
 /// Signed-in user claim that attribution is missing or mislabeled.
 model AttributionClaim {
-  id                 BigInt    @id @default(autoincrement())
-  stickerId          BigInt    @map("sticker_id")
-  claimantId         BigInt    @map("claimant_id")
-  reason             String    @db.VarChar(20)
-  contactName        String    @map("contact_name") @db.VarChar(200)
-  contactEmail       String    @map("contact_email") @db.VarChar(255)
-  message            String?
-  proposedAuthorName String    @map("proposed_author_name") @db.VarChar(200)
-  proposedSourceUrl  String    @map("proposed_source_url") @db.VarChar(2048)
-  status             String    @default("pending") @db.VarChar(20)
-  adminNote          String?   @map("admin_note")
-  reviewedById       BigInt?   @map("reviewed_by")
-  reviewedAt         DateTime? @map("reviewed_at") @db.Timestamptz(6)
-  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                         BigInt    @id @default(autoincrement())
+  stickerId                  BigInt    @map("sticker_id")
+  claimantId                 BigInt    @map("claimant_id")
+  reason                     String    @db.VarChar(20)
+  contactName                String    @map("contact_name") @db.VarChar(200)
+  contactEmail               String    @map("contact_email") @db.VarChar(255)
+  message                    String?
+  proposedBlobberId          BigInt?   @map("proposed_blobber_id")
+  proposedBlobberDisplayName String?   @map("proposed_blobber_display_name") @db.VarChar(200)
+  proposedSourceUrl          String?   @map("proposed_source_url") @db.VarChar(2048)
+  status                     String    @default("pending") @db.VarChar(20)
+  adminNote                  String?   @map("admin_note")
+  reviewedById               BigInt?   @map("reviewed_by")
+  reviewedAt                 DateTime? @map("reviewed_at") @db.Timestamptz(6)
+  createdAt                  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  sticker    Sticker @relation(fields: [stickerId], references: [id], onDelete: Cascade)
-  claimant   User    @relation("AttributionClaimant", fields: [claimantId], references: [id])
-  reviewedBy User?   @relation("AttributionClaimReviewer", fields: [reviewedById], references: [id])
+  sticker         Sticker  @relation(fields: [stickerId], references: [id], onDelete: Cascade)
+  claimant        User     @relation("AttributionClaimant", fields: [claimantId], references: [id])
+  reviewedBy      User?    @relation("AttributionClaimReviewer", fields: [reviewedById], references: [id])
+  proposedBlobber Blobber? @relation(fields: [proposedBlobberId], references: [id], onDelete: SetNull)
 
   @@index([status, createdAt(sort: Desc)])
   @@index([stickerId])

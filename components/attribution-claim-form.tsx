@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { CLAIM_REASON, CLAIM_REASONS } from "@/lib/attribution";
+import { BlobberCombobox, type BlobberPick } from "./blobber-combobox";
 import { BusyButton } from "./busy-button";
 
 type Props = {
@@ -11,6 +12,7 @@ type Props = {
   signedIn: boolean;
   signInHref: string;
   defaults?: { contactName: string; contactEmail: string };
+  initialBlobber?: BlobberPick | null;
   alreadyPending?: boolean;
 };
 
@@ -19,6 +21,7 @@ export function AttributionClaimForm({
   signedIn,
   signInHref,
   defaults,
+  initialBlobber = null,
   alreadyPending,
 }: Props) {
   const router = useRouter();
@@ -26,6 +29,7 @@ export function AttributionClaimForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const [blobber, setBlobber] = useState<BlobberPick | null>(initialBlobber);
 
   if (!signedIn) {
     return (
@@ -71,12 +75,18 @@ export function AttributionClaimForm({
     e.preventDefault();
     setBusy(true);
     setError(null);
+    if (!blobber?.displayName && !blobber?.id) {
+      setError("Select or create a Blobber");
+      setBusy(false);
+      return;
+    }
     const fd = new FormData(e.currentTarget);
     const payload = {
       reason: String(fd.get("reason") ?? ""),
       contactName: String(fd.get("contactName") ?? ""),
       contactEmail: String(fd.get("contactEmail") ?? ""),
-      proposedAuthorName: String(fd.get("proposedAuthorName") ?? ""),
+      proposedBlobberId: blobber?.id ?? "",
+      proposedBlobberDisplayName: blobber?.displayName ?? "",
       proposedSourceUrl: String(fd.get("proposedSourceUrl") ?? ""),
       message: String(fd.get("message") ?? ""),
     };
@@ -155,21 +165,15 @@ export function AttributionClaimForm({
       </label>
 
       <label className="block">
-        <span className="text-secondary">Correct attribution label</span>
-        <input
-          name="proposedAuthorName"
-          required
-          maxLength={200}
-          className="mt-1 w-full rounded-2xl border border-divider bg-background px-4 py-2.5 outline-none"
-        />
+        <span className="text-secondary">Blobber credit</span>
+        <BlobberCombobox value={blobber} onChange={setBlobber} />
       </label>
 
       <label className="block">
-        <span className="text-secondary">Correct source link</span>
+        <span className="text-secondary">Source link (optional)</span>
         <input
           name="proposedSourceUrl"
           type="url"
-          required
           maxLength={2048}
           placeholder="https://"
           className="mt-1 w-full rounded-2xl border border-divider bg-background px-4 py-2.5 outline-none"

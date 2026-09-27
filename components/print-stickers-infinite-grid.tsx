@@ -9,6 +9,7 @@ type Item = {
   title: string;
   slug: string;
   author: string;
+  blobberHref?: string | null;
   type: string;
   href: string;
   thumbUrl: string;
@@ -80,6 +81,7 @@ export function PrintStickersInfiniteGrid({
     href: s.href,
     thumbUrl: s.thumbUrl,
     author: s.author,
+    blobberHref: s.blobberHref,
     type: s.type,
     hasAudio: s.hasAudio ?? null,
     stickerId: s.id,

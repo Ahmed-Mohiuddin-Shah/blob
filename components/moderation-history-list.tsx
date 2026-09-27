@@ -20,6 +20,12 @@ const SUBJECT_FILTERS = [
   { value: MODERATION_SUBJECT.sticker, label: "Stickers" },
   { value: MODERATION_SUBJECT.attributionClaim, label: "Claims" },
   { value: MODERATION_SUBJECT.collection, label: "Collections" },
+  { value: MODERATION_SUBJECT.blobberEditRequest, label: "Blobber edits" },
+  {
+    value: MODERATION_SUBJECT.blobberAssociationRequest,
+    label: "Associations",
+  },
+  { value: MODERATION_SUBJECT.blobber, label: "Blobbers" },
 ] as const;
 
 export function ModerationHistoryList() {

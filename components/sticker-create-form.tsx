@@ -14,19 +14,21 @@ import {
   VISIBILITIES,
   VISIBILITY,
 } from "@/lib/stickers";
+import { BlobberCombobox, type BlobberPick } from "./blobber-combobox";
 import { BlobEditorHost } from "./blob-editor-host";
 import { BusyButton } from "./busy-button";
+import { TagPillsInput } from "./tag-pills-input";
 
 export type CategoryOption = { id: string; name: string; slug: string };
 
 type Meta = {
   title: string;
   description: string;
-  hasAttribution: string;
-  authorName: string;
+  attributionMode: string;
+  blobber: BlobberPick | null;
   sourceUrl: string;
   categoryId: string;
-  tags: string;
+  tags: string[];
   visibility: string;
 };
 
@@ -35,11 +37,11 @@ type Step = "pick" | "edit" | "meta";
 const emptyMeta: Meta = {
   title: "",
   description: "",
-  hasAttribution: "",
-  authorName: "",
+  attributionMode: "self",
+  blobber: null,
   sourceUrl: "",
   categoryId: "",
-  tags: "",
+  tags: [],
   visibility: VISIBILITY.public,
 };
 
@@ -82,10 +84,9 @@ export function StickerCreateForm({
 
   function validateMeta(): string | null {
     if (!meta.title.trim()) return "Title required";
-    if (!meta.hasAttribution) return "Select attribution";
-    if (meta.hasAttribution === "yes") {
-      if (!meta.authorName.trim()) return "Attribution label required";
-      if (!meta.sourceUrl.trim()) return "Source URL required";
+    if (!meta.attributionMode) return "Select attribution";
+    if (meta.attributionMode === "other" && !meta.blobber?.displayName) {
+      return "Select or create a Blobber";
     }
     return null;
   }
@@ -219,11 +220,14 @@ export function StickerCreateForm({
       const form = new FormData();
       form.set("title", meta.title.trim());
       form.set("description", meta.description.trim());
-      form.set("hasAttribution", meta.hasAttribution);
-      form.set("authorName", meta.authorName.trim());
+      form.set("attributionMode", meta.attributionMode);
+      if (meta.blobber?.id) form.set("blobberId", meta.blobber.id);
+      if (meta.blobber?.displayName) {
+        form.set("blobberDisplayName", meta.blobber.displayName);
+      }
       form.set("sourceUrl", meta.sourceUrl.trim());
       form.set("categoryId", meta.categoryId);
-      form.set("tags", meta.tags);
+      form.set("tags", meta.tags.join(", "));
       form.set("visibility", meta.visibility);
       form.set("document", JSON.stringify(document));
       if (remixedFromStickerId) {
@@ -382,38 +386,37 @@ export function StickerCreateForm({
         />
       </label>
       <label className="block">
-        <span className="text-secondary">Has attribution?</span>
+        <span className="text-secondary">Attribution</span>
         <select
           required
-          value={meta.hasAttribution}
+          value={meta.attributionMode}
           onChange={(e) =>
-            setMeta((m) => ({ ...m, hasAttribution: e.target.value }))
+            setMeta((m) => ({
+              ...m,
+              attributionMode: e.target.value,
+              blobber: e.target.value === "other" ? m.blobber : null,
+              sourceUrl: e.target.value === "other" ? m.sourceUrl : "",
+            }))
           }
           className="mt-1 w-full rounded-2xl border border-divider bg-surface px-4 py-2.5 outline-none"
         >
-          <option value="">Select…</option>
-          <option value="yes">Yes — credit a source</option>
-          <option value="no">No attribution</option>
+          <option value="self">Me (my Blobber)</option>
+          <option value="none">Unknown / no credit</option>
+          <option value="other">Another Blobber</option>
         </select>
       </label>
-      {meta.hasAttribution === "yes" ? (
+      {meta.attributionMode === "other" ? (
         <>
           <label className="block">
-            <span className="text-secondary">Attribution label</span>
-            <input
-              required
-              maxLength={200}
-              value={meta.authorName}
-              onChange={(e) =>
-                setMeta((m) => ({ ...m, authorName: e.target.value }))
-              }
-              className="mt-1 w-full rounded-2xl border border-divider bg-surface px-4 py-2.5 outline-none"
+            <span className="text-secondary">Blobber</span>
+            <BlobberCombobox
+              value={meta.blobber}
+              onChange={(blobber) => setMeta((m) => ({ ...m, blobber }))}
             />
           </label>
           <label className="block">
-            <span className="text-secondary">Source URL</span>
+            <span className="text-secondary">Source URL (optional)</span>
             <input
-              required
               type="url"
               value={meta.sourceUrl}
               onChange={(e) =>
@@ -443,12 +446,12 @@ export function StickerCreateForm({
       </label>
       <label className="block">
         <span className="text-secondary">Tags</span>
-        <input
-          value={meta.tags}
-          onChange={(e) => setMeta((m) => ({ ...m, tags: e.target.value }))}
-          placeholder="angry, cat"
-          className="mt-1 w-full rounded-2xl border border-divider bg-surface px-4 py-2.5 outline-none"
-        />
+        <div className="mt-1">
+          <TagPillsInput
+            value={meta.tags}
+            onChange={(tags) => setMeta((m) => ({ ...m, tags }))}
+          />
+        </div>
       </label>
       <label className="block">
         <span className="text-secondary">Visibility</span>

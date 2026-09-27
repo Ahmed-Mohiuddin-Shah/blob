@@ -97,7 +97,7 @@ export async function POST(
           uploadedById: user.id,
           remixedFromStickerId: source.id,
           categoryId: source.categoryId,
-          authorName: source.authorName,
+          blobberId: source.blobberId,
           sourceUrl: source.sourceUrl,
           visibility:
             source.visibility === VISIBILITY.private

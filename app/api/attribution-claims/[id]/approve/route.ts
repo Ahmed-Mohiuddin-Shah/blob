@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { getSession } from "@/lib/auth";
 import { CLAIM_STATUS } from "@/lib/attribution";
+import { resolveUnlinkedBlobber } from "@/lib/blobbers";
 import { canModerate } from "@/lib/capabilities";
 import {
   MODERATION_ACTION,
@@ -67,24 +68,44 @@ export async function POST(
     return NextResponse.json({ error: "Claim already reviewed" }, { status: 409 });
   }
 
-  await prisma.$transaction(async (tx) => {
-    await tx.sticker.update({
-      where: { id: claim.stickerId },
-      data: {
-        authorName: claim.proposedAuthorName,
-        sourceUrl: claim.proposedSourceUrl,
-      },
+  try {
+    await prisma.$transaction(async (tx) => {
+      let blobberId = claim.proposedBlobberId;
+      if (!blobberId) {
+        if (!claim.proposedBlobberDisplayName) {
+          throw new Error("Claim missing Blobber");
+        }
+        const resolved = await resolveUnlinkedBlobber(
+          claim.proposedBlobberDisplayName,
+          tx,
+        );
+        blobberId = resolved.id;
+      }
+
+      await tx.sticker.update({
+        where: { id: claim.stickerId },
+        data: {
+          blobberId,
+          sourceUrl: claim.proposedSourceUrl,
+        },
+      });
+      await tx.attributionClaim.update({
+        where: { id: claim.id },
+        data: {
+          status: CLAIM_STATUS.approved,
+          proposedBlobberId: blobberId,
+          adminNote: note,
+          reviewedById: admin.id,
+          reviewedAt: new Date(),
+        },
+      });
     });
-    await tx.attributionClaim.update({
-      where: { id: claim.id },
-      data: {
-        status: CLAIM_STATUS.approved,
-        adminNote: note,
-        reviewedById: admin.id,
-        reviewedAt: new Date(),
-      },
-    });
-  });
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Approve failed" },
+      { status: 400 },
+    );
+  }
 
   await recordModerationEvent({
     subjectType: MODERATION_SUBJECT.attributionClaim,

@@ -17,6 +17,9 @@ export function Footer() {
           <Link href="/stickers" className="transition-colors hover:text-foreground">
             Stickers
           </Link>
+          <Link href="/blobbers" className="transition-colors hover:text-foreground">
+            Blobbers
+          </Link>
           <Link href="/prints" className="transition-colors hover:text-foreground">
             Prints
           </Link>

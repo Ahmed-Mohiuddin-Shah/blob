@@ -18,8 +18,8 @@ export type AttributionClaimItem = {
   contactName: string;
   contactEmail: string;
   message: string | null;
-  proposedAuthorName: string;
-  proposedSourceUrl: string;
+  proposedBlobberLabel: string;
+  proposedSourceUrl: string | null;
   createdAt: string;
   sticker: { id: string; title: string; slug: string; thumbUrl: string };
   claimant: { username: string; displayName: string };
@@ -167,15 +167,21 @@ export function AttributionClaimsList({ items }: { items: AttributionClaimItem[]
                     {item.contactName} &lt;{item.contactEmail}&gt;
                   </p>
                   <p className="mt-2 text-xs">
-                    Proposed:{" "}
-                    <a
-                      href={item.proposedSourceUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-medium text-accent-pink hover:underline"
-                    >
-                      {item.proposedAuthorName}
-                    </a>
+                    Proposed Blobber:{" "}
+                    {item.proposedSourceUrl ? (
+                      <a
+                        href={item.proposedSourceUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-medium text-accent-pink hover:underline"
+                      >
+                        {item.proposedBlobberLabel}
+                      </a>
+                    ) : (
+                      <span className="font-medium text-secondary">
+                        {item.proposedBlobberLabel}
+                      </span>
+                    )}
                   </p>
                   {item.message ? (
                     <p className="mt-2 text-xs text-secondary">{item.message}</p>

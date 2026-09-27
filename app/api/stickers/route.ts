@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { canUpload } from "@/lib/capabilities";
+import { parseBlobberAttributionInput } from "@/lib/blobbers";
 import {
-  parseAttributionInput,
   parseDocumentJson,
   parseTagNames,
   parseVisibility,
@@ -80,7 +80,7 @@ export async function GET(request: Request) {
       { category: { name: { contains: q, mode: "insensitive" } } },
       { createdBy: { username: { contains: q, mode: "insensitive" } } },
       { createdBy: { displayName: { contains: q, mode: "insensitive" } } },
-      { authorName: { contains: q, mode: "insensitive" } },
+      { blobber: { displayName: { contains: q, mode: "insensitive" } } },
     ];
   }
 
@@ -91,6 +91,7 @@ export async function GET(request: Request) {
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     include: {
       createdBy: { select: { username: true, displayName: true } },
+      blobber: { select: { id: true, displayName: true } },
       category: { select: { slug: true, name: true } },
       media: {
         where: { kind: { in: [...CARD_MEDIA_KINDS] }, status: MEDIA_ASSET_STATUS.ready },
@@ -130,8 +131,9 @@ export async function GET(request: Request) {
       title: s.title,
       slug: s.slug,
       visibility: s.visibility,
-      author: s.authorName || s.createdBy.displayName || s.createdBy.username,
-      authorName: s.authorName,
+      author: s.blobber?.displayName ?? "",
+      blobberId: s.blobber?.id.toString() ?? null,
+      blobberHref: s.blobber ? `/blobbers/${s.blobber.id}` : null,
       sourceUrl: s.sourceUrl,
       username: s.createdBy.username,
       category: s.category?.name ?? null,
@@ -208,10 +210,14 @@ export async function POST(request: Request) {
   }
 
   const tagNames = parseTagNames(String(form.get("tags") ?? ""));
-  const attribution = parseAttributionInput({
-    hasAttribution: String(form.get("hasAttribution") ?? ""),
-    authorName: String(form.get("authorName") ?? ""),
+  const attribution = await parseBlobberAttributionInput({
+    mode: String(form.get("attributionMode") ?? "self"),
+    blobberId: String(form.get("blobberId") ?? ""),
+    blobberDisplayName: String(form.get("blobberDisplayName") ?? ""),
     sourceUrl: String(form.get("sourceUrl") ?? ""),
+    userId: user.id,
+    userDisplayName: user.displayName,
+    username: user.username,
   });
   if ("error" in attribution) {
     return NextResponse.json({ error: attribution.error }, { status: 400 });
@@ -241,7 +247,7 @@ export async function POST(request: Request) {
           uploadedById: user.id,
           remixedFromStickerId,
           categoryId,
-          authorName: attribution.authorName,
+          blobberId: attribution.blobberId,
           sourceUrl: attribution.sourceUrl,
           visibility,
           moderationStatus: MODERATION_STATUS.pendingReview,

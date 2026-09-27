@@ -11,6 +11,7 @@ export default async function ProfileClaimsPage() {
     include: {
       claimant: { select: { username: true, displayName: true } },
       sticker: { select: { id: true, title: true, slug: true } },
+      proposedBlobber: { select: { id: true, displayName: true } },
     },
   });
 
@@ -18,7 +19,7 @@ export default async function ProfileClaimsPage() {
     <div>
       <h1 className="text-2xl font-semibold tracking-tight">Attribution claims</h1>
       <p className="mt-1 text-sm text-secondary">
-        Approve applies the proposed credit to the sticker. Note required either way.
+        Approve applies the proposed Blobber credit to the sticker. Note required either way.
       </p>
       <div className="mt-8">
         <AttributionClaimsList
@@ -29,7 +30,10 @@ export default async function ProfileClaimsPage() {
             contactName: c.contactName,
             contactEmail: c.contactEmail,
             message: c.message,
-            proposedAuthorName: c.proposedAuthorName,
+            proposedBlobberLabel:
+              c.proposedBlobber?.displayName ||
+              c.proposedBlobberDisplayName ||
+              "—",
             proposedSourceUrl: c.proposedSourceUrl,
             createdAt: c.createdAt.toISOString(),
             sticker: {

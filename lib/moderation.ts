@@ -4,6 +4,9 @@ export const MODERATION_SUBJECT = {
   sticker: "sticker",
   collection: "collection",
   attributionClaim: "attribution_claim",
+  blobberEditRequest: "blobber_edit_request",
+  blobberAssociationRequest: "blobber_association_request",
+  blobber: "blobber",
 } as const;
 
 export type ModerationSubjectType =

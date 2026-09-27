@@ -1,12 +1,15 @@
 "use client";
 
+import Link from "next/link";
 import { Info } from "lucide-react";
 import { useId, useState } from "react";
 
 export type AttributionCreditProps = {
-  /** Credit label (authorName) or uploader fallback. */
+  /** Credit label (blobber display name). Empty = hide credit line. */
   label: string;
   sourceUrl?: string | null;
+  /** Internal Blobber profile path. */
+  blobberHref?: string | null;
   /** Show info icon + popover when source/attribution exists. */
   showInfo?: boolean;
   className?: string;
@@ -15,44 +18,52 @@ export type AttributionCreditProps = {
 export function AttributionCredit({
   label,
   sourceUrl,
+  blobberHref,
   showInfo,
   className = "",
 }: AttributionCreditProps) {
   const [open, setOpen] = useState(false);
   const tipId = useId();
+  if (!label) return null;
+
+  const profileHref = blobberHref || null;
   const hasSource = !!sourceUrl;
+  const showInfoBtn = !!showInfo && hasSource;
+
+  const nameEl = profileHref ? (
+    <Link
+      href={profileHref}
+      className="font-medium text-accent-pink hover:underline"
+      onClick={(e) => e.stopPropagation()}
+    >
+      {label}
+    </Link>
+  ) : (
+    <span className="font-medium text-secondary">{label}</span>
+  );
+
+  function goToSource(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (sourceUrl) {
+      window.open(sourceUrl, "_blank", "noopener,noreferrer");
+    }
+  }
 
   return (
     <span className={`relative inline-flex max-w-full items-center gap-1.5 ${className}`}>
       <span className="truncate text-xs text-secondary">
-        by{" "}
-        {hasSource ? (
-          <a
-            href={sourceUrl!}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-medium text-accent-pink hover:underline"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {label}
-          </a>
-        ) : (
-          <span className="font-medium text-secondary">{label}</span>
-        )}
+        by {nameEl}
       </span>
 
-      {showInfo && hasSource ? (
+      {showInfoBtn ? (
         <span className="relative shrink-0">
           <button
             type="button"
             aria-label="Attribution info"
             aria-expanded={open}
             aria-controls={tipId}
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              setOpen((v) => !v);
-            }}
+            onClick={goToSource}
             onMouseEnter={() => setOpen(true)}
             onMouseLeave={() => setOpen(false)}
             className="flex h-5 w-5 items-center justify-center rounded-full bg-accent-gradient text-white shadow-sm"
@@ -68,15 +79,9 @@ export function AttributionCredit({
               onMouseLeave={() => setOpen(false)}
             >
               <span className="block font-semibold text-foreground">{label}</span>
-              <a
-                href={sourceUrl!}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-1 block truncate text-accent-pink hover:underline"
-                onClick={(e) => e.stopPropagation()}
-              >
+              <span className="mt-1 block truncate text-accent-pink">
                 {sourceUrl}
-              </a>
+              </span>
             </span>
           ) : null}
         </span>

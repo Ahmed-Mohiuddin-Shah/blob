@@ -112,6 +112,7 @@ export async function GET(request: Request) {
           where: { id: { in: stickerIds } },
           include: {
             createdBy: { select: { username: true, displayName: true } },
+            blobber: { select: { id: true, displayName: true } },
             media: {
               where: {
                 kind: { in: [...CARD_MEDIA_KINDS] },
@@ -170,7 +171,8 @@ export async function GET(request: Request) {
           thumbUrl: stickerPreviewUrl(s.id, s.media),
           type: stickerTypeFromKinds(s.media.map((m) => m.kind)),
           hasAudio: videoHasAudio(s.media),
-          author: s.authorName || s.createdBy.displayName || s.createdBy.username,
+          author: s.blobber?.displayName ?? "",
+          blobberHref: s.blobber ? `/blobbers/${s.blobber.id}` : null,
           createdAt: f.createdAt.toISOString(),
         };
       }

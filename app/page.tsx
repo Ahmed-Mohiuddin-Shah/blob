@@ -58,6 +58,7 @@ export default async function HomePage() {
       take: 6,
       include: {
         createdBy: { select: { displayName: true, username: true } },
+        blobber: { select: { id: true, displayName: true } },
         media: { select: { kind: true, status: true, hasAudio: true } },
       },
     }),
@@ -93,8 +94,9 @@ export default async function HomePage() {
       <Featured
         stickers={stickers.map((s) => ({
           title: s.title,
-          author: s.authorName || s.createdBy.displayName || s.createdBy.username,
+          author: s.blobber?.displayName ?? "",
           sourceUrl: s.sourceUrl,
+          blobberHref: s.blobber ? `/blobbers/${s.blobber.id}` : null,
           type: stickerTypeFromKinds(s.media.map((m) => m.kind)),
           href: `/stickers/${s.slug}`,
           thumbUrl: stickerPreviewUrl(s.id, s.media),

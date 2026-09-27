@@ -22,7 +22,6 @@ import {
   type DetectedKind,
   type Visibility,
 } from "@/lib/stickers";
-import { parseAttributionInput } from "@/lib/attribution";
 
 export async function uniqueStickerSlug(title: string): Promise<string> {
   const baseSlug = slugify(title);
@@ -71,8 +70,6 @@ export function parseVisibility(raw: string): Visibility {
     VISIBILITIES.includes(raw as Visibility) ? raw : VISIBILITY.public
   ) as Visibility;
 }
-
-export { parseAttributionInput };
 
 /** Upload immutable original into `assets` + GLASS. */
 export async function createAssetFromBytes(opts: {

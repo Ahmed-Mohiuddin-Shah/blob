@@ -12,6 +12,7 @@ export type StickerCardProps = {
   title: string;
   author: string;
   sourceUrl?: string | null;
+  blobberHref?: string | null;
   type: string;
   href: string;
   thumbUrl?: string | null;
@@ -36,6 +37,7 @@ export function StickerCard({
   title,
   author,
   sourceUrl,
+  blobberHref,
   type,
   href,
   thumbUrl,
@@ -143,6 +145,7 @@ export function StickerCard({
         <AttributionCredit
           label={author}
           sourceUrl={sourceUrl}
+          blobberHref={blobberHref}
           showInfo={!!sourceUrl}
           className="mt-0.5"
         />

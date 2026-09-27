@@ -31,9 +31,19 @@ export default async function StickerEditPage({
     where: { slug },
     include: {
       tags: { include: { tag: true } },
+      blobber: { select: { id: true, displayName: true, userId: true } },
     },
   });
   if (!sticker) notFound();
+
+  const linked = await prisma.blobber.findUnique({
+    where: { userId: user.id },
+    select: { id: true },
+  });
+  let attributionMode: "self" | "none" | "other" = "none";
+  if (sticker.blobberId == null) attributionMode = "none";
+  else if (linked && sticker.blobberId === linked.id) attributionMode = "self";
+  else attributionMode = "other";
 
   const isAdmin = canModerate({
     role: user.role,
@@ -83,9 +93,14 @@ export default async function StickerEditPage({
             description: sticker.description ?? "",
             visibility: sticker.visibility,
             categoryId: sticker.categoryId?.toString() ?? "",
-            tags: sticker.tags.map((t) => t.tag.name).join(", "),
-            hasAttribution: sticker.authorName && sticker.sourceUrl ? "yes" : "no",
-            authorName: sticker.authorName ?? "",
+            tags: sticker.tags.map((t) => t.tag.name),
+            attributionMode,
+            blobber: sticker.blobber
+              ? {
+                  id: sticker.blobber.id.toString(),
+                  displayName: sticker.blobber.displayName,
+                }
+              : null,
             sourceUrl: sticker.sourceUrl ?? "",
             moderationNote: sticker.moderationNote,
             moderationStatus: sticker.moderationStatus,

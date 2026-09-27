@@ -9,10 +9,12 @@ import {
   History,
   ImageIcon,
   LayoutDashboard,
+  Link2,
   Pencil,
   Printer,
   ScrollText,
   Settings,
+  Sparkles,
   Upload,
   Users,
 } from "lucide-react";
@@ -24,6 +26,8 @@ type Props = {
   pendingCount: number;
   needsEditCount: number;
   claimsCount: number;
+  blobberEditsCount: number;
+  blobberAssocCount: number;
   username: string;
 };
 
@@ -41,6 +45,8 @@ export function ProfileNav({
   pendingCount,
   needsEditCount,
   claimsCount,
+  blobberEditsCount,
+  blobberAssocCount,
   username,
 }: Props) {
   const pathname = usePathname();
@@ -101,6 +107,16 @@ export function ProfileNav({
           ) : null}
         </Link>
         <Link
+          href="/profile/blobber"
+          className={linkClass(
+            pathname === "/profile/blobber" ||
+              pathname.startsWith("/profile/blobber/"),
+          )}
+        >
+          <Sparkles className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+          Blobber
+        </Link>
+        <Link
           href="/profile/settings"
           className={linkClass(pathname.startsWith("/profile/settings"))}
         >
@@ -120,6 +136,41 @@ export function ProfileNav({
                   {claimsCount}
                 </span>
               ) : null}
+            </Link>
+            <Link
+              href="/profile/blobber-edits"
+              className={linkClass(pathname.startsWith("/profile/blobber-edits"))}
+            >
+              <Pencil className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+              Blobber edits
+              {blobberEditsCount > 0 ? (
+                <span className="ml-auto rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold text-white">
+                  {blobberEditsCount}
+                </span>
+              ) : null}
+            </Link>
+            <Link
+              href="/profile/blobber-associations"
+              className={linkClass(
+                pathname.startsWith("/profile/blobber-associations"),
+              )}
+            >
+              <Link2 className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+              Associations
+              {blobberAssocCount > 0 ? (
+                <span className="ml-auto rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold text-white">
+                  {blobberAssocCount}
+                </span>
+              ) : null}
+            </Link>
+            <Link
+              href="/profile/unlinked-blobbers"
+              className={linkClass(
+                pathname.startsWith("/profile/unlinked-blobbers"),
+              )}
+            >
+              <Users className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+              Unlinked
             </Link>
             <Link
               href="/profile/history"

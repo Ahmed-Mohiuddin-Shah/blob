@@ -7,6 +7,7 @@ import {
   isHttpUrl,
   type ClaimReason,
 } from "@/lib/attribution";
+import { normalizeBlobberName } from "@/lib/blobbers";
 import { canModerate } from "@/lib/capabilities";
 import {
   MODERATION_ACTION,
@@ -79,20 +80,35 @@ export async function POST(
     return NextResponse.json({ error: "Contact name and email required" }, { status: 400 });
   }
 
-  const proposedAuthorName = (
-    typeof body.proposedAuthorName === "string" ? body.proposedAuthorName : ""
-  )
-    .trim()
-    .slice(0, 200);
+  const proposedBlobberIdRaw =
+    typeof body.proposedBlobberId === "string" ? body.proposedBlobberId.trim() : "";
+  const proposedBlobberDisplayName = normalizeBlobberName(
+    typeof body.proposedBlobberDisplayName === "string"
+      ? body.proposedBlobberDisplayName
+      : "",
+  );
+  let proposedBlobberId: bigint | null = null;
+  if (proposedBlobberIdRaw) {
+    const found = await prisma.blobber.findUnique({
+      where: { id: BigInt(proposedBlobberIdRaw) },
+    });
+    if (!found) {
+      return NextResponse.json({ error: "Blobber not found" }, { status: 400 });
+    }
+    proposedBlobberId = found.id;
+  } else if (!proposedBlobberDisplayName) {
+    return NextResponse.json(
+      { error: "Select or name a Blobber for the claim" },
+      { status: 400 },
+    );
+  }
+
   const proposedSourceUrl = (
     typeof body.proposedSourceUrl === "string" ? body.proposedSourceUrl : ""
   )
     .trim()
     .slice(0, 2048);
-  if (!proposedAuthorName) {
-    return NextResponse.json({ error: "Proposed attribution label required" }, { status: 400 });
-  }
-  if (!isHttpUrl(proposedSourceUrl)) {
+  if (proposedSourceUrl && !isHttpUrl(proposedSourceUrl)) {
     return NextResponse.json(
       { error: "Proposed source link must be an http(s) URL" },
       { status: 400 },
@@ -124,8 +140,11 @@ export async function POST(
       contactName,
       contactEmail,
       message,
-      proposedAuthorName,
-      proposedSourceUrl,
+      proposedBlobberId,
+      proposedBlobberDisplayName: proposedBlobberId
+        ? null
+        : proposedBlobberDisplayName,
+      proposedSourceUrl: proposedSourceUrl || null,
       status: CLAIM_STATUS.pending,
     },
   });
