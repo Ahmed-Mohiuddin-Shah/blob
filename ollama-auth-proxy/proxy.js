@@ -10,9 +10,9 @@ const keys = new Set(
     .map((s) => s.trim())
     .filter(Boolean),
 );
-const listenPort = Number(process.env.LISTEN_PORT || 11434);
+const listenPort = Number(process.env.LISTEN_PORT || 11435);
 const upstreamHost = process.env.UPSTREAM_HOST || "127.0.0.1";
-const upstreamPort = Number(process.env.UPSTREAM_PORT || 11435);
+const upstreamPort = Number(process.env.UPSTREAM_PORT || 11434);
 
 if (!keys.size) {
   console.error("OLLAMA_PROXY_API_KEYS is required (comma-separated hex keys)");

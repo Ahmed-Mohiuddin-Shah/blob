@@ -64,6 +64,7 @@ Site search is Meilisearch-first (`/search`, landing bar, library pages). If `ME
 | **Prisma only** | Leave `MEILI_HOST` empty | Text search on stickers/collections/prints (legacy). No `/search` facets, hybrid, or image search. |
 | **Meili keyword** | `MEILI_HOST`, `MEILI_MASTER_KEY` (compose starts `meilisearch`) | Full-text + facets + popularity ranking once documents are indexed. Indexing still needs search-meta approve (see flows). |
 | **+ Ollama text** | `OLLAMA_BASE_URL`, `OLLAMA_EMBED_MODEL=nomic-embed-text` | Hybrid / semantic text search (Meili `ollama` embedder). |
+| **+ Ollama auth** | `OLLAMA_API_KEY` + `docker-compose.proxy.yml` on Ollama host | Bearer proxy on `:11435` → local Ollama `:11434` (optional; see below). |
 | **+ Ollama vision** | `OLLAMA_VISION_MODEL=moondream` (+ worker or local enrich) | AI captions → admin meta review → richer searchable text. |
 | **+ CLIP multimodal** | `MEILI_MULTIMODAL_URL`, `MEILI_MULTIMODAL_MODEL` + `docker-compose.clip.yml` on GPU host | Meili native text→image / image→image (`media` search). |
 | **+ Agent** | `OLLAMA_AGENT_MODEL=qwen2.5:3b` | `/search` Agent mode plans a Meili query via Ollama. |
@@ -90,26 +91,11 @@ docker compose up -d --build
 
 **2. GPU / Ollama host** (same machine for Ollama + CLIP — e.g. `ollama.example.com`):
 
-Ollama has no API keys. Put [`ollama-auth-proxy`](ollama-auth-proxy/) on `0.0.0.0:11434` and bind Ollama to loopback `:11435` so only Bearer-authed traffic reaches it.
-
 ```bash
-# Bind Ollama to localhost:11435 (not the public 11434)
-OLLAMA_HOST=127.0.0.1:11435 ollama serve
-# systemd: Environment=OLLAMA_HOST=127.0.0.1:11435
-
+# Ollama already running; pull models used by Blob
 ollama pull nomic-embed-text
 ollama pull moondream
 ollama pull qwen2.5:3b
-
-# Auth proxy: 0.0.0.0:11434 → 127.0.0.1:11435
-cp ollama-auth-proxy/.env.proxy.example .env.proxy
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-# → paste into OLLAMA_PROXY_API_KEYS (comma-separate for multiple clients)
-docker compose -f docker-compose.proxy.yml up -d --build
-
-# smoke (expect 401 without key, 200 with)
-curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:11434/api/tags
-curl -s -H "Authorization: Bearer <key>" http://127.0.0.1:11434/api/tags | head
 
 # CLIP server from this repo (copy clip-server + compose file, or clone the repo)
 cp .env.clip.example .env.clip
@@ -121,13 +107,37 @@ curl -s http://127.0.0.1:8081/v1/embeddings \
   -d '{"model":"openclip-vit-b-32","input":[{"text":"angry cat sticker"}]}'
 ```
 
-Put HTTPS in front of the proxy (and CLIP), e.g. `https://ollama.example.com` → `127.0.0.1:11434`, `https://clip.example.com` → `127.0.0.1:8081`.
+Put HTTPS in front of services on that host, e.g. `https://ollama.example.com` → `127.0.0.1:11434`, `https://clip.example.com` → `127.0.0.1:8081`.
+
+**Optional — Ollama auth proxy** if the host is reachable beyond localhost. Ollama has no API keys of its own: leave Ollama on its default `:11434` (prefer loopback), run [`ollama-auth-proxy`](ollama-auth-proxy/) via [`docker-compose.proxy.yml`](docker-compose.proxy.yml) on `:11435`, and point public TLS at **11435**.
+
+| Port | Role |
+|------|------|
+| `127.0.0.1:11434` | Ollama (unchanged default; keep off the public interface) |
+| `0.0.0.0:11435` | Auth proxy → forwards to `127.0.0.1:11434` only with a valid Bearer key |
+
+```bash
+# Ollama on 11434, loopback only
+OLLAMA_HOST=127.0.0.1:11434 ollama serve
+# systemd: Environment=OLLAMA_HOST=127.0.0.1:11434
+
+cp ollama-auth-proxy/.env.proxy.example .env.proxy
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+# → OLLAMA_PROXY_API_KEYS=<hex>[,more,keys]
+docker compose -f docker-compose.proxy.yml up -d --build
+
+# smoke against the proxy port (401 without key)
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:11435/api/tags
+curl -s -H "Authorization: Bearer <key>" http://127.0.0.1:11435/api/tags | head
+```
+
+TLS: `https://ollama.example.com` → `127.0.0.1:11435`. Put the same hex in Blob `OLLAMA_API_KEY`.
 
 **3. Wire Blob → Ollama + CLIP** (blob `.env`):
 
 ```bash
-OLLAMA_BASE_URL=https://ollama.example.com
-OLLAMA_API_KEY=<same hex key as OLLAMA_PROXY_API_KEYS>
+OLLAMA_BASE_URL=https://ollama.example.com   # → :11434 direct, or → :11435 if using the proxy
+# OLLAMA_API_KEY=<key>                       # required when proxy is in front
 OLLAMA_EMBED_MODEL=nomic-embed-text
 OLLAMA_VISION_MODEL=moondream
 OLLAMA_AGENT_MODEL=qwen2.5:3b
