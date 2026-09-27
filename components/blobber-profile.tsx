@@ -2,12 +2,60 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link2 } from "lucide-react";
+import { Gift, Link2, MessageCircleHeart } from "lucide-react";
 import { blobberMediaUrl } from "@/lib/blobber-media-url";
 import { StickerCard, type StickerCardProps } from "./sticker-card";
 import { UserBlobatar } from "./user-blobatar";
 
 type Social = { linkType: string; handle: string; url: string };
+
+function MerchSiteIcon({ url }: { url: string }) {
+  const [ready, setReady] = useState(false);
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    return <Gift className="h-3.5 w-3.5" strokeWidth={1.75} />;
+  }
+  return (
+    <>
+      {!ready ? <Gift className="h-3.5 w-3.5" strokeWidth={1.75} /> : null}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={`/api/site-icon?url=${encodeURIComponent(url)}`}
+        alt=""
+        className={`h-full w-full rounded-full object-cover ${ready ? "" : "hidden"}`}
+        onLoad={() => setReady(true)}
+        onError={() => setFailed(true)}
+      />
+    </>
+  );
+}
+
+function SocialLinkIcon({
+  linkType,
+  url,
+}: {
+  linkType: string;
+  url: string;
+}) {
+  if (linkType === "youtube" || linkType === "instagram") {
+    return (
+      // ponytail: invert monochrome brand SVGs to match white Lucide icons
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={`/${linkType}.svg`}
+        alt=""
+        className="h-3.5 w-3.5 brightness-0 invert"
+      />
+    );
+  }
+  if (linkType === "merch") {
+    return <MerchSiteIcon url={url} />;
+  }
+  if (linkType === "other") {
+    return <MessageCircleHeart className="h-3.5 w-3.5" strokeWidth={1.75} />;
+  }
+  return <Link2 className="h-3.5 w-3.5" strokeWidth={1.75} />;
+}
 
 type Profile = {
   id: string;
@@ -156,8 +204,8 @@ export function BlobberProfile({ profile }: { profile: Profile }) {
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-2 rounded-full bg-badge px-3 py-1.5 text-xs font-semibold text-foreground transition hover:text-accent-pink"
                   >
-                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-accent-gradient text-white">
-                      <Link2 className="h-3.5 w-3.5" strokeWidth={1.75} />
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-full bg-accent-gradient text-white">
+                      <SocialLinkIcon linkType={s.linkType} url={s.url} />
                     </span>
                     <span className="uppercase text-[10px] text-inactive">
                       {s.linkType}

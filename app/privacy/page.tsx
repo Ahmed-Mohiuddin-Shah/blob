@@ -9,7 +9,7 @@ export default function PrivacyPage() {
       <h1 className="mt-1 text-3xl font-semibold tracking-tight sm:text-4xl">
         Privacy policy
       </h1>
-      <p className="mt-2 text-sm text-secondary">Last updated: 24 Sep 2026</p>
+      <p className="mt-2 text-sm text-secondary">Last updated: 27 Sep 2026</p>
 
       <div className="mt-10 space-y-8 text-sm leading-relaxed text-secondary">
         <section>
@@ -20,8 +20,23 @@ export default function PrivacyPage() {
             Sign-in uses Zitadel. We keep account details such as email, display
             name, and a local username, role, and account status. Stickers,
             metadata, and media references live in our database; binary files
-            live in GLASS object storage. Profile pictures are generated from
-            your username via blobatar — we do not use identity-provider photos.
+            live in GLASS object storage. Profile pictures for accounts are
+            generated from your username via blobatar — we do not use
+            identity-provider photos.
+          </p>
+          <p className="mt-2">
+            Blobber (credit) profiles may include a display name, bio,
+            banner and avatar media references, section toggles, and social
+            or merch link handles and URLs. Stickers may store a credited
+            Blobber and an optional source URL. Attribution claims and
+            Blobber association requests store messages and contact details
+            for admin review.
+          </p>
+          <p className="mt-2">
+            Unlinked Blobber profiles and their social or merch links are{" "}
+            <strong className="text-foreground">public</strong> even when no
+            account is linked — anyone who can browse the library can see
+            that credit identity.
           </p>
         </section>
 
@@ -50,9 +65,10 @@ export default function PrivacyPage() {
             How we use data
           </h2>
           <p className="mt-2">
-            We use account and content data to run BLOB: authentication, library
-            browse, uploads, moderation, and prints. We do not sell your
-            personal data.
+            We use account and content data to run BLOB: authentication,
+            library browse, uploads, moderation, prints, public Blobber
+            credit pages, attribution and association queues, and responding
+            to rights or abuse reports. We do not sell your personal data.
           </p>
         </section>
 

@@ -1,0 +1,13 @@
+# Remote encode worker only — no ports, no DB.
+# Copy .env.worker.example → .env.worker, set BLOB_URL + WORKER_API_KEY + GLASS_*.
+# Run: docker compose -f docker-compose.worker.yml up -d --build
+
+name: blob-worker
+
+services:
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    restart: unless-stopped
+    env_file: .env.worker

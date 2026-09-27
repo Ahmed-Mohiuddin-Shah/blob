@@ -47,16 +47,19 @@ export function TagPillsInput({
     };
   }, [draft, value]);
 
-  function addTag(raw: string) {
+  function addTag(raw: string, current: string[] = value): string[] {
     const name = raw.trim().replace(/^#/, "");
-    if (!name) return;
+    if (!name) return current;
     const upper = name.toUpperCase().slice(0, 80);
-    if (value.some((v) => v.toUpperCase() === upper)) {
-      setDraft("");
-      return;
-    }
-    if (value.length >= max) return;
-    onChange([...value, upper]);
+    if (current.some((v) => v.toUpperCase() === upper)) return current;
+    if (current.length >= max) return current;
+    return [...current, upper];
+  }
+
+  function commitTags(rawParts: string[]) {
+    let next = value;
+    for (const p of rawParts) next = addTag(p, next);
+    if (next !== value) onChange(next);
     setDraft("");
     setSuggestions([]);
     setOpen(false);
@@ -66,11 +69,25 @@ export function TagPillsInput({
     if (e.key === "Enter" || e.key === "," || e.key === "Tab") {
       if (draft.trim()) {
         e.preventDefault();
-        addTag(draft);
+        commitTags([draft]);
+      } else if (e.key === ",") {
+        e.preventDefault(); // don't leave a lone comma in the field
       }
     } else if (e.key === "Backspace" && !draft && value.length) {
       onChange(value.slice(0, -1));
     }
+  }
+
+  function onDraftChange(raw: string) {
+    // Comma (typed or IME) → pill immediately; keep trailing fragment as draft.
+    if (raw.includes(",")) {
+      const parts = raw.split(",");
+      const rest = parts.pop() ?? "";
+      commitTags(parts);
+      setDraft(rest);
+      return;
+    }
+    setDraft(raw);
   }
 
   function onPaste(e: React.ClipboardEvent<HTMLInputElement>) {
@@ -78,15 +95,7 @@ export function TagPillsInput({
     if (!/[,#\n]/.test(text)) return;
     e.preventDefault();
     const parts = text.split(/[,#\n]+/).map((t) => t.trim()).filter(Boolean);
-    const next = [...value];
-    for (const p of parts) {
-      const upper = p.toUpperCase().slice(0, 80);
-      if (next.some((v) => v.toUpperCase() === upper)) continue;
-      if (next.length >= max) break;
-      next.push(upper);
-    }
-    onChange(next);
-    setDraft("");
+    commitTags(parts);
   }
 
   return (
@@ -110,7 +119,7 @@ export function TagPillsInput({
         ))}
         <input
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={(e) => onDraftChange(e.target.value)}
           onKeyDown={onKeyDown}
           onPaste={onPaste}
           onFocus={() => suggestions.length && setOpen(true)}
@@ -136,7 +145,7 @@ export function TagPillsInput({
                 role="option"
                 className="w-full px-4 py-2 text-left text-sm hover:bg-badge"
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => addTag(s.name)}
+                onClick={() => commitTags([s.name])}
               >
                 {s.name}
               </button>

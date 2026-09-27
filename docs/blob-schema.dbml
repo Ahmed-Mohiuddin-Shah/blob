@@ -539,3 +539,62 @@ Table pack_sheets {
 
   Note: 'Ordered sheet references inside a pack. Min 2 sheets enforced in app.'
 }
+
+Table worker_api_keys {
+  id bigserial [pk]
+  name varchar(120) [not null]
+  key_hash char(64) [unique, not null, note: 'sha256 hex of secret; plaintext shown once on create']
+  prefix varchar(16) [not null, note: 'Display prefix e.g. first 8 of blob_wk_…']
+  revoked_at timestamptz [null]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  Note: 'Superadmin-minted bearer keys for remote encode workers.'
+}
+
+Table workers {
+  id bigserial [pk]
+  api_key_id bigint [not null, ref: > worker_api_keys.id]
+  instance_id varchar(64) [not null]
+  version varchar(40) [not null, default: '0']
+  capabilities text [not null, default: '[]', note: 'JSON string array of job types']
+  concurrency integer [not null, default: 1]
+  cpu_pct float [null]
+  mem_mb float [null]
+  status varchar(20) [not null, default: 'offline', note: 'online | offline']
+  last_heartbeat_at timestamptz [null]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  indexes {
+    (api_key_id, instance_id) [unique]
+    (status, last_heartbeat_at)
+  }
+
+  Note: 'Fleet row updated by WSS register/heartbeat. Control plane sole DB owner.'
+}
+
+Table jobs {
+  id bigserial [pk]
+  type varchar(40) [not null, note: 'composition_encode | sheet_encode | pack_encode']
+  subject_type varchar(40) [not null, note: 'sticker | sticker_sheet | sticker_pack']
+  subject_id bigint [not null]
+  status varchar(20) [not null, default: 'pending', note: 'pending | leased | running | succeeded | failed']
+  idempotency_key varchar(120) [unique, not null]
+  payload jsonb [null]
+  result jsonb [null]
+  worker_id bigint [null, ref: > workers.id]
+  lease_expires_at timestamptz [null]
+  attempts integer [not null, default: 0]
+  last_error text [null]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  indexes {
+    (status, lease_expires_at)
+    (type, status)
+    (subject_type, subject_id)
+  }
+
+  Note: 'Durable encode work. WSS notifies workers; expired leases reclaim to pending. Local fallback when no capable online worker.'
+}

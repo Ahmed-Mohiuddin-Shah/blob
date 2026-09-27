@@ -1,12 +1,14 @@
 # Docker
 
-`docker compose up -d --build` starts the Next.js app, Postgres, and daily DB backups.
+`docker compose up -d --build` starts the Next.js app (+ worker WSS), Postgres, and daily DB backups.
+
+Remote encode workers use a **separate** compose file and env — see [Worker compose](#worker-compose) below.
 
 ## Services
 
 | Service | Role |
 |---------|------|
-| `app` | Next.js (`next start` on :3000), runs `prisma migrate deploy` on boot |
+| `app` | Next.js + worker WSS (`tsx server.ts` on :3000), runs `prisma migrate deploy` on boot |
 | `db` | Postgres 16 |
 | `pgbackups` | Daily gzipped dumps into `./storage/backups/postgres/` (14 days) |
 
@@ -25,6 +27,7 @@ Copy `.env.example` → `.env`. Required:
 - `ZITADEL_POST_LOGOUT_URL`
 - `ZITADEL_SERVICE_PAT`, `ZITADEL_ORG_ID`, `ZITADEL_PROJECT_ID` (Management API)
 - For Glass uploads: `GLASS_API_URL`, `GLASS_API_KEY` (public PRISM is created by the app into `public_prism`)
+- Optional: `WORKER_LEASE_SECONDS` (default 120) — how long a claimed job stays leased before reclaim
 
 Zitadel app settings (must match exactly):
 
@@ -58,6 +61,24 @@ gunzip -c storage/backups/postgres/last/blob-latest.sql.gz \
   | docker compose exec -T db psql -U "$DB_USERNAME" -d "$DB_DATABASE"
 ```
 
+## Worker compose
+
+On a machine that only runs an encode worker (outbound WSS + GLASS; no public ports):
+
+```bash
+cp .env.worker.example .env.worker
+# set BLOB_URL, WORKER_API_KEY (from /profile/workers), GLASS_API_URL, GLASS_API_KEY
+docker compose -f docker-compose.worker.yml up -d --build
+```
+
+Or locally against a running app:
+
+```bash
+npm run worker
+```
+
+Workers connect to `wss://<BLOB_URL host>/api/workers/ws`. Mint keys as superadmin at `/profile/workers`. If no capable worker is online, the app falls back to single-flight in-process encode.
+
 ## Local without Docker app
 
 ```bash
@@ -67,7 +88,7 @@ npx prisma migrate deploy
 npm run dev
 ```
 
-Use `DATABASE_URL` pointing at `localhost:${DB_PUBLISH_PORT}`.
+Use `DATABASE_URL` pointing at `localhost:${DB_PUBLISH_PORT}`. `npm run dev` / `npm run start` use the custom server (Next + worker WSS).
 
 ## Prisma P3005 (schema not empty)
 

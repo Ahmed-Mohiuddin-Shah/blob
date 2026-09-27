@@ -9,24 +9,82 @@ export default function TermsPage() {
       <h1 className="mt-1 text-3xl font-semibold tracking-tight sm:text-4xl">
         Terms of use
       </h1>
-      <p className="mt-2 text-sm text-secondary">Last updated: 24 Sep 2026</p>
+      <p className="mt-2 text-sm text-secondary">Last updated: 27 Sep 2026</p>
 
       <div className="mt-10 space-y-8 text-sm leading-relaxed text-secondary">
         <section>
           <h2 className="text-base font-semibold text-foreground">The service</h2>
           <p className="mt-2">
             BLOB is a public sticker library and related tools (browse, upload,
-            prints). You use it as-is. We may change or interrupt features
-            without notice.
+            prints, Blobber profiles, and attribution). You use it as-is. We
+            may change or interrupt features without notice.
           </p>
         </section>
 
         <section>
           <h2 className="text-base font-semibold text-foreground">Your uploads</h2>
           <p className="mt-2">
-            Only upload content you have the right to share. Do not upload
+            Only upload content you have the right to share — you own it, you
+            have permission, or you have another lawful basis. Do not upload
             illegal, abusive, or others&apos; copyrighted material without
-            permission. You are responsible for what you submit.
+            that right. By uploading, you represent that your submission does
+            not infringe others&apos; rights. You are responsible for what you
+            submit.
+          </p>
+          <p className="mt-2">
+            Prefer attributing every upload (yourself, another Blobber, or
+            unknown). Crediting another creator — including creating an
+            unlinked Blobber by name or adding a source URL — is credit only.
+            It is <strong className="text-foreground">not</strong> permission
+            or a licence from them, and it does not imply they uploaded the
+            work. If you lack the right to share it, do not upload it — even
+            with perfect credit.
+          </p>
+          <p className="mt-2">
+            If your upload or misattribution infringes someone&apos;s rights
+            or breaks these terms, you agree to cover losses we reasonably
+            incur as a result.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="text-base font-semibold text-foreground">
+            Blobbers &amp; attribution
+          </h2>
+          <p className="mt-2">
+            A Blobber is a public credit identity, separate from a private
+            BLOB account. Stickers can credit a linked Blobber (tied to an
+            account) or an unlinked Blobber (credit-only, for creators who
+            are not on BLOB yet). Unlinked profiles let their work sit under
+            one name, with optional social and merch links, so credit can
+            point people back to the creator.
+          </p>
+          <p className="mt-2">
+            The uploader of a sticker is not necessarily the credited
+            Blobber. Members may find or create an unlinked Blobber when
+            attributing an upload. Attribution claims (fix sticker credit)
+            and association requests (link an account to an unlinked Blobber)
+            are reviewed by human admins; approving them may re-point sticker
+            credit or attach an account to that profile.
+          </p>
+          <p className="mt-2">
+            Do not invent fake creators, spam unlinked names, or
+            misattribute on purpose. Abuse can get content and accounts
+            moderated.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="text-base font-semibold text-foreground">
+            Copyright complaints
+          </h2>
+          <p className="mt-2">
+            Rights holders (or their agents) may report unauthorized content
+            through the admin contact channel published for this instance.
+            After human review, we may remove or restrict the content,
+            related print or sheet visibility where applicable, and/or the
+            uploader&apos;s account — without needing the uploader&apos;s
+            agreement. Attribution on a sticker does not block removal.
           </p>
         </section>
 

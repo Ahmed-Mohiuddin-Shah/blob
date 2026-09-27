@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import {
+  BadgeCheck,
   BookOpen,
   Heart,
   Layers,
@@ -58,6 +59,8 @@ export default function AboutPage() {
           BLOB is a shared place for stickers that actually fit — proper
           squares, clean exports, and a library you can browse, remix, and
           print from. Built so we can keep our favourites in one nice format.
+          Stickers are meant to be credited to creators (Blobbers), not left as
+          anonymous dumps.
         </p>
 
         <div className="mt-14 grid gap-4 sm:grid-cols-2">
@@ -70,6 +73,12 @@ export default function AboutPage() {
             Browse, search, favourite, and collect. Members upload and remix;
             everyone can download what the library publishes. One place for
             the stickers we actually use.
+          </Feature>
+          <Feature icon={BadgeCheck} title="Credit that sticks">
+            Every upload can credit a Blobber — you, unknown, or another
+            creator. If they are not on BLOB yet, an unlinked Blobber keeps
+            their work under one public name, with room for socials and merch
+            links so credit also points people back to them.
           </Feature>
           <Feature icon={Printer} title="Sheets & packs">
             Lay stickers on printable pages, bundle sheets into packs, and
@@ -93,16 +102,20 @@ export default function AboutPage() {
               I do <strong className="font-semibold text-white">not</strong>{" "}
               claim copyright over content hosted on BLOB. Stickers, sheets,
               packs, and collections remain with whoever contributed them (or
-              their respective rights holders).
+              their respective rights holders). Crediting a Blobber shows who
+              made the work — it is{" "}
+              <strong className="font-semibold text-white">not</strong> a
+              licence from that creator.
             </p>
             <p>
-              BLOB will{" "}
-              <strong className="font-semibold text-white">not</strong> take
-              down user uploads on request from me as the site operator for
-              copyright ownership of that content — because I am not claiming
-              ownership of it. Uploaders are responsible for what they share.
-              How the library is moderated for spam and abuse is described in
-              the{" "}
+              As the site operator I do not assert ownership of user uploads,
+              and I will not remove content on the basis that{" "}
+              <em>I</em> own it. Uploaders are responsible for what they
+              share. Rights holders and creators can still report unauthorized
+              use; BLOB may remove or restrict content and accounts after
+              human review. Creators can also ask to associate an account with
+              an unlinked Blobber profile, or fix sticker credit, through
+              admin-reviewed flows. Details are in the{" "}
               <Link
                 href="/terms"
                 className="font-semibold text-accent-pink hover:underline"
@@ -127,7 +140,8 @@ export default function AboutPage() {
               tidy sticker library: consistent squares, remixable documents,
               favourites and collections, and prints when we need a sheet.
               Less hunting through chat archives. More stickers that look
-              right.
+              right — with neat credit and links back to creators, not a dump
+              without names.
             </p>
             <p className="mt-3 inline-flex items-center gap-2 text-sm text-secondary">
               <Layers className="h-4 w-4 text-accent-pink" strokeWidth={1.75} />

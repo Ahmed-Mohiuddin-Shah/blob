@@ -1,8 +1,3 @@
-/**
- * ponytail: in-process print encode instead of BullMQ.
- * Uses blob-editor/encode + public prism. Upgrade: worker when volume needs isolation.
- */
-
 import {
   combinePdfs,
   combinePngsGrid,
@@ -10,6 +5,8 @@ import {
 } from "blob-editor/encode";
 import { validatePrintDocument } from "blob-editor/print";
 import { getGlass, getPublicPrismId } from "@/lib/glass";
+import { enqueueJob, enqueueJobAsync } from "@/lib/jobs/enqueue";
+import { JOB_TYPE } from "@/lib/jobs/types";
 import { ensureNodeCanvas } from "@/lib/node-canvas";
 import { PRINT_STATUS } from "@/lib/prints";
 import { prisma } from "@/lib/prisma";
@@ -19,25 +16,30 @@ import {
 } from "@/lib/processing-log";
 import { MEDIA_ASSET_STATUS, MEDIA_KIND } from "@/lib/stickers";
 
-/** Fire-and-forget (pack wait / detail recovery). Prefer `runSheetEncode` on create. */
+/** Enqueue sheet encode (remote worker or single-flight local fallback). */
 export function enqueueSheetEncode(sheetId: bigint): void {
-  void processSheet(sheetId).catch((err) => {
-    console.error("Sheet encode failed:", sheetId.toString(), err);
-  });
+  enqueueJob(JOB_TYPE.sheetEncode, sheetId);
 }
 
 export function enqueuePackEncode(packId: bigint): void {
-  void processPack(packId).catch((err) => {
-    console.error("Pack encode failed:", packId.toString(), err);
-  });
+  enqueueJob(JOB_TYPE.packEncode, packId);
 }
 
-/** Awaitable encode — use on create so Next doesn't drop the job mid-request. */
+/** Await enqueue + local/remote processing kickoff (returns once job is queued). */
 export async function runSheetEncode(sheetId: bigint): Promise<void> {
-  await processSheet(sheetId);
+  await enqueueJobAsync(JOB_TYPE.sheetEncode, sheetId);
 }
 
 export async function runPackEncode(packId: bigint): Promise<void> {
+  await enqueueJobAsync(JOB_TYPE.packEncode, packId);
+}
+
+/** In-process encode cores — used by local job fallback. */
+export async function processSheetEncode(sheetId: bigint): Promise<void> {
+  await processSheet(sheetId);
+}
+
+export async function processPackEncode(packId: bigint): Promise<void> {
   await processPack(packId);
 }
 
@@ -94,8 +96,7 @@ async function processSheet(sheetId: bigint): Promise<void> {
     const png = encoded.exports.png;
     const pdf = encoded.exports.pdf;
     if (!png || !pdf) {
-      await failSheet(sheetId, "Encode missing png or pdf");
-      return;
+      return failSheet(sheetId, "Encode missing png or pdf");
     }
 
     const prismId = await getPublicPrismId();
@@ -134,9 +135,14 @@ async function processSheet(sheetId: bigint): Promise<void> {
       select: { packId: true },
     });
     for (const { packId } of waiting) {
-      enqueuePackEncode(packId);
+      enqueueJob(JOB_TYPE.packEncode, packId);
     }
   } catch (err) {
+    const cur = await prisma.stickerSheet.findUnique({
+      where: { id: sheetId },
+      select: { status: true },
+    });
+    if (cur?.status === PRINT_STATUS.failed) throw err;
     await failSheet(
       sheetId,
       err instanceof Error ? err.message : "Sheet encode failed",
@@ -222,6 +228,11 @@ async function processPack(packId: bigint): Promise<void> {
       },
     });
   } catch (err) {
+    const cur = await prisma.stickerPack.findUnique({
+      where: { id: packId },
+      select: { status: true },
+    });
+    if (cur?.status === PRINT_STATUS.failed) throw err;
     await failPack(
       packId,
       err instanceof Error ? err.message : "Pack encode failed",
@@ -229,7 +240,7 @@ async function processPack(packId: bigint): Promise<void> {
   }
 }
 
-async function failSheet(sheetId: bigint, message: string) {
+async function failSheet(sheetId: bigint, message: string): Promise<never> {
   const sheet = await prisma.stickerSheet.update({
     where: { id: sheetId },
     data: {
@@ -244,9 +255,10 @@ async function failSheet(sheetId: bigint, message: string) {
     subjectTitle: sheet.name,
     message,
   });
+  throw new Error(message);
 }
 
-async function failPack(packId: bigint, message: string) {
+async function failPack(packId: bigint, message: string): Promise<never> {
   const pack = await prisma.stickerPack.update({
     where: { id: packId },
     data: {
@@ -261,4 +273,5 @@ async function failPack(packId: bigint, message: string) {
     subjectTitle: pack.name,
     message,
   });
+  throw new Error(message);
 }

@@ -7,6 +7,8 @@ import {
 } from "blob-editor/encode";
 import { validateDocument, type CompositionDocument } from "blob-editor/core";
 import { getGlass } from "@/lib/glass";
+import { enqueueJob } from "@/lib/jobs/enqueue";
+import { JOB_TYPE } from "@/lib/jobs/types";
 import { ensureNodeCanvas } from "@/lib/node-canvas";
 import { prisma } from "@/lib/prisma";
 import {
@@ -49,20 +51,23 @@ function assertDerivativeBudget(
 }
 
 /**
- * ponytail: in-process encode instead of BullMQ.
- * Uses blob-editor/encode + @napi-rs/canvas. Upgrade: separate worker when volume needs isolation.
- *
+ * Enqueue composition encode (remote worker or single-flight local fallback).
  * Overlays are baked into client stills only — ephemeral ov_* asset_ids are expected and not
  * persisted. Static stickers with complete client stills skip server re-encode.
  */
 export function enqueueCompositionEncode(stickerId: bigint): void {
-  void processComposition(stickerId).catch((err) => {
-    console.error("Composition encode failed:", stickerId.toString(), err);
-  });
+  enqueueJob(JOB_TYPE.compositionEncode, stickerId);
 }
 
 /** @deprecated alias for callers still importing the stub name */
 export const enqueueStickerProcessing = enqueueCompositionEncode;
+
+/** In-process encode core — used by local job fallback. */
+export async function processCompositionEncode(
+  stickerId: bigint,
+): Promise<void> {
+  await processComposition(stickerId);
+}
 
 async function hasClientStills(
   stickerId: bigint,
@@ -100,8 +105,7 @@ async function processComposition(stickerId: bigint): Promise<void> {
     },
   });
   if (!sticker?.composition) {
-    await fail(stickerId, sticker?.title ?? "sticker", "Missing composition");
-    return;
+    return fail(stickerId, sticker?.title ?? "sticker", "Missing composition");
   }
 
   const comp = sticker.composition;
@@ -113,8 +117,7 @@ async function processComposition(stickerId: bigint): Promise<void> {
         })
       : null);
   if (!revision) {
-    await fail(stickerId, sticker.title, "Missing composition revision");
-    return;
+    return fail(stickerId, sticker.title, "Missing composition revision");
   }
 
   const maxDurationMs = maxDurationMsForKind(
@@ -127,12 +130,11 @@ async function processComposition(stickerId: bigint): Promise<void> {
   try {
     doc = validateDocument(revision.documentJson, durationOpts);
   } catch (err) {
-    await fail(
+    return fail(
       stickerId,
       sticker.title,
       err instanceof Error ? err.message : "Invalid document",
     );
-    return;
   }
 
   const needsAnimated = compositionNeedsAnimatedEncode(doc);
@@ -212,8 +214,7 @@ async function processComposition(stickerId: bigint): Promise<void> {
         await markReady(stickerId);
         return;
       }
-      await fail(stickerId, sticker.title, "No GLASS prism for uploads");
-      return;
+      return fail(stickerId, sticker.title, "No GLASS prism for uploads");
     }
 
     const kinds: {
@@ -343,13 +344,15 @@ async function processComposition(stickerId: bigint): Promise<void> {
       await markReady(stickerId);
       return;
     }
-    await fail(
+    return fail(
       stickerId,
       sticker.title,
       err instanceof Error ? err.message : "Encode failed",
     );
   }
 }
+
+// fail() always throws — keep TS happy on control-flow after await fail()
 
 function collectAssetIds(doc: CompositionDocument): string[] {
   const ids = new Set<string>();
@@ -366,7 +369,11 @@ function sha256Hex(buf: Uint8Array): string {
   return createHash("sha256").update(buf).digest("hex");
 }
 
-async function fail(stickerId: bigint, title: string, message: string) {
+async function fail(
+  stickerId: bigint,
+  title: string,
+  message: string,
+): Promise<never> {
   await prisma.sticker.update({
     where: { id: stickerId },
     data: {
@@ -380,6 +387,7 @@ async function fail(stickerId: bigint, title: string, message: string) {
     subjectTitle: title,
     message,
   });
+  throw new Error(message);
 }
 
 /** Delete derivative media (and GLASS objects) not tied to the current revision. */

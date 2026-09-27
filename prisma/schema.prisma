@@ -570,3 +570,69 @@ model MediaAsset {
   @@index([compositionRevisionId])
   @@map("media_assets")
 }
+
+/// Superadmin-minted bearer keys for remote encode workers. Store hash only.
+model WorkerApiKey {
+  id        BigInt    @id @default(autoincrement())
+  name      String    @db.VarChar(120)
+  /// sha256 hex of the secret
+  keyHash   String    @unique @map("key_hash") @db.Char(64)
+  /// First 8 chars of secret for display (blob_wk_…)
+  prefix    String    @db.VarChar(16)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workers Worker[]
+
+  @@map("worker_api_keys")
+}
+
+/// Connected / recently seen worker instance (heartbeat + capabilities).
+model Worker {
+  id              BigInt    @id @default(autoincrement())
+  apiKeyId        BigInt    @map("api_key_id")
+  instanceId      String    @map("instance_id") @db.VarChar(64)
+  version         String    @default("0") @db.VarChar(40)
+  /// JSON string array of job types, e.g. ["composition_encode","sheet_encode"]
+  capabilities    String    @default("[]")
+  concurrency     Int       @default(1)
+  cpuPct          Float?    @map("cpu_pct")
+  memMb           Float?    @map("mem_mb")
+  status          String    @default("offline") @db.VarChar(20)
+  lastHeartbeatAt DateTime? @map("last_heartbeat_at") @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  apiKey WorkerApiKey @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+  jobs   Job[]
+
+  @@unique([apiKeyId, instanceId])
+  @@index([status, lastHeartbeatAt])
+  @@map("workers")
+}
+
+/// Durable encode/print work unit. Postgres SoT; WSS wakes workers.
+model Job {
+  id             BigInt    @id @default(autoincrement())
+  type           String    @db.VarChar(40)
+  subjectType    String    @map("subject_type") @db.VarChar(40)
+  subjectId      BigInt    @map("subject_id")
+  status         String    @default("pending") @db.VarChar(20)
+  idempotencyKey String    @unique @map("idempotency_key") @db.VarChar(120)
+  payload        Json?
+  result         Json?
+  workerId       BigInt?   @map("worker_id")
+  leaseExpiresAt DateTime? @map("lease_expires_at") @db.Timestamptz(6)
+  attempts       Int       @default(0)
+  lastError      String?   @map("last_error")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  worker Worker? @relation(fields: [workerId], references: [id], onDelete: SetNull)
+
+  @@index([status, leaseExpiresAt])
+  @@index([type, status])
+  @@index([subjectType, subjectId])
+  @@map("jobs")
+}

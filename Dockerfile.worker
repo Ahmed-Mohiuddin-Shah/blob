@@ -1,0 +1,22 @@
+# syntax=docker/dockerfile:1
+# Encode worker image — no Next.js, no public ports.
+
+FROM node:22-bookworm-slim
+WORKDIR /app
+ENV NODE_ENV=production
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    openssl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY package.json package-lock.json ./
+COPY scripts/patch-esm-exports.mjs ./scripts/patch-esm-exports.mjs
+RUN npm ci --legacy-peer-deps
+
+COPY tsconfig.json ./
+COPY worker ./worker
+# Prisma-free slices only — worker never talks to Postgres.
+COPY lib/jobs/types.ts lib/jobs/payload-types.ts ./lib/jobs/
+COPY lib/node-canvas.ts ./lib/
+
+CMD ["npm", "run", "worker"]

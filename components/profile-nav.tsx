@@ -13,6 +13,7 @@ import {
   Pencil,
   Printer,
   ScrollText,
+  Server,
   Settings,
   Sparkles,
   Upload,
@@ -178,6 +179,13 @@ export function ProfileNav({
             >
               <History className="h-4 w-4" strokeWidth={1.75} aria-hidden />
               History
+            </Link>
+            <Link
+              href="/profile/workers"
+              className={linkClass(pathname.startsWith("/profile/workers"))}
+            >
+              <Server className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+              Workers
             </Link>
             {isSuperadmin ? (
               <Link
