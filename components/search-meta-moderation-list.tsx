@@ -63,6 +63,26 @@ export function SearchMetaModerationList({ items }: { items: SearchMetaItem[] })
     }
   }
 
+  async function retryEnrich(id: string) {
+    setBusyId(`retry-${id}`);
+    setError(null);
+    try {
+      const res = await fetch(`/api/stickers/${id}/search-meta/retry`, {
+        method: "POST",
+      });
+      const json = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setError(json.error ?? "Retry failed");
+        return;
+      }
+      router.refresh();
+    } catch {
+      setError("Retry failed");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   if (!items.length) {
     return <p className="text-sm text-secondary">No search meta waiting.</p>;
   }
@@ -133,14 +153,24 @@ export function SearchMetaModerationList({ items }: { items: SearchMetaItem[] })
                     />
                   </div>
                 </div>
-                <BusyButton
-                  type="button"
-                  busy={busyId === item.id}
-                  onClick={() => void approve(item.id)}
-                  className="rounded-full bg-accent-gradient px-5 py-2 text-sm font-semibold text-white"
-                >
-                  Approve search meta
-                </BusyButton>
+                <div className="flex flex-wrap gap-2">
+                  <BusyButton
+                    type="button"
+                    busy={busyId === item.id}
+                    onClick={() => void approve(item.id)}
+                    className="rounded-full bg-accent-gradient px-5 py-2 text-sm font-semibold text-white"
+                  >
+                    Approve search meta
+                  </BusyButton>
+                  <BusyButton
+                    type="button"
+                    busy={busyId === `retry-${item.id}`}
+                    onClick={() => void retryEnrich(item.id)}
+                    className="rounded-full border border-divider px-5 py-2 text-sm font-semibold text-primary"
+                  >
+                    Retry AI caption
+                  </BusyButton>
+                </div>
               </div>
             </div>
           </article>

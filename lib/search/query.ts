@@ -225,7 +225,7 @@ async function prismaFallback(q: string, limit: number): Promise<FederatedHit[]>
     })),
     ...sheets.map((s) => ({
       index: MEILI_INDEX.prints,
-      id: `sheet:${s.id}`,
+      id: `sheet-${s.id}`,
       slug: s.slug,
       name: s.name,
       kind: "sheet",

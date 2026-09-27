@@ -145,6 +145,11 @@ export async function buildCollectionSearchDoc(collectionId: bigint) {
   };
 }
 
+/** Meili primary keys allow [a-zA-Z0-9_-] only — no colons. */
+export function printSearchDocId(kind: "sheet" | "pack", id: bigint | string) {
+  return `${kind}-${id}`;
+}
+
 export async function buildPrintSearchDoc(
   kind: "sheet" | "pack",
   id: bigint,
@@ -162,7 +167,7 @@ export async function buildPrintSearchDoc(
     });
     if (!sheet || sheet.status !== PRINT_STATUS.ready) return null;
     return {
-      id: `sheet:${sheet.id}`,
+      id: printSearchDocId("sheet", sheet.id),
       kind: "sheet" as const,
       slug: sheet.slug,
       name: sheet.name,
@@ -203,7 +208,7 @@ export async function buildPrintSearchDoc(
     .join(" ")
     .slice(0, 4000);
   return {
-    id: `pack:${pack.id}`,
+    id: printSearchDocId("pack", pack.id),
     kind: "pack" as const,
     slug: pack.slug,
     name: pack.name,

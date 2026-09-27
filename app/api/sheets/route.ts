@@ -100,7 +100,11 @@ export async function GET(request: Request) {
         if (found.engine === "meili") {
           meiliIds = found.hits
             .map((h) => {
-              const raw = h.id.startsWith("sheet:") ? h.id.slice(6) : h.id;
+              const raw = h.id.startsWith("sheet-")
+                ? h.id.slice(6)
+                : h.id.startsWith("sheet:")
+                  ? h.id.slice(6)
+                  : h.id;
               try {
                 return BigInt(raw);
               } catch {

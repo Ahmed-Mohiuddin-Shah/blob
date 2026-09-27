@@ -7,6 +7,7 @@ import {
   buildCollectionSearchDoc,
   buildPrintSearchDoc,
   buildStickerSearchDoc,
+  printSearchDocId,
 } from "@/lib/search/documents";
 import { prisma } from "@/lib/prisma";
 async function ready(): Promise<ReturnType<typeof getMeili>> {
@@ -76,6 +77,11 @@ export async function upsertPrintSearch(
   if (!meili) return;
   const doc = await buildPrintSearchDoc(kind, id);
   if (!doc) {
+    await meili
+      .index(MEILI_INDEX.prints)
+      .deleteDocument(printSearchDocId(kind, id))
+      .catch(() => {});
+    // Drop legacy colon ids from earlier bootstrap.
     await meili
       .index(MEILI_INDEX.prints)
       .deleteDocument(`${kind}:${id}`)

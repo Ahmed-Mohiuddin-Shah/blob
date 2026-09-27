@@ -87,7 +87,11 @@ export async function GET(request: Request) {
         if (found.engine === "meili") {
           meiliIds = found.hits
             .map((h) => {
-              const raw = h.id.startsWith("pack:") ? h.id.slice(5) : h.id;
+              const raw = h.id.startsWith("pack-")
+                ? h.id.slice(5)
+                : h.id.startsWith("pack:")
+                  ? h.id.slice(5)
+                  : h.id;
               try {
                 return BigInt(raw);
               } catch {

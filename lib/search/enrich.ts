@@ -1,43 +1,17 @@
 import { isOllamaConfigured, ollamaChat } from "@/lib/ollama/client";
 import { prisma } from "@/lib/prisma";
 import { SEARCH_META_STATUS } from "@/lib/search/constants";
+import { visionImageBase64 } from "@/lib/search/vision-image";
+import {
+  parseVisionEnrichResult,
+  type EnrichResult,
+} from "@/lib/search/vision-parse";
 import { getGlass } from "@/lib/glass";
 import { MEDIA_ASSET_STATUS, MEDIA_KIND } from "@/lib/stickers";
 
-export type EnrichResult = {
-  aiCaption: string;
-  aiScenario: string;
-  aiVisualTags: string[];
-};
+export type { EnrichResult };
 
-function parseVisionJson(raw: string): EnrichResult {
-  const start = raw.indexOf("{");
-  const end = raw.lastIndexOf("}");
-  const slice = start >= 0 && end > start ? raw.slice(start, end + 1) : raw;
-  let parsed: {
-    caption?: string;
-    scenario?: string;
-    tags?: string[];
-  } = {};
-  try {
-    parsed = JSON.parse(slice) as typeof parsed;
-  } catch {
-    return {
-      aiCaption: raw.slice(0, 500),
-      aiScenario: "",
-      aiVisualTags: [],
-    };
-  }
-  return {
-    aiCaption: (parsed.caption ?? "").toString().slice(0, 1000),
-    aiScenario: (parsed.scenario ?? "").toString().slice(0, 1000),
-    aiVisualTags: Array.isArray(parsed.tags)
-      ? parsed.tags.map((t) => String(t).slice(0, 60)).slice(0, 24)
-      : [],
-  };
-}
-
-/** Download sticker preview bytes from GLASS as base64 for Ollama vision. */
+/** Download sticker preview, resize to JPEG base64 for Ollama vision. */
 async function stickerPreviewBase64(stickerId: bigint): Promise<string | null> {
   const media = await prisma.mediaAsset.findMany({
     where: { stickerId, status: MEDIA_ASSET_STATUS.ready },
@@ -51,7 +25,7 @@ async function stickerPreviewBase64(stickerId: bigint): Promise<string | null> {
   const glass = getGlass();
   const res = await glass.objects.download(asset.glassObjectId);
   const buf = Buffer.from(await res.arrayBuffer());
-  return buf.toString("base64");
+  return visionImageBase64(buf);
 }
 
 export async function runSearchEnrich(stickerId: bigint): Promise<EnrichResult> {
@@ -70,7 +44,7 @@ export async function runSearchEnrich(stickerId: bigint): Promise<EnrichResult> 
     prompt,
     images: [b64],
   });
-  return parseVisionJson(raw);
+  return parseVisionEnrichResult(raw);
 }
 
 /** Apply enrich result and move to pending_search_meta. */

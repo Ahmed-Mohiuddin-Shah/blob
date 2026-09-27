@@ -20,6 +20,8 @@ import type {
 } from "../lib/jobs/payload-types";
 import { JOB_TYPE } from "../lib/jobs/types";
 import { ensureNodeCanvas } from "../lib/node-canvas";
+import { visionImageBase64 } from "../lib/search/vision-image";
+import { parseVisionEnrichResult } from "../lib/search/vision-parse";
 import {
   MAX_GIF_BYTES,
   MAX_IMAGE_BYTES,
@@ -86,7 +88,9 @@ async function runSearchEnrich(
 
   const glass = glassClient(glassUrl, glassKey);
   const res = await glass.objects.download(payload.glassObjectId);
-  const b64 = Buffer.from(await res.arrayBuffer()).toString("base64");
+  const b64 = await visionImageBase64(
+    Buffer.from(await res.arrayBuffer()),
+  );
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -114,26 +118,7 @@ async function runSearchEnrich(
     throw new Error(`Ollama chat ${chatRes.status}: ${await chatRes.text()}`);
   }
   const data = (await chatRes.json()) as { message?: { content?: string } };
-  const raw = data.message?.content?.trim() ?? "";
-  const start = raw.indexOf("{");
-  const end = raw.lastIndexOf("}");
-  const slice = start >= 0 && end > start ? raw.slice(start, end + 1) : raw;
-  try {
-    const parsed = JSON.parse(slice) as {
-      caption?: string;
-      scenario?: string;
-      tags?: string[];
-    };
-    return {
-      aiCaption: (parsed.caption ?? "").toString().slice(0, 1000),
-      aiScenario: (parsed.scenario ?? "").toString().slice(0, 1000),
-      aiVisualTags: Array.isArray(parsed.tags)
-        ? parsed.tags.map((t) => String(t).slice(0, 60)).slice(0, 24)
-        : [],
-    };
-  } catch {
-    return { aiCaption: raw.slice(0, 500), aiScenario: "", aiVisualTags: [] };
-  }
+  return parseVisionEnrichResult(data.message?.content?.trim() ?? "");
 }
 
 async function runComposition(

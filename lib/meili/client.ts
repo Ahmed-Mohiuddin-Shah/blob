@@ -13,6 +13,8 @@ export function getMeili(): Meilisearch | null {
     client = new Meilisearch({
       host: process.env.MEILI_HOST!.replace(/\/$/, ""),
       apiKey: process.env.MEILI_MASTER_KEY!,
+      // Embedder settings validate against live Ollama/CLIP — default 5s is too short.
+      timeout: 120_000,
     });
   }
   return client;

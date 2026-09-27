@@ -4,6 +4,11 @@ import { logMeiliError } from "@/lib/processing-log";
 
 let bootstrapped = false;
 
+const STICKER_TEXT_TEMPLATE =
+  "{{doc.title}} {{doc.aiCaption}} {{doc.tags}} {{doc.description}} {{doc.keywords}}";
+const MEMBER_TEXT_TEMPLATE =
+  "{{doc.name}} {{doc.description}} {{doc.memberText}}";
+
 function multimodalEmbedderSettings(): Record<string, unknown> | null {
   const url = process.env.MEILI_MULTIMODAL_URL?.trim();
   const model = process.env.MEILI_MULTIMODAL_MODEL?.trim();
@@ -54,7 +59,9 @@ function multimodalEmbedderSettings(): Record<string, unknown> | null {
   };
 }
 
-function textEmbedderSettings(): Record<string, unknown> | null {
+function textEmbedderSettings(
+  documentTemplate: string,
+): Record<string, unknown> | null {
   const ollama = process.env.OLLAMA_BASE_URL?.trim();
   if (!ollama) return null;
   const model = process.env.OLLAMA_EMBED_MODEL?.trim() || "nomic-embed-text";
@@ -66,8 +73,7 @@ function textEmbedderSettings(): Record<string, unknown> | null {
       source: "rest",
       url: `${base}/v1/embeddings`,
       ...(apiKey ? { apiKey } : {}),
-      documentTemplate:
-        "{{doc.title}} {{doc.aiCaption}} {{doc.tags}} {{doc.description}} {{doc.keywords}}",
+      documentTemplate,
       request: {
         model,
         input: ["{{text}}", "{{..}}"],
@@ -87,8 +93,7 @@ function textEmbedderSettings(): Record<string, unknown> | null {
     url: base,
     model,
     ...(apiKey ? { apiKey } : {}),
-    documentTemplate:
-      "{{doc.title}} {{doc.aiCaption}} {{doc.tags}} {{doc.description}} {{doc.keywords}}",
+    documentTemplate,
   };
 }
 
@@ -106,7 +111,8 @@ export async function ensureMeiliIndexes(): Promise<boolean> {
       console.warn("Meili multimodal experimental enable failed:", err);
     }
 
-    const textEmbedder = textEmbedderSettings();
+    const stickerText = textEmbedderSettings(STICKER_TEXT_TEMPLATE);
+    const memberText = textEmbedderSettings(MEMBER_TEXT_TEMPLATE);
     const imageEmbedder = multimodalEmbedderSettings();
 
     await meili.createIndex(MEILI_INDEX.stickers, { primaryKey: "id" }).catch(() => {});
@@ -129,6 +135,7 @@ export async function ensureMeiliIndexes(): Promise<boolean> {
         "aiVisualTags",
       ],
       filterableAttributes: [
+        "id",
         "categorySlug",
         "tags",
         "blobberId",
@@ -150,6 +157,10 @@ export async function ensureMeiliIndexes(): Promise<boolean> {
         "exactness",
         "popularityScore:desc",
       ],
+      // Short plurals get no typo tolerance — map cats → cat for keyword hits.
+      synonyms: {
+        cats: ["cat"],
+      },
     });
 
     await meili.index(MEILI_INDEX.collections).updateSettings({
@@ -216,14 +227,22 @@ export async function ensureMeiliIndexes(): Promise<boolean> {
       }
     }
 
-    if (textEmbedder) {
-      for (const uid of [
-        MEILI_INDEX.stickers,
-        MEILI_INDEX.collections,
-        MEILI_INDEX.prints,
-      ]) {
+    if (stickerText) {
+      try {
+        await applyEmbedder(
+          MEILI_INDEX.stickers,
+          MEILI_EMBEDDER.text,
+          stickerText,
+        );
+      } catch (err) {
+        console.warn(`Meili stickers text embedder failed:`, err);
+        logMeiliError("stickers text embedder", err);
+      }
+    }
+    if (memberText) {
+      for (const uid of [MEILI_INDEX.collections, MEILI_INDEX.prints]) {
         try {
-          await applyEmbedder(uid, MEILI_EMBEDDER.text, textEmbedder);
+          await applyEmbedder(uid, MEILI_EMBEDDER.text, memberText);
         } catch (err) {
           console.warn(`Meili ${uid} text embedder failed:`, err);
           logMeiliError(`${uid} text embedder`, err);

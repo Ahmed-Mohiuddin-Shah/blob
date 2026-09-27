@@ -18,5 +18,6 @@ COPY worker ./worker
 # Prisma-free slices only — worker never talks to Postgres.
 COPY lib/jobs/types.ts lib/jobs/payload-types.ts ./lib/jobs/
 COPY lib/node-canvas.ts ./lib/
+COPY lib/search/vision-parse.ts lib/search/vision-image.ts ./lib/search/
 
 CMD ["npm", "run", "worker"]
