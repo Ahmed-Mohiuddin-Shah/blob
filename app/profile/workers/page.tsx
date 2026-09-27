@@ -1,6 +1,6 @@
 import { WorkersAdmin } from "@/components/workers-admin";
 import { canManageAdmins } from "@/lib/capabilities";
-import { JOB_STATUS, JOB_SUBJECT } from "@/lib/jobs/types";
+import { JOB_STATUS, JOB_SUBJECT, WORKER_STATUS } from "@/lib/jobs/types";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/require-user";
 
@@ -60,6 +60,13 @@ export default async function ProfileWorkersPage() {
 
   const [workers, keys] = await Promise.all([
     prisma.worker.findMany({
+      // Hide offline workers whose key was revoked; keep offline if key still valid.
+      where: {
+        OR: [
+          { apiKey: { revokedAt: null } },
+          { status: WORKER_STATUS.online },
+        ],
+      },
       orderBy: [{ status: "asc" }, { lastHeartbeatAt: "desc" }],
       include: { apiKey: { select: { name: true, prefix: true } } },
       take: 100,

@@ -53,15 +53,16 @@ export async function meiliFederatedSearch(opts: {
         };
 
   try {
+    // Image search must omit `q` — empty q still matches the text searchFragment
+    // and Meili errors with "Query matches multiple search fragments".
     const stickerParams: Record<string, unknown> = {
-      q: mode === "image" ? "" : q,
       limit,
       facets: ["categorySlug", "tags", "mediaKind"],
       ...(opts.filter ? { filter: opts.filter } : {}),
       ...(hybrid ? { hybrid } : {}),
       ...(mode === "image" && opts.media
         ? { media: { image: opts.media } }
-        : {}),
+        : { q }),
     };
 
     const multi = await meili.multiSearch({

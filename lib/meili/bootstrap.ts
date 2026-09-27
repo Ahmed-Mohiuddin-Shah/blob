@@ -9,11 +9,15 @@ function multimodalEmbedderSettings(): Record<string, unknown> | null {
   const model = process.env.MEILI_MULTIMODAL_MODEL?.trim();
   if (!url || !model) return null;
   const apiKey = process.env.MEILI_MULTIMODAL_API_KEY?.trim();
-  // OpenAI-compatible /v1/embeddings — fragment value becomes `input` (array of {text|image}).
-  // Matches clip-server (docker-compose.clip.yml) and similar OpenAI multimodal embed APIs.
+  // ViT-B-32 OpenCLIP → 512; Meili cannot infer dims when using indexingFragments.
+  const dimensions = Number(process.env.MEILI_MULTIMODAL_DIMENSIONS || "512") || 512;
+  // One fragment → one embedding. Do NOT put "{{..}}" in response unless request
+  // also batches — that causes "response has multiple embeddings, but request
+  // has only one text to embed".
   return {
     source: "rest",
     url: url.replace(/\/$/, "") + "/v1/embeddings",
+    dimensions,
     ...(apiKey ? { apiKey } : {}),
     indexingFragments: {
       image: {
@@ -45,7 +49,7 @@ function multimodalEmbedderSettings(): Record<string, unknown> | null {
       input: "{{fragment}}",
     },
     response: {
-      data: [{ embedding: "{{embedding}}" }, "{{..}}" ],
+      data: [{ embedding: "{{embedding}}" }],
     },
   };
 }
