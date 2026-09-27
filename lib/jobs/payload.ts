@@ -48,11 +48,11 @@ async function buildSearchEnrichPayload(
   });
   if (!sticker) throw new Error("Missing sticker");
   const media = sticker.media.filter((m) => m.status === MEDIA_ASSET_STATUS.ready);
+  // Thumbnail first; never raw gif/video for vision.
   const asset =
     media.find((m) => m.kind === MEDIA_KIND.thumbnail) ||
     media.find((m) => m.kind === MEDIA_KIND.image) ||
-    media.find((m) => m.kind === MEDIA_KIND.chat) ||
-    media.find((m) => m.kind === MEDIA_KIND.gif);
+    media.find((m) => m.kind === MEDIA_KIND.chat);
   if (!asset) throw new Error("No preview media for search_enrich");
   return {
     kind: JOB_TYPE.searchEnrich,

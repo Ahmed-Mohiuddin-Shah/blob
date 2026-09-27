@@ -21,7 +21,11 @@ import type {
 import { JOB_TYPE } from "../lib/jobs/types";
 import { ensureNodeCanvas } from "../lib/node-canvas";
 import { visionImageBase64 } from "../lib/search/vision-image";
-import { parseVisionEnrichResult } from "../lib/search/vision-parse";
+import {
+  parseVisionEnrichResult,
+  structureEnrichPrompt,
+  VISION_DESCRIBE_PROMPT,
+} from "../lib/search/vision-parse";
 import {
   MAX_GIF_BYTES,
   MAX_IMAGE_BYTES,
@@ -73,6 +77,35 @@ export async function runWorkerJob(
   return runPack(payload, glass);
 }
 
+async function ollamaChatWorker(opts: {
+  base: string;
+  headers: Record<string, string>;
+  model: string;
+  content: string;
+  images?: string[];
+}): Promise<string> {
+  const chatRes = await fetch(`${opts.base}/api/chat`, {
+    method: "POST",
+    headers: opts.headers,
+    body: JSON.stringify({
+      model: opts.model,
+      stream: false,
+      messages: [
+        {
+          role: "user",
+          content: opts.content,
+          ...(opts.images?.length ? { images: opts.images } : {}),
+        },
+      ],
+    }),
+  });
+  if (!chatRes.ok) {
+    throw new Error(`Ollama chat ${chatRes.status}: ${await chatRes.text()}`);
+  }
+  const data = (await chatRes.json()) as { message?: { content?: string } };
+  return data.message?.content?.trim() ?? "";
+}
+
 async function runSearchEnrich(
   payload: SearchEnrichJobPayload,
   glassUrl: string,
@@ -84,7 +117,8 @@ async function runSearchEnrich(
 }> {
   const ollamaBase = (process.env.OLLAMA_BASE_URL || "").replace(/\/$/, "");
   if (!ollamaBase) throw new Error("OLLAMA_BASE_URL is not set on worker");
-  const model = process.env.OLLAMA_VISION_MODEL?.trim() || "moondream";
+  const visionModel = process.env.OLLAMA_VISION_MODEL?.trim() || "moondream";
+  const agentModel = process.env.OLLAMA_AGENT_MODEL?.trim() || "qwen2.5:3b";
 
   const glass = glassClient(glassUrl, glassKey);
   const res = await glass.objects.download(payload.glassObjectId);
@@ -98,27 +132,22 @@ async function runSearchEnrich(
   const key = process.env.OLLAMA_API_KEY?.trim();
   if (key) headers.Authorization = `Bearer ${key}`;
 
-  const chatRes = await fetch(`${ollamaBase}/api/chat`, {
-    method: "POST",
+  const prose = await ollamaChatWorker({
+    base: ollamaBase,
     headers,
-    body: JSON.stringify({
-      model,
-      stream: false,
-      messages: [
-        {
-          role: "user",
-          content: `Describe this sticker for search. Reply with ONLY JSON:
-{"caption":"one sentence visual description","scenario":"when someone would use this sticker","tags":["SHORT","TAGS"]}`,
-          images: [b64],
-        },
-      ],
-    }),
+    model: visionModel,
+    content: VISION_DESCRIBE_PROMPT,
+    images: [b64],
   });
-  if (!chatRes.ok) {
-    throw new Error(`Ollama chat ${chatRes.status}: ${await chatRes.text()}`);
-  }
-  const data = (await chatRes.json()) as { message?: { content?: string } };
-  return parseVisionEnrichResult(data.message?.content?.trim() ?? "");
+  if (!prose) throw new Error("Vision description empty");
+
+  const structured = await ollamaChatWorker({
+    base: ollamaBase,
+    headers,
+    model: agentModel,
+    content: structureEnrichPrompt(prose),
+  });
+  return parseVisionEnrichResult(structured);
 }
 
 async function runComposition(

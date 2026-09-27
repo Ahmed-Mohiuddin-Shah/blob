@@ -4,8 +4,14 @@ import { MEILI_EMBEDDER, MEILI_INDEX } from "../lib/meili/indexes";
 import { JOB_TYPE, JOB_TYPES } from "../lib/jobs/types";
 import { isMeiliConfigured } from "../lib/meili/client";
 import { printSearchDocId } from "../lib/search/documents";
+import { pickSearchEnrichMedia } from "../lib/search/enrich";
 import { visionImageBase64 } from "../lib/search/vision-image";
-import { parseVisionEnrichResult } from "../lib/search/vision-parse";
+import {
+  parseVisionEnrichResult,
+  structureEnrichPrompt,
+  VISION_DESCRIBE_PROMPT,
+} from "../lib/search/vision-parse";
+import { MEDIA_KIND } from "../lib/stickers";
 
 describe("search constants", () => {
   it("exposes search meta statuses", () => {
@@ -35,8 +41,21 @@ describe("search constants", () => {
     expect(printSearchDocId("pack", "3")).toBe("pack-3");
   });
 
-  it("rejects empty or schema-echo vision captions", () => {
-    expect(() => parseVisionEnrichResult("")).toThrow(/empty or placeholder/);
+  it("uses plain vision prompt and agent structure prompt", () => {
+    expect(VISION_DESCRIBE_PROMPT).toBe("Describe this image for search:");
+    expect(structureEnrichPrompt("a blackboard on a wall")).toContain(
+      "a blackboard on a wall",
+    );
+    expect(structureEnrichPrompt("x")).toContain("ONLY JSON");
+  });
+
+  it("rejects empty or schema-echo agent captions", () => {
+    expect(() => parseVisionEnrichResult("")).toThrow();
+    expect(() =>
+      parseVisionEnrichResult(
+        "The image shows a blackboard on a concrete wall.",
+      ),
+    ).toThrow(/JSON parse failed/);
     expect(() =>
       parseVisionEnrichResult(
         '{"caption":"one sentence visual description","scenario":"","tags":[]}',
@@ -47,6 +66,16 @@ describe("search constants", () => {
     );
     expect(ok.aiCaption).toBe("a blue cat under rain");
     expect(ok.aiVisualTags).toEqual(["CAT", "RAIN"]);
+  });
+
+  it("picks thumbnail over gif for enrich preview", () => {
+    expect(
+      pickSearchEnrichMedia([
+        { kind: MEDIA_KIND.gif },
+        { kind: MEDIA_KIND.thumbnail },
+      ])?.kind,
+    ).toBe(MEDIA_KIND.thumbnail);
+    expect(pickSearchEnrichMedia([{ kind: MEDIA_KIND.gif }])).toBeNull();
   });
 
   it("resizes vision input to jpeg within max edge", async () => {
