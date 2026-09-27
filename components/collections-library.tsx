@@ -1,9 +1,9 @@
 "use client";
 
-import { Search } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { SearchBar } from "@/components/search-bar";
 import { CollectionCard, type CollectionCardProps } from "./collection-card";
 import { LibrarySearchSentinel, useSearchDock } from "./library-search";
 
@@ -80,55 +80,24 @@ export function CollectionsLibrary({
     return () => obs.disconnect();
   }, [cursor, fetchPage, initialQ, loadingMore]);
 
-  function submit(e: React.FormEvent) {
-    e.preventDefault();
+  function submit(nextQ: string) {
     const params = new URLSearchParams();
-    if (q.trim()) params.set("q", q.trim());
+    if (nextQ.trim()) params.set("q", nextQ.trim());
     const qs = params.toString();
     router.push(qs ? `/collections?${qs}` : "/collections");
   }
 
   const searchForm = (dockedMode: boolean) => (
-    <form
+    <SearchBar
+      variant="library"
+      value={q}
+      onChange={setQ}
       onSubmit={submit}
+      showCamera
+      hideSubmit={dockedMode}
+      placeholder="Search collections or stickers inside…"
       className={dockedMode ? "w-full max-w-md" : "mx-auto max-w-2xl"}
-    >
-      <div
-        className={`group relative flex items-center rounded-full border border-divider bg-surface shadow-xl shadow-black/5 transition-all duration-300 focus-within:border-accent-pink/50 ${
-          dockedMode ? "p-1" : "p-2"
-        }`}
-      >
-        <div
-          className={`flex shrink-0 items-center justify-center text-inactive ${
-            dockedMode ? "h-9 w-9" : "h-12 w-12"
-          }`}
-        >
-          <Search
-            className={dockedMode ? "h-4 w-4" : "h-5 w-5"}
-            strokeWidth={1.75}
-            aria-hidden
-          />
-        </div>
-        <input
-          type="search"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search collections or stickers inside…"
-          className={`min-w-0 flex-1 bg-transparent outline-none placeholder:text-inactive ${
-            dockedMode ? "px-1 text-sm" : "px-2 text-base"
-          }`}
-          autoComplete="off"
-        />
-        {!dockedMode ? (
-          <button
-            type="submit"
-            className="hidden rounded-full bg-accent-gradient px-6 py-3 text-sm font-semibold text-white sm:block"
-          >
-            Search
-          </button>
-        ) : null}
-      </div>
-    </form>
+    />
   );
 
   return (

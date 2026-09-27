@@ -1,5 +1,7 @@
+"use client";
+
 import Link from "next/link";
-import { Search } from "lucide-react";
+import { SearchBar } from "@/components/search-bar";
 
 type Props = {
   action?: string;
@@ -16,26 +18,13 @@ export function SearchForm({
 }: Props) {
   return (
     <div className={className}>
-      <form action={action} method="GET" className="mx-auto max-w-2xl">
-        <div className="group relative flex items-center rounded-full border border-divider bg-surface p-2 shadow-xl shadow-black/5 transition-all duration-300 focus-within:border-accent-pink/50 focus-within:shadow-2xl focus-within:shadow-accent-pink/10">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center text-inactive">
-            <Search className="h-5 w-5" strokeWidth={1.75} aria-hidden />
-          </div>
-          <input
-            type="search"
-            name="q"
-            placeholder={placeholder}
-            className="min-w-0 flex-1 bg-transparent px-2 text-base outline-none placeholder:text-inactive"
-            autoComplete="off"
-          />
-          <button
-            type="submit"
-            className="hidden rounded-full bg-accent-gradient px-6 py-3 text-sm font-semibold text-white shadow-md shadow-accent-pink/20 transition-transform duration-200 hover:scale-[1.03] sm:block"
-          >
-            Search
-          </button>
-        </div>
-      </form>
+      <SearchBar
+        variant="hero"
+        placeholder={placeholder}
+        navigateTo={action}
+        showCamera
+        className="mx-auto max-w-2xl"
+      />
 
       {popular.length > 0 ? (
         <div className="mt-5 flex flex-wrap items-center justify-center gap-2 text-xs">

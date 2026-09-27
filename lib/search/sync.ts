@@ -1,6 +1,7 @@
 import { ensureMeiliIndexes } from "@/lib/meili/bootstrap";
 import { getMeili, isMeiliConfigured } from "@/lib/meili/client";
 import { MEILI_INDEX } from "@/lib/meili/indexes";
+import { logMeiliError } from "@/lib/processing-log";
 import {
   buildBlobberSearchDoc,
   buildCollectionSearchDoc,
@@ -8,18 +9,19 @@ import {
   buildStickerSearchDoc,
 } from "@/lib/search/documents";
 import { prisma } from "@/lib/prisma";
-import { SEARCH_META_STATUS } from "@/lib/search/constants";
-
 async function ready(): Promise<ReturnType<typeof getMeili>> {
   if (!isMeiliConfigured()) return null;
   await ensureMeiliIndexes();
   return getMeili();
 }
 
-export async function upsertStickerSearch(stickerId: bigint): Promise<void> {
+export async function upsertStickerSearch(
+  stickerId: bigint,
+  opts?: { requireSearchMeta?: boolean },
+): Promise<void> {
   const meili = await ready();
   if (!meili) return;
-  const doc = await buildStickerSearchDoc(stickerId);
+  const doc = await buildStickerSearchDoc(stickerId, opts);
   if (!doc) {
     await meili.index(MEILI_INDEX.stickers).deleteDocument(stickerId.toString()).catch(() => {});
     return;
@@ -50,9 +52,9 @@ export async function patchStickerPopularity(
   if (!meili) return;
   const row = await prisma.sticker.findUnique({
     where: { id: stickerId },
-    select: { searchMetaStatus: true },
+    select: { searchIndexedAt: true },
   });
-  if (row?.searchMetaStatus !== SEARCH_META_STATUS.approved) return;
+  if (!row?.searchIndexedAt) return;
   await meili.index(MEILI_INDEX.stickers).updateDocuments([
     { id: stickerId.toString(), ...attrs },
   ]);
@@ -92,19 +94,22 @@ export async function upsertBlobberSearch(blobberId: bigint): Promise<void> {
 }
 
 export function syncStickerSearch(stickerId: bigint): void {
-  void upsertStickerSearch(stickerId).catch((err) =>
-    console.error("upsertStickerSearch", stickerId.toString(), err),
-  );
+  void upsertStickerSearch(stickerId).catch((err) => {
+    console.error("upsertStickerSearch", stickerId.toString(), err);
+    logMeiliError(`upsert sticker ${stickerId}`, err);
+  });
 }
 
 export function syncCollectionSearch(collectionId: bigint): void {
-  void upsertCollectionSearch(collectionId).catch((err) =>
-    console.error("upsertCollectionSearch", collectionId.toString(), err),
-  );
+  void upsertCollectionSearch(collectionId).catch((err) => {
+    console.error("upsertCollectionSearch", collectionId.toString(), err);
+    logMeiliError(`upsert collection ${collectionId}`, err);
+  });
 }
 
 export function syncPrintSearch(kind: "sheet" | "pack", id: bigint): void {
-  void upsertPrintSearch(kind, id).catch((err) =>
-    console.error("upsertPrintSearch", kind, id.toString(), err),
-  );
+  void upsertPrintSearch(kind, id).catch((err) => {
+    console.error("upsertPrintSearch", kind, id.toString(), err);
+    logMeiliError(`upsert print ${kind}:${id}`, err);
+  });
 }

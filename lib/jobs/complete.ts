@@ -150,9 +150,16 @@ export async function failJob(opts: {
       message: opts.message,
     });
   } else if (job.type === JOB_TYPE.searchEnrich) {
-    await prisma.sticker.update({
+    const s = await prisma.sticker.update({
       where: { id: job.subjectId },
       data: { searchMetaStatus: SEARCH_META_STATUS.none },
+      select: { title: true },
+    });
+    await appendProcessingLog({
+      subjectType: PROCESSING_SUBJECT.sticker,
+      subjectId: job.subjectId,
+      subjectTitle: s.title,
+      message: `search_enrich: ${opts.message}`,
     });
   } else if (job.type === JOB_TYPE.packEncode) {
     const pack = await prisma.stickerPack.update({

@@ -1,5 +1,6 @@
 import { getMeili, isMeiliConfigured } from "@/lib/meili/client";
 import { MEILI_EMBEDDER, MEILI_INDEX } from "@/lib/meili/indexes";
+import { logMeiliError } from "@/lib/processing-log";
 
 let bootstrapped = false;
 
@@ -54,9 +55,32 @@ function textEmbedderSettings(): Record<string, unknown> | null {
   if (!ollama) return null;
   const model = process.env.OLLAMA_EMBED_MODEL?.trim() || "nomic-embed-text";
   const apiKey = process.env.OLLAMA_API_KEY?.trim();
+  const base = ollama.replace(/\/$/, "");
+  // Meili `source: ollama` only allows http:// — use OpenAI-compatible REST for HTTPS.
+  if (base.startsWith("https://")) {
+    return {
+      source: "rest",
+      url: `${base}/v1/embeddings`,
+      ...(apiKey ? { apiKey } : {}),
+      documentTemplate:
+        "{{doc.title}} {{doc.aiCaption}} {{doc.tags}} {{doc.description}} {{doc.keywords}}",
+      request: {
+        model,
+        input: ["{{text}}", "{{..}}"],
+      },
+      response: {
+        data: [
+          {
+            embedding: "{{embedding}}",
+          },
+          "{{..}}",
+        ],
+      },
+    };
+  }
   return {
     source: "ollama",
-    url: ollama.replace(/\/$/, ""),
+    url: base,
     model,
     ...(apiKey ? { apiKey } : {}),
     documentTemplate:
@@ -72,114 +96,154 @@ export async function ensureMeiliIndexes(): Promise<boolean> {
   if (!meili) return false;
 
   try {
-    await meili.updateExperimentalFeatures({ multimodal: true });
+    try {
+      await meili.updateExperimentalFeatures({ multimodal: true });
+    } catch (err) {
+      console.warn("Meili multimodal experimental enable failed:", err);
+    }
+
+    const textEmbedder = textEmbedderSettings();
+    const imageEmbedder = multimodalEmbedderSettings();
+
+    await meili.createIndex(MEILI_INDEX.stickers, { primaryKey: "id" }).catch(() => {});
+    await meili.createIndex(MEILI_INDEX.collections, { primaryKey: "id" }).catch(() => {});
+    await meili.createIndex(MEILI_INDEX.prints, { primaryKey: "id" }).catch(() => {});
+    await meili.createIndex(MEILI_INDEX.blobbers, { primaryKey: "id" }).catch(() => {});
+
+    // Core settings first — keyword search must work even if embedders fail.
+    await meili.index(MEILI_INDEX.stickers).updateSettings({
+      searchableAttributes: [
+        "title",
+        "description",
+        "keywords",
+        "alternateNames",
+        "tags",
+        "category",
+        "blobber",
+        "aiCaption",
+        "aiScenario",
+        "aiVisualTags",
+      ],
+      filterableAttributes: [
+        "categorySlug",
+        "tags",
+        "blobberId",
+        "mediaKind",
+        "hasAudio",
+      ],
+      sortableAttributes: [
+        "popularityScore",
+        "likesCount",
+        "publishedAt",
+        "createdAt",
+      ],
+      rankingRules: [
+        "words",
+        "typo",
+        "proximity",
+        "attribute",
+        "sort",
+        "exactness",
+        "popularityScore:desc",
+      ],
+    });
+
+    await meili.index(MEILI_INDEX.collections).updateSettings({
+      searchableAttributes: ["name", "description", "memberText"],
+      filterableAttributes: [],
+      sortableAttributes: ["likesCount", "updatedAt"],
+      rankingRules: [
+        "words",
+        "typo",
+        "proximity",
+        "attribute",
+        "sort",
+        "exactness",
+        "likesCount:desc",
+      ],
+    });
+
+    await meili.index(MEILI_INDEX.prints).updateSettings({
+      searchableAttributes: ["name", "description", "memberText"],
+      filterableAttributes: ["kind"],
+      sortableAttributes: ["likesCount", "updatedAt"],
+      rankingRules: [
+        "words",
+        "typo",
+        "proximity",
+        "attribute",
+        "sort",
+        "exactness",
+        "likesCount:desc",
+      ],
+    });
+
+    await meili.index(MEILI_INDEX.blobbers).updateSettings({
+      searchableAttributes: ["displayName", "bio"],
+      filterableAttributes: [],
+      sortableAttributes: ["stickerCount"],
+      rankingRules: [
+        "words",
+        "typo",
+        "proximity",
+        "attribute",
+        "sort",
+        "exactness",
+        "stickerCount:desc",
+      ],
+    });
+
+    // Embedders validate against live Ollama/CLIP — set one at a time so a bad
+    // multimodal config cannot block the text embedder (hybrid/semantic).
+    const client = meili;
+    async function applyEmbedder(
+      uid: string,
+      name: string,
+      settings: Record<string, unknown>,
+    ) {
+      const task = await client
+        .index(uid)
+        .updateEmbedders({ [name]: settings } as never)
+        .waitTask();
+      if (task.status === "failed") {
+        throw new Error(
+          task.error?.message ?? `Meili embedder ${uid}/${name} failed`,
+        );
+      }
+    }
+
+    if (textEmbedder) {
+      for (const uid of [
+        MEILI_INDEX.stickers,
+        MEILI_INDEX.collections,
+        MEILI_INDEX.prints,
+      ]) {
+        try {
+          await applyEmbedder(uid, MEILI_EMBEDDER.text, textEmbedder);
+        } catch (err) {
+          console.warn(`Meili ${uid} text embedder failed:`, err);
+          logMeiliError(`${uid} text embedder`, err);
+        }
+      }
+    }
+    if (imageEmbedder) {
+      try {
+        await applyEmbedder(
+          MEILI_INDEX.stickers,
+          MEILI_EMBEDDER.image,
+          imageEmbedder,
+        );
+      } catch (err) {
+        console.warn("Meili sticker image embedder failed:", err);
+        logMeiliError("sticker image embedder", err);
+      }
+    }
+
+    bootstrapped = true;
+    return true;
   } catch (err) {
-    console.warn("Meili multimodal experimental enable failed:", err);
+    console.error("Meili bootstrap failed:", err);
+    logMeiliError("bootstrap", err);
+    return false;
   }
-
-  const textEmbedder = textEmbedderSettings();
-  const imageEmbedder = multimodalEmbedderSettings();
-
-  await meili.createIndex(MEILI_INDEX.stickers, { primaryKey: "id" }).catch(() => {});
-  await meili.createIndex(MEILI_INDEX.collections, { primaryKey: "id" }).catch(() => {});
-  await meili.createIndex(MEILI_INDEX.prints, { primaryKey: "id" }).catch(() => {});
-  await meili.createIndex(MEILI_INDEX.blobbers, { primaryKey: "id" }).catch(() => {});
-
-  const stickerEmbedders: Record<string, unknown> = {};
-  if (textEmbedder) stickerEmbedders[MEILI_EMBEDDER.text] = textEmbedder;
-  if (imageEmbedder) stickerEmbedders[MEILI_EMBEDDER.image] = imageEmbedder;
-
-  await meili.index(MEILI_INDEX.stickers).updateSettings({
-    searchableAttributes: [
-      "title",
-      "description",
-      "keywords",
-      "alternateNames",
-      "tags",
-      "category",
-      "blobber",
-      "aiCaption",
-      "aiScenario",
-      "aiVisualTags",
-    ],
-    filterableAttributes: [
-      "categorySlug",
-      "tags",
-      "blobberId",
-      "mediaKind",
-      "hasAudio",
-    ],
-    sortableAttributes: [
-      "popularityScore",
-      "likesCount",
-      "publishedAt",
-      "createdAt",
-    ],
-    rankingRules: [
-      "words",
-      "typo",
-      "proximity",
-      "attribute",
-      "sort",
-      "exactness",
-      "popularityScore:desc",
-    ],
-    ...(Object.keys(stickerEmbedders).length
-      ? { embedders: stickerEmbedders as never }
-      : {}),
-  });
-
-  const textOnly = textEmbedder
-    ? { embedders: { [MEILI_EMBEDDER.text]: textEmbedder } as never }
-    : {};
-
-  await meili.index(MEILI_INDEX.collections).updateSettings({
-    searchableAttributes: ["name", "description", "memberText"],
-    filterableAttributes: [],
-    sortableAttributes: ["likesCount", "updatedAt"],
-    rankingRules: [
-      "words",
-      "typo",
-      "proximity",
-      "attribute",
-      "sort",
-      "exactness",
-      "likesCount:desc",
-    ],
-    ...textOnly,
-  });
-
-  await meili.index(MEILI_INDEX.prints).updateSettings({
-    searchableAttributes: ["name", "description", "memberText"],
-    filterableAttributes: ["kind"],
-    sortableAttributes: ["likesCount", "updatedAt"],
-    rankingRules: [
-      "words",
-      "typo",
-      "proximity",
-      "attribute",
-      "sort",
-      "exactness",
-      "likesCount:desc",
-    ],
-    ...textOnly,
-  });
-
-  await meili.index(MEILI_INDEX.blobbers).updateSettings({
-    searchableAttributes: ["displayName", "bio"],
-    filterableAttributes: [],
-    sortableAttributes: ["stickerCount"],
-    rankingRules: [
-      "words",
-      "typo",
-      "proximity",
-      "attribute",
-      "sort",
-      "exactness",
-      "stickerCount:desc",
-    ],
-  });
-
-  bootstrapped = true;
-  return true;
 }

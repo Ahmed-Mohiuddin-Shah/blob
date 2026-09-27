@@ -18,6 +18,7 @@ import {
   Sparkles,
   Upload,
   Users,
+  type LucideIcon,
 } from "lucide-react";
 
 type Props = {
@@ -30,6 +31,21 @@ type Props = {
   blobberEditsCount: number;
   blobberAssocCount: number;
   username: string;
+};
+
+type NavItem = {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  active: (pathname: string) => boolean;
+  badge?: number;
+  admin?: boolean;
+  superadmin?: boolean;
+};
+
+type NavSection = {
+  title: string;
+  items: NavItem[];
 };
 
 const linkClass = (active: boolean) =>
@@ -52,159 +68,187 @@ export function ProfileNav({
 }: Props) {
   const pathname = usePathname();
 
+  const sections: NavSection[] = [
+    {
+      title: "Library",
+      items: [
+        {
+          href: "/profile",
+          label: "Overview",
+          icon: LayoutDashboard,
+          active: (p) => p === "/profile",
+        },
+        {
+          href: "/profile/uploads",
+          label: "Uploads",
+          icon: ImageIcon,
+          active: (p) => p.startsWith("/profile/uploads"),
+        },
+        {
+          href: "/profile/favourites",
+          label: "Favourites",
+          icon: Heart,
+          active: (p) => p.startsWith("/profile/favourites"),
+        },
+        {
+          href: "/profile/prints",
+          label: "Prints",
+          icon: Printer,
+          active: (p) => p.startsWith("/profile/prints"),
+        },
+      ],
+    },
+    {
+      title: "Moderation",
+      items: [
+        {
+          href: "/profile/pending",
+          label: "Pending",
+          icon: Clock,
+          active: (p) => p.startsWith("/profile/pending"),
+          badge: pendingCount,
+        },
+        {
+          href: "/profile/edits",
+          label: "Edits",
+          icon: Pencil,
+          active: (p) => p.startsWith("/profile/edits"),
+          badge: needsEditCount,
+        },
+        {
+          href: "/profile/claims",
+          label: "Claims",
+          icon: Flag,
+          active: (p) => p.startsWith("/profile/claims"),
+          badge: claimsCount,
+          admin: true,
+        },
+        {
+          href: "/profile/blobber-edits",
+          label: "Blobber edits",
+          icon: Pencil,
+          active: (p) => p.startsWith("/profile/blobber-edits"),
+          badge: blobberEditsCount,
+          admin: true,
+        },
+      ],
+    },
+    {
+      title: "Blobber",
+      items: [
+        {
+          href: "/profile/blobber",
+          label: "Blobber",
+          icon: Sparkles,
+          active: (p) =>
+            p === "/profile/blobber" || p.startsWith("/profile/blobber/"),
+        },
+        {
+          href: "/profile/blobber-associations",
+          label: "Associations",
+          icon: Link2,
+          active: (p) => p.startsWith("/profile/blobber-associations"),
+          badge: blobberAssocCount,
+          admin: true,
+        },
+        {
+          href: "/profile/unlinked-blobbers",
+          label: "Unlinked",
+          icon: Users,
+          active: (p) => p.startsWith("/profile/unlinked-blobbers"),
+          admin: true,
+        },
+      ],
+    },
+    {
+      title: "Account",
+      items: [
+        {
+          href: "/profile/settings",
+          label: "Settings",
+          icon: Settings,
+          active: (p) => p.startsWith("/profile/settings"),
+        },
+      ],
+    },
+    {
+      title: "System",
+      items: [
+        {
+          href: "/profile/history",
+          label: "History",
+          icon: History,
+          active: (p) => p.startsWith("/profile/history"),
+          admin: true,
+        },
+        {
+          href: "/profile/workers",
+          label: "Workers",
+          icon: Server,
+          active: (p) => p.startsWith("/profile/workers"),
+          admin: true,
+        },
+        {
+          href: "/profile/logs",
+          label: "Logs",
+          icon: ScrollText,
+          active: (p) => p.startsWith("/profile/logs"),
+          superadmin: true,
+        },
+        {
+          href: "/profile/users",
+          label: "Manage users",
+          icon: Users,
+          active: (p) => p.startsWith("/profile/users"),
+          admin: true,
+        },
+      ],
+    },
+  ];
+
   return (
     <aside className="w-full shrink-0 sm:w-56">
       <p className="mb-3 truncate px-3 text-xs font-bold uppercase tracking-wider text-inactive">
         @{username}
       </p>
       <nav className="flex flex-row gap-1 overflow-x-auto sm:flex-col sm:overflow-visible">
-        <Link href="/profile" className={linkClass(pathname === "/profile")}>
-          <LayoutDashboard className="h-4 w-4" strokeWidth={1.75} aria-hidden />
-          Overview
-        </Link>
-        <Link
-          href="/profile/uploads"
-          className={linkClass(pathname.startsWith("/profile/uploads"))}
-        >
-          <ImageIcon className="h-4 w-4" strokeWidth={1.75} aria-hidden />
-          Uploads
-        </Link>
-        <Link
-          href="/profile/favourites"
-          className={linkClass(pathname.startsWith("/profile/favourites"))}
-        >
-          <Heart className="h-4 w-4" strokeWidth={1.75} aria-hidden />
-          Favourites
-        </Link>
-        <Link
-          href="/profile/prints"
-          className={linkClass(pathname.startsWith("/profile/prints"))}
-        >
-          <Printer className="h-4 w-4" strokeWidth={1.75} aria-hidden />
-          Prints
-        </Link>
-        <Link
-          href="/profile/pending"
-          className={linkClass(pathname.startsWith("/profile/pending"))}
-        >
-          <Clock className="h-4 w-4" strokeWidth={1.75} aria-hidden />
-          Pending
-          {pendingCount > 0 ? (
-            <span className="ml-auto rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold text-white">
-              {pendingCount}
-            </span>
-          ) : null}
-        </Link>
-        <Link
-          href="/profile/edits"
-          className={linkClass(pathname.startsWith("/profile/edits"))}
-        >
-          <Pencil className="h-4 w-4" strokeWidth={1.75} aria-hidden />
-          Edits
-          {needsEditCount > 0 ? (
-            <span className="ml-auto rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold text-white">
-              {needsEditCount}
-            </span>
-          ) : null}
-        </Link>
-        <Link
-          href="/profile/blobber"
-          className={linkClass(
-            pathname === "/profile/blobber" ||
-              pathname.startsWith("/profile/blobber/"),
-          )}
-        >
-          <Sparkles className="h-4 w-4" strokeWidth={1.75} aria-hidden />
-          Blobber
-        </Link>
-        <Link
-          href="/profile/settings"
-          className={linkClass(pathname.startsWith("/profile/settings"))}
-        >
-          <Settings className="h-4 w-4" strokeWidth={1.75} aria-hidden />
-          Settings
-        </Link>
-        {isAdmin ? (
-          <>
-            <Link
-              href="/profile/claims"
-              className={linkClass(pathname.startsWith("/profile/claims"))}
+        {sections.map((section) => {
+          const items = section.items.filter((item) => {
+            if (item.superadmin) return isSuperadmin;
+            if (item.admin) return isAdmin;
+            return true;
+          });
+          if (!items.length) return null;
+          return (
+            <div
+              key={section.title}
+              className="flex flex-row gap-1 sm:mb-3 sm:flex-col sm:gap-1"
             >
-              <Flag className="h-4 w-4" strokeWidth={1.75} aria-hidden />
-              Claims
-              {claimsCount > 0 ? (
-                <span className="ml-auto rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold text-white">
-                  {claimsCount}
-                </span>
-              ) : null}
-            </Link>
-            <Link
-              href="/profile/blobber-edits"
-              className={linkClass(pathname.startsWith("/profile/blobber-edits"))}
-            >
-              <Pencil className="h-4 w-4" strokeWidth={1.75} aria-hidden />
-              Blobber edits
-              {blobberEditsCount > 0 ? (
-                <span className="ml-auto rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold text-white">
-                  {blobberEditsCount}
-                </span>
-              ) : null}
-            </Link>
-            <Link
-              href="/profile/blobber-associations"
-              className={linkClass(
-                pathname.startsWith("/profile/blobber-associations"),
-              )}
-            >
-              <Link2 className="h-4 w-4" strokeWidth={1.75} aria-hidden />
-              Associations
-              {blobberAssocCount > 0 ? (
-                <span className="ml-auto rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold text-white">
-                  {blobberAssocCount}
-                </span>
-              ) : null}
-            </Link>
-            <Link
-              href="/profile/unlinked-blobbers"
-              className={linkClass(
-                pathname.startsWith("/profile/unlinked-blobbers"),
-              )}
-            >
-              <Users className="h-4 w-4" strokeWidth={1.75} aria-hidden />
-              Unlinked
-            </Link>
-            <Link
-              href="/profile/history"
-              className={linkClass(pathname.startsWith("/profile/history"))}
-            >
-              <History className="h-4 w-4" strokeWidth={1.75} aria-hidden />
-              History
-            </Link>
-            <Link
-              href="/profile/workers"
-              className={linkClass(pathname.startsWith("/profile/workers"))}
-            >
-              <Server className="h-4 w-4" strokeWidth={1.75} aria-hidden />
-              Workers
-            </Link>
-            {isSuperadmin ? (
-              <Link
-                href="/profile/logs"
-                className={linkClass(pathname.startsWith("/profile/logs"))}
-              >
-                <ScrollText className="h-4 w-4" strokeWidth={1.75} aria-hidden />
-                Logs
-              </Link>
-            ) : null}
-            <Link
-              href="/profile/users"
-              className={linkClass(pathname.startsWith("/profile/users"))}
-            >
-              <Users className="h-4 w-4" strokeWidth={1.75} aria-hidden />
-              Manage users
-            </Link>
-          </>
-        ) : null}
+              <p className="mb-1 hidden px-3 text-[0.65rem] font-bold uppercase tracking-wider text-inactive sm:block">
+                {section.title}
+              </p>
+              {items.map((item) => {
+                const Icon = item.icon;
+                const active = item.active(pathname);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={linkClass(active)}
+                  >
+                    <Icon className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+                    {item.label}
+                    {item.badge && item.badge > 0 ? (
+                      <span className="ml-auto rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold text-white">
+                        {item.badge}
+                      </span>
+                    ) : null}
+                  </Link>
+                );
+              })}
+            </div>
+          );
+        })}
       </nav>
 
       {canUpload ? (

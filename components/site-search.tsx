@@ -2,10 +2,14 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Search, ImagePlus } from "lucide-react";
 import { useEffect, useState, useTransition } from "react";
-import { BusyButton } from "@/components/busy-button";
 import { MeiliTypeahead } from "@/components/meili-typeahead";
+import { SearchBar } from "@/components/search-bar";
+import {
+  fileToHandoff,
+  takeImageHandoff,
+  type ImageHandoff,
+} from "@/lib/search/image-handoff";
 
 type Hit = {
   index: string;
@@ -45,6 +49,20 @@ function labelFor(hit: Hit): string {
   return hit.title || hit.name || hit.displayName || hit.id;
 }
 
+async function parseJsonResponse(res: Response): Promise<Record<string, unknown>> {
+  const text = await res.text();
+  if (!text) {
+    throw new Error(
+      res.ok ? "Empty response" : `Search failed (${res.status})`,
+    );
+  }
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    throw new Error(`Search failed (${res.status})`);
+  }
+}
+
 export function SiteSearch({ initialQ = "", initialMode = "hybrid" }: Props) {
   const router = useRouter();
   const params = useSearchParams();
@@ -66,12 +84,25 @@ export function SiteSearch({ initialQ = "", initialMode = "hybrid" }: Props) {
     }
     const t = setTimeout(() => {
       void fetch(`/api/search?suggest=1&q=${encodeURIComponent(q)}`)
-        .then((r) => r.json())
-        .then((d) => setSuggestions(d.suggestions ?? []))
+        .then((r) => parseJsonResponse(r))
+        .then((d) =>
+          setSuggestions(
+            (d.suggestions as { id: string; slug?: string; title?: string }[]) ??
+              [],
+          ),
+        )
         .catch(() => setSuggestions([]));
     }, 200);
     return () => clearTimeout(t);
   }, [q]);
+
+  function applyResult(data: Record<string, unknown>, engineFallback = "") {
+    setHits((data.hits as Hit[]) ?? []);
+    setFacets(
+      (data.facetDistribution as Record<string, Record<string, number>>) ?? {},
+    );
+    setEngine(String(data.engine ?? engineFallback));
+  }
 
   function runSearch(nextQ = q, nextMode = mode) {
     setError(null);
@@ -87,21 +118,17 @@ export function SiteSearch({ initialQ = "", initialMode = "hybrid" }: Props) {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ q: nextQ }),
           });
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.error || "Agent search failed");
-          setHits(data.hits ?? []);
-          setFacets(data.facetDistribution ?? {});
-          setEngine(data.engine ?? "meili");
+          const data = await parseJsonResponse(res);
+          if (!res.ok) throw new Error(String(data.error || "Agent search failed"));
+          applyResult(data, "meili");
           return;
         }
         const res = await fetch(
           `/api/search?q=${encodeURIComponent(nextQ)}&mode=${encodeURIComponent(nextMode)}&limit=36`,
         );
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Search failed");
-        setHits(data.hits ?? []);
-        setFacets(data.facetDistribution ?? {});
-        setEngine(data.engine ?? "");
+        const data = await parseJsonResponse(res);
+        if (!res.ok) throw new Error(String(data.error || "Search failed"));
+        applyResult(data);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Search failed");
         setHits([]);
@@ -109,46 +136,43 @@ export function SiteSearch({ initialQ = "", initialMode = "hybrid" }: Props) {
     });
   }
 
-  useEffect(() => {
-    if (initialQ || params.get("q")) {
-      runSearch(initialQ || params.get("q") || "", initialMode || params.get("mode") || "hybrid");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount / URL seed only
-  }, []);
-
-  async function onImage(file: File | null) {
-    if (!file) return;
+  function runImageSearch(media: ImageHandoff) {
     setError(null);
     setMode("image");
     startTransition(async () => {
       try {
-        const dataUrl = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(String(reader.result));
-          reader.onerror = () => reject(new Error("read failed"));
-          reader.readAsDataURL(file);
-        });
-        const [header, data] = dataUrl.split(",");
-        const mime = header.match(/data:(.*);base64/)?.[1] || file.type;
         const res = await fetch("/api/search", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             mode: "image",
-            media: { mime, data },
+            media: { mime: media.mime, data: media.data },
           }),
         });
-        const json = await res.json();
-        if (!res.ok) throw new Error(json.error || "Image search failed");
-        setHits(json.hits ?? []);
-        setFacets(json.facetDistribution ?? {});
-        setEngine(json.engine ?? "");
+        const json = await parseJsonResponse(res);
+        if (!res.ok) throw new Error(String(json.error || "Image search failed"));
+        applyResult(json);
         router.replace("/search?mode=image");
       } catch (e) {
         setError(e instanceof Error ? e.message : "Image search failed");
       }
     });
   }
+
+  useEffect(() => {
+    const handoff = takeImageHandoff();
+    if (handoff) {
+      runImageSearch(handoff);
+      return;
+    }
+    if (initialQ || params.get("q")) {
+      runSearch(
+        initialQ || params.get("q") || "",
+        initialMode || params.get("mode") || "hybrid",
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount / URL seed only
+  }, []);
 
   const byIndex = {
     stickers: hits.filter((h) => h.index === "stickers"),
@@ -166,34 +190,24 @@ export function SiteSearch({ initialQ = "", initialMode = "hybrid" }: Props) {
         find anything
       </h1>
 
-      <form
+      <SearchBar
+        variant="universal"
         className="mt-8"
-        onSubmit={(e) => {
-          e.preventDefault();
-          runSearch();
+        value={q}
+        onChange={setQ}
+        busy={pending}
+        showCamera
+        showAgent
+        placeholder="Stickers, collections, prints, blobbers…"
+        onSubmit={(next) => runSearch(next, mode === "image" ? "hybrid" : mode)}
+        onImageSearch={(file) => {
+          void fileToHandoff(file).then(runImageSearch);
         }}
-      >
-        <div className="group relative flex items-center rounded-full border border-divider bg-surface p-2 shadow-xl shadow-black/5">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center text-inactive">
-            <Search className="h-5 w-5" strokeWidth={1.75} aria-hidden />
-          </div>
-          <input
-            type="search"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Stickers, collections, prints, blobbers…"
-            className="min-w-0 flex-1 bg-transparent px-2 text-base outline-none placeholder:text-inactive"
-            autoComplete="off"
-          />
-          <BusyButton
-            type="submit"
-            busy={pending}
-            className="rounded-full bg-accent-gradient px-6 py-3 text-sm font-semibold text-white"
-          >
-            Search
-          </BusyButton>
-        </div>
-      </form>
+        onAgentSearch={(next) => {
+          setMode("agent");
+          runSearch(next, "agent");
+        }}
+      />
 
       <MeiliTypeahead
         query={q}
@@ -239,16 +253,6 @@ export function SiteSearch({ initialQ = "", initialMode = "hybrid" }: Props) {
             {m.label}
           </button>
         ))}
-        <label className="ml-auto inline-flex cursor-pointer items-center gap-2 rounded-full border border-divider px-3 py-1.5 text-xs text-secondary hover:border-accent-pink/40">
-          <ImagePlus className="h-4 w-4" strokeWidth={1.75} />
-          Upload image
-          <input
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => void onImage(e.target.files?.[0] ?? null)}
-          />
-        </label>
       </div>
 
       {engine ? (

@@ -43,7 +43,9 @@ export type StickerSearchDoc = {
 
 export async function buildStickerSearchDoc(
   stickerId: bigint,
+  opts?: { requireSearchMeta?: boolean },
 ): Promise<StickerSearchDoc | null> {
+  const requireSearchMeta = opts?.requireSearchMeta !== false;
   const s = await prisma.sticker.findUnique({
     where: { id: stickerId },
     include: {
@@ -58,7 +60,8 @@ export async function buildStickerSearchDoc(
     s.moderationStatus !== MODERATION_STATUS.approved ||
     s.visibility !== VISIBILITY.public ||
     s.processingStatus !== PROCESSING_STATUS.ready ||
-    s.searchMetaStatus !== SEARCH_META_STATUS.approved
+    (requireSearchMeta &&
+      s.searchMetaStatus !== SEARCH_META_STATUS.approved)
   ) {
     return null;
   }

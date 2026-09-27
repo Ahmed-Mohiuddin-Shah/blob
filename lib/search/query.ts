@@ -4,6 +4,7 @@ import { MEILI_EMBEDDER, MEILI_INDEX } from "@/lib/meili/indexes";
 import { MODERATION_STATUS } from "@/lib/moderation";
 import { PRINT_STATUS } from "@/lib/prints";
 import { prisma } from "@/lib/prisma";
+import { logMeiliError } from "@/lib/processing-log";
 import {
   PROCESSING_STATUS,
   VISIBILITY,
@@ -144,6 +145,7 @@ export async function meiliFederatedSearch(opts: {
     return { engine: "meili", hits, facetDistribution };
   } catch (err) {
     console.error("Meili search failed, Prisma fallback:", err);
+    logMeiliError("federated search", err);
     return { engine: "prisma", hits: await prismaFallback(q, limit) };
   }
 }
@@ -232,7 +234,7 @@ async function prismaFallback(q: string, limit: number): Promise<FederatedHit[]>
 
 export async function relatedStickers(
   stickerId: bigint,
-  limit = 12,
+  limit = 5,
 ): Promise<FederatedHit[]> {
   const self = await prisma.sticker.findUnique({
     where: { id: stickerId },

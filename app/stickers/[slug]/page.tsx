@@ -6,6 +6,7 @@ import { AddToCollectionButton } from "@/components/add-to-collection-button";
 import { AttributionClaimForm } from "@/components/attribution-claim-form";
 import { AttributionCredit } from "@/components/attribution-credit";
 import { FavouriteButton } from "@/components/favourite-button";
+import { StickerCard, type StickerCardProps } from "@/components/sticker-card";
 import { StickerDownloadButtons } from "@/components/sticker-download-buttons";
 import { StickerFailedActions } from "@/components/sticker-failed-actions";
 import { StickerMedia } from "@/components/sticker-media";
@@ -18,6 +19,7 @@ import { MODERATION_STATUS } from "@/lib/moderation";
 import { prisma } from "@/lib/prisma";
 import { relatedStickers } from "@/lib/search/query";
 import {
+  MEDIA_ASSET_STATUS,
   PROCESSING_STATUS,
   VISIBILITY,
   canAccessSticker,
@@ -129,9 +131,52 @@ export default async function StickerDetailPage({
   const creditLabel = sticker.blobber?.displayName ?? "";
   const blobberHref = sticker.blobber ? `/blobbers/${sticker.blobber.id}` : null;
 
-  const related = isPublicBrowseable(sticker)
-    ? await relatedStickers(sticker.id, 8)
-    : [];
+  let relatedCards: StickerCardProps[] = [];
+  if (isPublicBrowseable(sticker)) {
+    const hits = (await relatedStickers(sticker.id, 5)).slice(0, 5);
+    const ids = hits
+      .map((h) => {
+        try {
+          return BigInt(h.id);
+        } catch {
+          return null;
+        }
+      })
+      .filter((x): x is bigint => x != null);
+    if (ids.length) {
+      const rows = await prisma.sticker.findMany({
+        where: { id: { in: ids } },
+        include: {
+          blobber: { select: { id: true, displayName: true } },
+          createdBy: { select: { displayName: true, username: true } },
+          media: {
+            where: { status: MEDIA_ASSET_STATUS.ready },
+            select: { kind: true, hasAudio: true, status: true },
+          },
+        },
+      });
+      const byId = new Map(rows.map((r) => [r.id.toString(), r]));
+      relatedCards = ids
+        .map((id) => byId.get(id.toString()))
+        .filter((r): r is NonNullable<typeof r> => !!r)
+        .map((r) => {
+          const type = stickerTypeFromKinds(r.media.map((m) => m.kind));
+          return {
+            title: r.title,
+            author:
+              r.blobber?.displayName ||
+              r.createdBy.displayName ||
+              r.createdBy.username,
+            blobberHref: r.blobber ? `/blobbers/${r.blobber.id}` : null,
+            type,
+            href: `/stickers/${r.slug}`,
+            thumbUrl: `/api/stickers/${r.id}/media/thumbnail`,
+            stickerId: r.id.toString(),
+            hasAudio: type === "VIDEO" ? videoHasAudio(r.media) : null,
+          };
+        });
+    }
+  }
 
   return (
     <section className="mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-16">
@@ -309,7 +354,7 @@ export default async function StickerDetailPage({
         </div>
       </div>
 
-      {related.length > 0 ? (
+      {relatedCards.length > 0 ? (
         <div className="mt-16">
           <p className="text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-accent-pink">
             related
@@ -317,18 +362,14 @@ export default async function StickerDetailPage({
           <h2 className="zune-header mt-1 text-3xl font-light lowercase tracking-tight">
             more like this
           </h2>
-          <ul className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {related.map((r) => (
-              <li key={r.id}>
-                <Link
-                  href={`/stickers/${r.slug}`}
-                  className="block rounded-[28px] border border-divider bg-surface p-3 transition hover:border-accent-pink/40"
-                >
-                  <p className="truncate font-medium">{r.title}</p>
-                </Link>
-              </li>
+          <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5 sm:gap-5">
+            {relatedCards.map((item) => (
+              <StickerCard
+                key={item.stickerId ?? item.href}
+                {...item}
+              />
             ))}
-          </ul>
+          </div>
         </div>
       ) : null}
     </section>

@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import { canModerate } from "@/lib/capabilities";
 import { prisma } from "@/lib/prisma";
 import { SEARCH_META_STATUS } from "@/lib/search/constants";
+import { logMeiliError } from "@/lib/processing-log";
 import { upsertStickerSearch } from "@/lib/search/sync";
 import { upsertBlobberSearch } from "@/lib/search/sync";
 
@@ -63,9 +64,24 @@ export async function POST(
     },
   });
 
-  await upsertStickerSearch(sticker.id);
-  if (sticker.blobberId) {
-    void upsertBlobberSearch(sticker.blobberId);
+  try {
+    await upsertStickerSearch(sticker.id);
+    if (sticker.blobberId) {
+      void upsertBlobberSearch(sticker.blobberId).catch((err) =>
+        logMeiliError(`upsert blobber ${sticker.blobberId}`, err),
+      );
+    }
+  } catch (err) {
+    logMeiliError(`upsert sticker ${sticker.id}`, err);
+    return NextResponse.json(
+      {
+        error:
+          err instanceof Error
+            ? err.message
+            : "Search index update failed",
+      },
+      { status: 502 },
+    );
   }
 
   return NextResponse.json({ ok: true, status: SEARCH_META_STATUS.approved });

@@ -26,7 +26,8 @@ services:
       ZITADEL_PROJECT_ID: ${ZITADEL_PROJECT_ID:-}
       GLASS_API_URL: ${GLASS_API_URL:-}
       GLASS_API_KEY: ${GLASS_API_KEY:-}
-      MEILI_HOST: ${MEILI_HOST:-http://meilisearch:7700}
+      # Compose network hostname — do not use host .env localhost here.
+      MEILI_HOST: http://meilisearch:7700
       MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-}
       MEILI_SEARCH_KEY: ${MEILI_SEARCH_KEY:-}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-}

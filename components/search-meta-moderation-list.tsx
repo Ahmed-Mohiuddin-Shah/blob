@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { BusyButton } from "./busy-button";
 import { StickerMedia } from "./sticker-media";
+import { TagPillsInput } from "./tag-pills-input";
 
 export type SearchMetaItem = {
   id: string;
@@ -20,7 +21,7 @@ export function SearchMetaModerationList({ items }: { items: SearchMetaItem[] })
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<
-    Record<string, { caption: string; scenario: string; tags: string }>
+    Record<string, { caption: string; scenario: string; tags: string[] }>
   >(() =>
     Object.fromEntries(
       items.map((i) => [
@@ -28,7 +29,7 @@ export function SearchMetaModerationList({ items }: { items: SearchMetaItem[] })
         {
           caption: i.aiCaption,
           scenario: i.aiScenario,
-          tags: i.aiVisualTags.join(", "),
+          tags: i.aiVisualTags,
         },
       ]),
     ),
@@ -46,10 +47,7 @@ export function SearchMetaModerationList({ items }: { items: SearchMetaItem[] })
         body: JSON.stringify({
           aiCaption: d.caption,
           aiScenario: d.scenario,
-          aiVisualTags: d.tags
-            .split(",")
-            .map((t) => t.trim())
-            .filter(Boolean),
+          aiVisualTags: d.tags,
         }),
       });
       const json = (await res.json()) as { error?: string };
@@ -76,7 +74,7 @@ export function SearchMetaModerationList({ items }: { items: SearchMetaItem[] })
         const d = drafts[item.id] ?? {
           caption: "",
           scenario: "",
-          tags: "",
+          tags: [] as string[],
         };
         return (
           <article
@@ -121,19 +119,20 @@ export function SearchMetaModerationList({ items }: { items: SearchMetaItem[] })
                     }
                   />
                 </label>
-                <label className="block text-xs text-inactive">
-                  Visual tags (comma-separated)
-                  <input
-                    className="mt-1 w-full rounded-2xl border border-divider bg-transparent p-2 text-sm text-primary"
-                    value={d.tags}
-                    onChange={(e) =>
-                      setDrafts((prev) => ({
-                        ...prev,
-                        [item.id]: { ...d, tags: e.target.value },
-                      }))
-                    }
-                  />
-                </label>
+                <div className="block text-xs text-inactive">
+                  Visual tags
+                  <div className="mt-1">
+                    <TagPillsInput
+                      value={d.tags}
+                      onChange={(tags) =>
+                        setDrafts((prev) => ({
+                          ...prev,
+                          [item.id]: { ...d, tags },
+                        }))
+                      }
+                    />
+                  </div>
+                </div>
                 <BusyButton
                   type="button"
                   busy={busyId === item.id}
