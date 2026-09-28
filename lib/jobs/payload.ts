@@ -1,4 +1,4 @@
-import { getPublicPrismId } from "@/lib/glass";
+import { encodePrismIdForSticker, getPublicPrismId } from "@/lib/glass";
 import {
   type CompositionJobPayload,
   type JobPayload,
@@ -109,7 +109,7 @@ async function buildCompositionPayload(
     ? await prisma.asset.findMany({ where: { id: { in: assetIds } } })
     : [];
 
-  const prismId =
+  const fallbackPrismId =
     assets[0]?.glassPrismId ??
     (
       await prisma.mediaAsset.findFirst({
@@ -118,6 +118,7 @@ async function buildCompositionPayload(
       })
     )?.glassPrismId ??
     null;
+  const prismId = await encodePrismIdForSticker(stickerId, fallbackPrismId);
 
   const maxDurationMs = maxDurationMsForKind(
     primaryMediaKind(revision.documentJson),

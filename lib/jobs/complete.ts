@@ -1,4 +1,5 @@
 import { createHash } from "crypto";
+import { ensurePublicStickerMediaLinked } from "@/lib/glass";
 import { JOB_STATUS, JOB_TYPE } from "@/lib/jobs/types";
 import { enqueueJob } from "@/lib/jobs/enqueue";
 import {
@@ -279,6 +280,7 @@ async function applyCompositionResult(
       processingError: null,
     },
   });
+  await ensurePublicStickerMediaLinked(stickerId);
 }
 
 async function applySheetResult(

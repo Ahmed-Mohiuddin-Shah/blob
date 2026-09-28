@@ -1,5 +1,7 @@
 import { Glass } from "glass-ts";
+import { MODERATION_STATUS } from "@/lib/moderation";
 import { prisma } from "@/lib/prisma";
+import { VISIBILITY } from "@/lib/stickers";
 
 export const GLASS_UPLOAD_STATUS = {
   pending: "pending",
@@ -78,4 +80,82 @@ export async function getPublicPrismId(): Promise<string> {
 /** @internal test helper */
 export function clearPublicPrismCache(): void {
   cachedPublicPrismId = null;
+}
+
+type LinkableMedia = {
+  id: bigint;
+  glassObjectId: string;
+  glassPrismId: string;
+};
+
+/** Move media onto the app public PRISM so anonymous `/objects/:id` works. */
+export async function linkMediaToPublicPrism(
+  assets: LinkableMedia[],
+): Promise<string> {
+  const publicId = await getPublicPrismId();
+  const glass = getGlass();
+  for (const asset of assets) {
+    if (!asset.glassObjectId || asset.glassPrismId === publicId) continue;
+    await glass.prisms.linkObject(publicId, asset.glassObjectId);
+    if (asset.glassPrismId !== publicId) {
+      try {
+        await glass.prisms.unlinkObject(
+          asset.glassPrismId,
+          asset.glassObjectId,
+        );
+      } catch {
+        // ponytail: unlink best-effort; object may stay on private prism too
+      }
+    }
+    await prisma.mediaAsset.update({
+      where: { id: asset.id },
+      data: { glassPrismId: publicId },
+    });
+  }
+  return publicId;
+}
+
+/**
+ * After encode/OG backfill on an already-approved public sticker, re-link
+ * media — approve only runs once and won't catch new object ids.
+ */
+export async function ensurePublicStickerMediaLinked(
+  stickerId: bigint,
+): Promise<void> {
+  const sticker = await prisma.sticker.findUnique({
+    where: { id: stickerId },
+    select: {
+      visibility: true,
+      moderationStatus: true,
+      media: {
+        select: { id: true, glassObjectId: true, glassPrismId: true },
+      },
+    },
+  });
+  if (
+    !sticker ||
+    sticker.visibility !== VISIBILITY.public ||
+    sticker.moderationStatus !== MODERATION_STATUS.approved
+  ) {
+    return;
+  }
+  await linkMediaToPublicPrism(sticker.media);
+}
+
+/** Prism to upload into: public if already published public, else fallback. */
+export async function encodePrismIdForSticker(
+  stickerId: bigint,
+  fallbackPrismId: string | null | undefined,
+): Promise<string | null> {
+  const sticker = await prisma.sticker.findUnique({
+    where: { id: stickerId },
+    select: { visibility: true, moderationStatus: true },
+  });
+  if (
+    sticker?.visibility === VISIBILITY.public &&
+    sticker.moderationStatus === MODERATION_STATUS.approved
+  ) {
+    return getPublicPrismId();
+  }
+  return fallbackPrismId ?? null;
 }

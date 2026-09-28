@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { getSession } from "@/lib/auth";
 import { canModerate } from "@/lib/capabilities";
-import { getGlass, glassPublicObjectUrl } from "@/lib/glass";
+import {
+  getGlass,
+  getPublicPrismId,
+  glassPublicObjectUrl,
+} from "@/lib/glass";
 import { prisma } from "@/lib/prisma";
 import {
   canAccessSticker,
@@ -91,15 +95,19 @@ export async function GET(
 
   const isPublic = isPublicBrowseable(sticker);
 
-  // Public browseable: redirect to Glass so Next doesn't buffer every thumb.
+  // Public PRISM objects are anonymously readable at /objects/:id — redirect.
+  // If media is still on a private PRISM (post-approve re-encode/OG gap), proxy.
   if (isPublic && asset.glassObjectId) {
     try {
-      const res = NextResponse.redirect(
-        glassPublicObjectUrl(asset.glassObjectId),
-        302,
-      );
-      res.headers.set("Cache-Control", PUBLIC_CACHE);
-      return res;
+      const publicPrismId = await getPublicPrismId();
+      if (asset.glassPrismId === publicPrismId) {
+        const res = NextResponse.redirect(
+          glassPublicObjectUrl(asset.glassObjectId),
+          302,
+        );
+        res.headers.set("Cache-Control", PUBLIC_CACHE);
+        return res;
+      }
     } catch {
       /* fall through to authenticated download */
     }

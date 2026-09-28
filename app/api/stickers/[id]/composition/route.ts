@@ -7,6 +7,7 @@ import {
   upsertStillExports,
 } from "@/lib/composition";
 import { enqueueCompositionEncode } from "@/lib/composition-encode";
+import { encodePrismIdForSticker, ensurePublicStickerMediaLinked } from "@/lib/glass";
 import {
   MODERATION_ACTION,
   MODERATION_STATUS,
@@ -132,7 +133,13 @@ export async function POST(
       thumbFile instanceof File &&
       fullFile instanceof File
     ) {
-      const prismId = await ensurePrivatePrism(user.id, user.glassPrivatePrismId);
+      const privatePrismId = await ensurePrivatePrism(
+        user.id,
+        user.glassPrivatePrismId,
+      );
+      const prismId =
+        (await encodePrismIdForSticker(sticker.id, privatePrismId)) ??
+        privatePrismId;
       await upsertStillExports({
         stickerId: sticker.id,
         revisionId: revision.id,
@@ -146,6 +153,7 @@ export async function POST(
             ? new Uint8Array(await maskFile.arrayBuffer())
             : undefined,
       });
+      await ensurePublicStickerMediaLinked(sticker.id);
     }
 
     await recordModerationEvent({

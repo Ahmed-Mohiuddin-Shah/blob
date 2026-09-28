@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { getSession } from "@/lib/auth";
 import { canModerate } from "@/lib/capabilities";
 import { discardNonCurrentRevisionMedia } from "@/lib/composition-encode";
-import { getGlass, getPublicPrismId } from "@/lib/glass";
+import { linkMediaToPublicPrism } from "@/lib/glass";
 import { enqueueJob } from "@/lib/jobs/enqueue";
 import { JOB_TYPE } from "@/lib/jobs/types";
 import {
@@ -63,23 +63,7 @@ export async function POST(
 
   try {
     if (sticker.visibility === VISIBILITY.public) {
-      const glass = getGlass();
-      const publicId = await getPublicPrismId();
-      for (const asset of sticker.media) {
-        if (asset.glassPrismId === publicId) continue;
-        await glass.prisms.linkObject(publicId, asset.glassObjectId);
-        if (asset.glassPrismId !== publicId) {
-          try {
-            await glass.prisms.unlinkObject(asset.glassPrismId, asset.glassObjectId);
-          } catch {
-            // ponytail: unlink best-effort; object may stay on private prism too
-          }
-        }
-        await prisma.mediaAsset.update({
-          where: { id: asset.id },
-          data: { glassPrismId: publicId },
-        });
-      }
+      await linkMediaToPublicPrism(sticker.media);
     }
 
     const needsEnrich =

@@ -6,7 +6,11 @@ import {
   type AssetBytesResolver,
 } from "blob-editor/encode";
 import { validateDocument, type CompositionDocument } from "blob-editor/core";
-import { getGlass } from "@/lib/glass";
+import {
+  encodePrismIdForSticker,
+  ensurePublicStickerMediaLinked,
+  getGlass,
+} from "@/lib/glass";
 import { enqueueJob } from "@/lib/jobs/enqueue";
 import { JOB_TYPE } from "@/lib/jobs/types";
 import { ensureNodeCanvas } from "@/lib/node-canvas";
@@ -144,6 +148,7 @@ async function processComposition(stickerId: bigint): Promise<void> {
     // Client stills are the product for static stickers (overlays not asset-persisted).
     await ensureWhatsAppOg(stickerId, revision.id, sticker.slug);
     await markReady(stickerId);
+    await ensurePublicStickerMediaLinked(stickerId);
     return;
   }
 
@@ -198,7 +203,7 @@ async function processComposition(stickerId: bigint): Promise<void> {
       assertDerivativeBudget("video", encoded.exports.video, MAX_VIDEO_BYTES);
     }
 
-    const prismId =
+    const fallbackPrismId =
       (
         await prisma.asset.findFirst({
           where: { id: { in: assetIds.map((a) => BigInt(a)) } },
@@ -211,11 +216,13 @@ async function processComposition(stickerId: bigint): Promise<void> {
           select: { glassPrismId: true },
         })
       )?.glassPrismId;
+    const prismId = await encodePrismIdForSticker(stickerId, fallbackPrismId);
 
     if (!prismId) {
       if (!needsAnimated && (await hasClientStills(stickerId, revision.id))) {
         await ensureWhatsAppOg(stickerId, revision.id, sticker.slug);
         await markReady(stickerId);
+        await ensurePublicStickerMediaLinked(stickerId);
         return;
       }
       return fail(stickerId, sticker.title, "No GLASS prism for uploads");
@@ -354,10 +361,12 @@ async function processComposition(stickerId: bigint): Promise<void> {
     }
 
     await markReady(stickerId);
+    await ensurePublicStickerMediaLinked(stickerId);
   } catch (err) {
     if (!needsAnimated && (await hasClientStills(stickerId, revision.id))) {
       await ensureWhatsAppOg(stickerId, revision.id, sticker.slug);
       await markReady(stickerId);
+      await ensurePublicStickerMediaLinked(stickerId);
       return;
     }
     return fail(
@@ -421,7 +430,9 @@ async function ensureWhatsAppOg(
   const og = await encodeWhatsAppOg(fullBytes);
   assertDerivativeBudget("og", og.bytes, WHATSAPP_OG_MAX_BYTES);
 
-  const prismId = image.glassPrismId;
+  const prismId =
+    (await encodePrismIdForSticker(stickerId, image.glassPrismId)) ??
+    image.glassPrismId;
   const up = await glass.objects.upload({
     prismId,
     file: og.bytes,
@@ -458,6 +469,7 @@ async function ensureWhatsAppOg(
       status: MEDIA_ASSET_STATUS.ready,
     },
   });
+  await ensurePublicStickerMediaLinked(stickerId);
 }
 
 async function fail(
