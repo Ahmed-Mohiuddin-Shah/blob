@@ -28,6 +28,11 @@ import {
   structureEnrichPrompt,
   visionDescribePrompt,
 } from "../lib/search/vision-parse";
+import {
+  isOllamaRepeatLimitError,
+  ollamaChatOptions,
+  type OllamaChatOptions,
+} from "../lib/ollama/client";
 import { encodeWhatsAppOg } from "../lib/whatsapp-og-encode";
 import {
   MAX_GIF_BYTES,
@@ -87,7 +92,9 @@ async function ollamaChatWorker(opts: {
   model: string;
   content: string;
   images?: string[];
+  options?: OllamaChatOptions;
 }): Promise<string> {
+  const opt = opts.options ?? ollamaChatOptions("describe");
   const chatRes = await fetch(`${opts.base}/api/chat`, {
     method: "POST",
     headers: opts.headers,
@@ -101,6 +108,11 @@ async function ollamaChatWorker(opts: {
           ...(opts.images?.length ? { images: opts.images } : {}),
         },
       ],
+      options: {
+        num_predict: opt.numPredict ?? 220,
+        temperature: opt.temperature ?? 0.2,
+        repeat_penalty: opt.repeatPenalty ?? 1.3,
+      },
     }),
   });
   if (!chatRes.ok) {
@@ -108,6 +120,17 @@ async function ollamaChatWorker(opts: {
   }
   const data = (await chatRes.json()) as { message?: { content?: string } };
   return data.message?.content?.trim() ?? "";
+}
+
+async function ollamaChatWorkerSafe(
+  opts: Parameters<typeof ollamaChatWorker>[0],
+): Promise<string | null> {
+  try {
+    return await ollamaChatWorker(opts);
+  } catch (err) {
+    if (isOllamaRepeatLimitError(err)) return null;
+    throw err;
+  }
 }
 
 async function runSearchEnrich(
@@ -137,22 +160,24 @@ async function runSearchEnrich(
   if (key) headers.Authorization = `Bearer ${key}`;
 
   const chatOnce = () =>
-    ollamaChatWorker({
+    ollamaChatWorkerSafe({
       base: ollamaBase,
       headers,
       model: visionModel,
       content: visionDescribePrompt(visionModel),
       images: [b64],
+      options: ollamaChatOptions("describe"),
     });
-  let prose = await chatOnce();
-  if (!prose) prose = await chatOnce();
+  let prose = ((await chatOnce()) ?? "").trim();
+  if (!prose) prose = ((await chatOnce()) ?? "").trim();
   if (!prose) {
     throw new Error(
       `Vision description empty (${visionModel}) — check Ollama vision model`,
     );
   }
 
-  const tryParse = (raw: string) => {
+  const tryParse = (raw: string | null) => {
+    if (!raw) return null;
     try {
       return parseVisionEnrichResult(raw);
     } catch {
@@ -160,32 +185,36 @@ async function runSearchEnrich(
     }
   };
 
+  const jsonOpts = ollamaChatOptions("json");
   let result = tryParse(
-    await ollamaChatWorker({
+    await ollamaChatWorkerSafe({
       base: ollamaBase,
       headers,
       model: agentModel,
       content: structureEnrichPrompt(prose),
+      options: jsonOpts,
     }),
   );
   if (!result || isSparseEnrich(result)) {
     result = tryParse(
-      await ollamaChatWorker({
+      await ollamaChatWorkerSafe({
         base: ollamaBase,
         headers,
         model: agentModel,
         content: `${structureEnrichPrompt(prose)}\n\nYour previous reply was missing scenario or tags. Fill ALL three fields.`,
+        options: jsonOpts,
       }),
     );
   }
   if (!result || isSparseEnrich(result)) {
     result = tryParse(
-      await ollamaChatWorker({
+      await ollamaChatWorkerSafe({
         base: ollamaBase,
         headers,
         model: visionModel,
         content: structureEnrichFromImagePrompt(visionModel),
         images: [b64],
+        options: jsonOpts,
       }),
     );
   }

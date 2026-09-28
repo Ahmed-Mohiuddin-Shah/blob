@@ -1,4 +1,9 @@
-import { isOllamaConfigured, ollamaChat } from "@/lib/ollama/client";
+import {
+  isOllamaConfigured,
+  isOllamaRepeatLimitError,
+  ollamaChat,
+  ollamaChatOptions,
+} from "@/lib/ollama/client";
 import { prisma } from "@/lib/prisma";
 import { SEARCH_META_STATUS } from "@/lib/search/constants";
 import {
@@ -89,22 +94,36 @@ async function stickerPreviewBase64(stickerId: bigint): Promise<string | null> {
     : new Error("Vision image decode failed for all candidates");
 }
 
+async function chatSafe(
+  input: Parameters<typeof ollamaChat>[0],
+): Promise<string | null> {
+  try {
+    return await ollamaChat(input);
+  } catch (err) {
+    // Repeat-loop abort → try next enrich strategy instead of failing the job.
+    if (isOllamaRepeatLimitError(err)) return null;
+    throw err;
+  }
+}
+
 async function visionProse(
   visionModel: string,
   b64: string,
 ): Promise<string> {
   const once = () =>
-    ollamaChat({
+    chatSafe({
       model: visionModel,
       prompt: visionDescribePrompt(visionModel),
       images: [b64],
+      options: ollamaChatOptions("describe"),
     });
-  let prose = (await once()).trim();
-  if (!prose) prose = (await once()).trim();
+  let prose = ((await once()) ?? "").trim();
+  if (!prose) prose = ((await once()) ?? "").trim();
   return prose;
 }
 
-function tryParse(raw: string): EnrichResult | null {
+function tryParse(raw: string | null): EnrichResult | null {
+  if (!raw) return null;
   try {
     return parseVisionEnrichResult(raw);
   } catch {
@@ -132,18 +151,21 @@ export async function runSearchEnrich(stickerId: bigint): Promise<EnrichResult> 
     );
   }
 
+  const jsonOpts = ollamaChatOptions("json");
   let result = tryParse(
-    await ollamaChat({
+    await chatSafe({
       model: agentModel,
       prompt: structureEnrichPrompt(prose),
+      options: jsonOpts,
     }),
   );
 
   if (!result || isSparseEnrich(result)) {
     result = tryParse(
-      await ollamaChat({
+      await chatSafe({
         model: agentModel,
         prompt: `${structureEnrichPrompt(prose)}\n\nYour previous reply was missing scenario or tags. Fill ALL three fields.`,
+        options: jsonOpts,
       }),
     );
   }
@@ -151,10 +173,11 @@ export async function runSearchEnrich(stickerId: bigint): Promise<EnrichResult> 
   if (!result || isSparseEnrich(result)) {
     // VL models (qwen2.5vl) can emit JSON from the image directly.
     result = tryParse(
-      await ollamaChat({
+      await chatSafe({
         model: visionModel,
         prompt: structureEnrichFromImagePrompt(visionModel),
         images: [b64],
+        options: jsonOpts,
       }),
     );
   }

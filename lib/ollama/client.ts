@@ -15,11 +15,33 @@ export function isOllamaConfigured(): boolean {
   return Boolean(process.env.OLLAMA_BASE_URL?.trim());
 }
 
+/** Sampling caps — stops runaway “token repeat limit” loops on small GPUs. */
+export type OllamaChatOptions = {
+  /** Max new tokens (Ollama `num_predict`). */
+  numPredict?: number;
+  temperature?: number;
+  repeatPenalty?: number;
+};
+
+export function ollamaChatOptions(kind: "describe" | "json"): OllamaChatOptions {
+  if (kind === "json") {
+    return { numPredict: 320, temperature: 0.1, repeatPenalty: 1.35 };
+  }
+  return { numPredict: 220, temperature: 0.2, repeatPenalty: 1.3 };
+}
+
+export function isOllamaRepeatLimitError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /token repeat limit/i.test(msg);
+}
+
 export async function ollamaChat(input: {
   model: string;
   prompt: string;
   images?: string[];
+  options?: OllamaChatOptions;
 }): Promise<string> {
+  const opt = input.options ?? ollamaChatOptions("describe");
   const res = await fetch(`${baseUrl()}/api/chat`, {
     method: "POST",
     headers: headers(),
@@ -33,6 +55,11 @@ export async function ollamaChat(input: {
           ...(input.images?.length ? { images: input.images } : {}),
         },
       ],
+      options: {
+        num_predict: opt.numPredict ?? 220,
+        temperature: opt.temperature ?? 0.2,
+        repeat_penalty: opt.repeatPenalty ?? 1.3,
+      },
     }),
   });
   if (!res.ok) {
