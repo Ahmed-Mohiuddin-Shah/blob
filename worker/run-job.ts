@@ -22,9 +22,11 @@ import { JOB_TYPE } from "../lib/jobs/types";
 import { ensureNodeCanvas } from "../lib/node-canvas";
 import { visionImageBase64 } from "../lib/search/vision-image";
 import {
+  isSparseEnrich,
   parseVisionEnrichResult,
+  structureEnrichFromImagePrompt,
   structureEnrichPrompt,
-  VISION_DESCRIBE_PROMPT,
+  visionDescribePrompt,
 } from "../lib/search/vision-parse";
 import { encodeWhatsAppOg } from "../lib/whatsapp-og-encode";
 import {
@@ -139,7 +141,7 @@ async function runSearchEnrich(
       base: ollamaBase,
       headers,
       model: visionModel,
-      content: VISION_DESCRIBE_PROMPT,
+      content: visionDescribePrompt(visionModel),
       images: [b64],
     });
   let prose = await chatOnce();
@@ -150,22 +152,63 @@ async function runSearchEnrich(
     );
   }
 
-  const structured = await ollamaChatWorker({
-    base: ollamaBase,
-    headers,
-    model: agentModel,
-    content: structureEnrichPrompt(prose),
-  });
-  try {
-    return parseVisionEnrichResult(structured);
-  } catch {
-    // Agent VOID/SHORT/bad JSON — keep vision prose.
-    return {
-      aiCaption: prose.slice(0, 1000),
-      aiScenario: "",
-      aiVisualTags: [],
-    };
+  const tryParse = (raw: string) => {
+    try {
+      return parseVisionEnrichResult(raw);
+    } catch {
+      return null;
+    }
+  };
+
+  let result = tryParse(
+    await ollamaChatWorker({
+      base: ollamaBase,
+      headers,
+      model: agentModel,
+      content: structureEnrichPrompt(prose),
+    }),
+  );
+  if (!result || isSparseEnrich(result)) {
+    result = tryParse(
+      await ollamaChatWorker({
+        base: ollamaBase,
+        headers,
+        model: agentModel,
+        content: `${structureEnrichPrompt(prose)}\n\nYour previous reply was missing scenario or tags. Fill ALL three fields.`,
+      }),
+    );
   }
+  if (!result || isSparseEnrich(result)) {
+    result = tryParse(
+      await ollamaChatWorker({
+        base: ollamaBase,
+        headers,
+        model: visionModel,
+        content: structureEnrichFromImagePrompt(visionModel),
+        images: [b64],
+      }),
+    );
+  }
+  if (result && !isSparseEnrich(result)) return result;
+  if (result) {
+    if (!result.aiScenario.trim()) {
+      result.aiScenario = "Reaction sticker in chat";
+    }
+    if (result.aiVisualTags.length < 3) {
+      result.aiVisualTags = [
+        ...result.aiVisualTags,
+        "STICKER",
+        "MEME",
+        "REACTION",
+      ].filter((t, i, a) => a.indexOf(t) === i);
+    }
+    return result;
+  }
+  return {
+    aiCaption: prose.slice(0, 1000),
+    aiScenario: "Reaction sticker in chat",
+    aiVisualTags: ["STICKER", "MEME", "REACTION"],
+  };
 }
 
 async function runComposition(

@@ -9,6 +9,8 @@ import { visionImageBase64 } from "../lib/search/vision-image";
 import {
   parseVisionEnrichResult,
   structureEnrichPrompt,
+  visionDescribePrompt,
+  visionPromptFamily,
   VISION_DESCRIBE_PROMPT,
 } from "../lib/search/vision-parse";
 import { MEDIA_KIND } from "../lib/stickers";
@@ -42,7 +44,14 @@ describe("search constants", () => {
   });
 
   it("uses plain vision prompt and agent structure prompt", () => {
-    expect(VISION_DESCRIBE_PROMPT).toBe("Describe this image for search:");
+    expect(visionPromptFamily("moondream")).toBe("moondream");
+    expect(visionPromptFamily("moondream:latest")).toBe("moondream");
+    expect(visionPromptFamily("qwen2.5vl:3b")).toBe("qwen_vl");
+    expect(visionDescribePrompt("moondream")).toBe(
+      "Describe this image for search:",
+    );
+    expect(visionDescribePrompt("qwen2.5vl:3b")).toContain("sticker");
+    expect(VISION_DESCRIBE_PROMPT.length).toBeGreaterThan(0);
     expect(structureEnrichPrompt("a blackboard on a wall")).toContain(
       "a blackboard on a wall",
     );
@@ -84,6 +93,24 @@ describe("search constants", () => {
       "MALE",
       "MUSCULAR",
     ]);
+  });
+
+  it("detects sparse enrich (empty scenario/tags)", async () => {
+    const { isSparseEnrich } = await import("../lib/search/vision-parse");
+    expect(
+      isSparseEnrich({
+        aiCaption: "a cat",
+        aiScenario: "",
+        aiVisualTags: [],
+      }),
+    ).toBe(true);
+    expect(
+      isSparseEnrich({
+        aiCaption: "a cat",
+        aiScenario: "funny reply",
+        aiVisualTags: ["CAT", "MEME", "REACTION"],
+      }),
+    ).toBe(false);
   });
 
   it("picks image thumbnail over gif; skips video/mp4 thumbnail", () => {

@@ -6,9 +6,11 @@ import {
   visionImageBase64,
 } from "@/lib/search/vision-image";
 import {
+  isSparseEnrich,
   parseVisionEnrichResult,
+  structureEnrichFromImagePrompt,
   structureEnrichPrompt,
-  VISION_DESCRIBE_PROMPT,
+  visionDescribePrompt,
   type EnrichResult,
 } from "@/lib/search/vision-parse";
 import { getGlass } from "@/lib/glass";
@@ -32,7 +34,6 @@ export function pickSearchEnrichMedia<
     );
     if (hit) return hit;
   }
-  // Kind match without mime (tests / legacy) — still skip obvious video kinds.
   for (const kind of STILL_KIND_ORDER) {
     const hit = media.find(
       (m) =>
@@ -59,14 +60,12 @@ export function searchEnrichMediaCandidates<
   return out;
 }
 
-/** Download sticker preview, resize to JPEG base64 for Ollama vision. */
 async function stickerPreviewBase64(stickerId: bigint): Promise<string | null> {
   const media = await prisma.mediaAsset.findMany({
     where: { stickerId, status: MEDIA_ASSET_STATUS.ready },
   });
   const candidates = searchEnrichMediaCandidates(media);
   if (candidates.length === 0) {
-    // Video-only (e.g. thumbnail wrongly stored as mp4) — nothing sharp can decode.
     if (media.some((m) => String(m.mimeType).startsWith("video/"))) {
       throw new Error(
         "No still image for vision (video-only sticker — re-encode stills)",
@@ -97,25 +96,26 @@ async function visionProse(
   const once = () =>
     ollamaChat({
       model: visionModel,
-      prompt: VISION_DESCRIBE_PROMPT,
+      prompt: visionDescribePrompt(visionModel),
       images: [b64],
     });
   let prose = (await once()).trim();
-  if (!prose) {
-    // Cold / overloaded moondream often returns empty once.
-    prose = (await once()).trim();
-  }
+  if (!prose) prose = (await once()).trim();
   return prose;
 }
 
-function fallbackEnrichFromProse(prose: string): EnrichResult {
-  return {
-    aiCaption: prose.slice(0, 1000),
-    aiScenario: "",
-    aiVisualTags: [],
-  };
+function tryParse(raw: string): EnrichResult | null {
+  try {
+    return parseVisionEnrichResult(raw);
+  } catch {
+    return null;
+  }
 }
 
+/**
+ * Vision prose → text agent JSON; if tags/scenario missing, retry agent then
+ * one-shot VL JSON from the image (qwen2.5vl etc.).
+ */
 export async function runSearchEnrich(stickerId: bigint): Promise<EnrichResult> {
   if (!isOllamaConfigured()) {
     throw new Error("OLLAMA_BASE_URL is not set");
@@ -132,19 +132,58 @@ export async function runSearchEnrich(stickerId: bigint): Promise<EnrichResult> 
     );
   }
 
-  const structured = await ollamaChat({
-    model: agentModel,
-    prompt: structureEnrichPrompt(prose),
-  });
-  try {
-    return parseVisionEnrichResult(structured);
-  } catch {
-    // Agent echoed VOID/SHORT or bad JSON — keep the vision prose as caption.
-    return fallbackEnrichFromProse(prose);
+  let result = tryParse(
+    await ollamaChat({
+      model: agentModel,
+      prompt: structureEnrichPrompt(prose),
+    }),
+  );
+
+  if (!result || isSparseEnrich(result)) {
+    result = tryParse(
+      await ollamaChat({
+        model: agentModel,
+        prompt: `${structureEnrichPrompt(prose)}\n\nYour previous reply was missing scenario or tags. Fill ALL three fields.`,
+      }),
+    );
   }
+
+  if (!result || isSparseEnrich(result)) {
+    // VL models (qwen2.5vl) can emit JSON from the image directly.
+    result = tryParse(
+      await ollamaChat({
+        model: visionModel,
+        prompt: structureEnrichFromImagePrompt(visionModel),
+        images: [b64],
+      }),
+    );
+  }
+
+  if (result && !isSparseEnrich(result)) return result;
+
+  // Last resort: keep caption/scenario from best attempt; never ship empty tags silently.
+  if (result) {
+    if (!result.aiScenario.trim()) {
+      result.aiScenario = "Reaction sticker in chat";
+    }
+    if (result.aiVisualTags.length < 3) {
+      result.aiVisualTags = [
+        ...result.aiVisualTags,
+        "STICKER",
+        "MEME",
+        "REACTION",
+      ].filter((t, i, a) => a.indexOf(t) === i);
+    }
+    return result;
+  }
+
+  return {
+    aiCaption: prose.slice(0, 1000),
+    aiScenario: "Reaction sticker in chat",
+    aiVisualTags: ["STICKER", "MEME", "REACTION"],
+  };
 }
 
-/** Apply enrich result and move to pending_search_meta. */
 export async function applySearchEnrichResult(
   stickerId: bigint,
   result: EnrichResult,
