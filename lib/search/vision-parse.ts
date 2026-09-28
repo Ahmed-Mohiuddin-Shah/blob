@@ -1,3 +1,14 @@
+import {
+  DEFAULT_META_OUTPUT_EXAMPLE,
+  DEFAULT_META_VISION_DESCRIBE,
+  assembleStructurePrompt,
+  assembleVisionJsonPrompt,
+  defaultResolvedMetaPrompts,
+  structurePromptFromResolved,
+  visionJsonPromptFromResolved,
+  type ResolvedMetaPrompts,
+} from "@/lib/search/prompt-defaults";
+
 export type EnrichResult = {
   aiCaption: string;
   aiScenario: string;
@@ -17,40 +28,13 @@ const TAG_PLACEHOLDERS = new Set([
   "EXAMPLE",
 ]);
 
-const JSON_SCHEMA_HINT = `{"caption":"<one concrete visual sentence>","scenario":"<when someone would send this sticker>","tags":["ANIME","ANGRY","MEME","TEXT"]}`;
-
 type VisionPromptFamily = "moondream" | "qwen_vl" | "default";
 
 /** Cached vision prompts — pick via OLLAMA_VISION_MODEL, no manual swaps. */
 const VISION_DESCRIBE_PROMPTS: Record<VisionPromptFamily, string> = {
   moondream: "Describe this image for search:",
-  qwen_vl:
-    "Describe this sticker for search in 2-4 sentences: subjects, text on image, emotion, and style.",
+  qwen_vl: DEFAULT_META_VISION_DESCRIBE,
   default: "Describe this image for search:",
-};
-
-const VISION_JSON_FROM_IMAGE_PROMPTS: Record<VisionPromptFamily, string> = {
-  moondream: `Look at this sticker. Reply with ONLY JSON (no markdown):
-${JSON_SCHEMA_HINT}
-
-Requirements: caption (one sentence), scenario (when to send), tags (5-12 separate short words). No SHORT/TAGS/VOID.`,
-  qwen_vl: `Look at this sticker image. Reply with ONLY JSON (no markdown):
-${JSON_SCHEMA_HINT}
-
-Requirements (all required):
-- caption: one concrete visual sentence
-- scenario: when someone would send this sticker
-- tags: 5 to 12 separate short tags in the array (no commas inside a tag)
-- Specific: character, emotion, objects, style, text-on-image if any
-- Do NOT use SHORT, TAGS, VOID, or EXAMPLE`,
-  default: `Look at this sticker image. Reply with ONLY JSON (no markdown):
-${JSON_SCHEMA_HINT}
-
-Requirements (all required):
-- caption: one concrete visual sentence
-- scenario: when someone would send this sticker
-- tags: 5 to 12 separate short tags in the array (no commas inside a tag)
-- Do NOT use SHORT, TAGS, VOID, or EXAMPLE`,
 };
 
 export function visionPromptFamily(
@@ -65,7 +49,7 @@ export function visionPromptFamily(
   return "default";
 }
 
-/** Pass 1 — image describe prompt for the configured vision model. */
+/** Pass 1 — image describe prompt (code default / family; prefer ResolvedMetaPrompts). */
 export function visionDescribePrompt(
   model = process.env.OLLAMA_VISION_MODEL?.trim(),
 ): string {
@@ -78,28 +62,34 @@ export function visionDescribePrompt(
  */
 export const VISION_DESCRIBE_PROMPT = visionDescribePrompt();
 
-/** Pass 2 — text agent turns prose into search meta JSON (model-agnostic). */
+/** Pass 2 — text agent turns prose into search meta JSON (code defaults). */
 export function structureEnrichPrompt(description: string): string {
-  return `Given this sticker description, reply with ONLY JSON (no markdown):
-${JSON_SCHEMA_HINT}
-
-Requirements (all required):
-- caption: one concrete visual sentence (not empty)
-- scenario: when someone would send this sticker (not empty)
-- tags: 5 to 12 SEPARATE array strings (one word or underscore_phrase each; NEVER put commas inside a tag)
-- Specific visuals: character, emotion, objects, style, text-on-image if any
-- Do NOT use placeholder words like SHORT, TAGS, VOID, EXAMPLE
-
-Description:
-${description.trim()}`;
+  const d = defaultResolvedMetaPrompts();
+  return assembleStructurePrompt(d.structure, d.outputExample, description);
 }
 
-/** One-shot VL: image → JSON — prompt cached per vision model family. */
+/** One-shot VL: image → JSON (code defaults). */
 export function structureEnrichFromImagePrompt(
-  model = process.env.OLLAMA_VISION_MODEL?.trim(),
+  _model = process.env.OLLAMA_VISION_MODEL?.trim(),
 ): string {
-  return VISION_JSON_FROM_IMAGE_PROMPTS[visionPromptFamily(model)];
+  const d = defaultResolvedMetaPrompts();
+  return assembleVisionJsonPrompt(d.visionJson, d.outputExample);
 }
+
+export function describePromptFromResolved(
+  prompts: ResolvedMetaPrompts,
+  model?: string,
+): string {
+  // Admin override wins; else family-specific short moondream line.
+  if (prompts.visionDescribe.trim()) return prompts.visionDescribe.trim();
+  return visionDescribePrompt(model);
+}
+
+export {
+  structurePromptFromResolved,
+  visionJsonPromptFromResolved,
+  DEFAULT_META_OUTPUT_EXAMPLE,
+};
 
 /** Flatten model tags: split commas, drop placeholders, dedupe. */
 export function normalizeVisualTags(raw: unknown): string[] {

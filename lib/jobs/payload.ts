@@ -1,4 +1,5 @@
 import { encodePrismIdForSticker, getPublicPrismId } from "@/lib/glass";
+import { getResolvedMetaPrompts } from "@/lib/search/prompts";
 import {
   type CompositionJobPayload,
   type JobPayload,
@@ -58,6 +59,7 @@ async function buildSearchEnrichPayload(
         : "No preview media for search_enrich",
     );
   }
+  const prompts = await getResolvedMetaPrompts();
   return {
     kind: JOB_TYPE.searchEnrich,
     stickerId: sticker.id.toString(),
@@ -65,6 +67,7 @@ async function buildSearchEnrichPayload(
     title: sticker.title,
     glassObjectId: asset.glassObjectId,
     mimeType: asset.mimeType,
+    prompts,
   };
 }
 

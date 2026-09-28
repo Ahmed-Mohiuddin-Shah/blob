@@ -11,11 +11,15 @@ import {
   visionImageBase64,
 } from "@/lib/search/vision-image";
 import {
+  getResolvedMetaPrompts,
+  structurePromptFromResolved,
+  visionJsonPromptFromResolved,
+  type ResolvedMetaPrompts,
+} from "@/lib/search/prompts";
+import {
+  describePromptFromResolved,
   isSparseEnrich,
   parseVisionEnrichResult,
-  structureEnrichFromImagePrompt,
-  structureEnrichPrompt,
-  visionDescribePrompt,
   type EnrichResult,
 } from "@/lib/search/vision-parse";
 import { getGlass } from "@/lib/glass";
@@ -109,11 +113,13 @@ async function chatSafe(
 async function visionProse(
   visionModel: string,
   b64: string,
+  prompts: ResolvedMetaPrompts,
 ): Promise<string> {
+  const describe = describePromptFromResolved(prompts, visionModel);
   const once = () =>
     chatSafe({
       model: visionModel,
-      prompt: visionDescribePrompt(visionModel),
+      prompt: describe,
       images: [b64],
       options: ollamaChatOptions("describe"),
     });
@@ -144,18 +150,20 @@ export async function runSearchEnrich(stickerId: bigint): Promise<EnrichResult> 
   const b64 = await stickerPreviewBase64(stickerId);
   if (!b64) throw new Error("No preview media for caption");
 
-  const prose = await visionProse(visionModel, b64);
+  const prompts = await getResolvedMetaPrompts();
+  const prose = await visionProse(visionModel, b64, prompts);
   if (!prose) {
     throw new Error(
       `Vision description empty (${visionModel}) — check Ollama vision model`,
     );
   }
 
+  const structureOnce = structurePromptFromResolved(prompts, prose);
   const jsonOpts = ollamaChatOptions("json");
   let result = tryParse(
     await chatSafe({
       model: agentModel,
-      prompt: structureEnrichPrompt(prose),
+      prompt: structureOnce,
       options: jsonOpts,
     }),
   );
@@ -164,7 +172,7 @@ export async function runSearchEnrich(stickerId: bigint): Promise<EnrichResult> 
     result = tryParse(
       await chatSafe({
         model: agentModel,
-        prompt: `${structureEnrichPrompt(prose)}\n\nYour previous reply was missing scenario or tags. Fill ALL three fields.`,
+        prompt: `${structureOnce}\n\nYour previous reply was missing scenario or tags. Fill ALL three fields.`,
         options: jsonOpts,
       }),
     );
@@ -175,7 +183,7 @@ export async function runSearchEnrich(stickerId: bigint): Promise<EnrichResult> 
     result = tryParse(
       await chatSafe({
         model: visionModel,
-        prompt: structureEnrichFromImagePrompt(visionModel),
+        prompt: visionJsonPromptFromResolved(prompts),
         images: [b64],
         options: jsonOpts,
       }),
@@ -193,8 +201,8 @@ export async function runSearchEnrich(stickerId: bigint): Promise<EnrichResult> 
       result.aiVisualTags = [
         ...result.aiVisualTags,
         "STICKER",
-        "MEME",
         "REACTION",
+        "CHAT",
       ].filter((t, i, a) => a.indexOf(t) === i);
     }
     return result;
@@ -203,7 +211,7 @@ export async function runSearchEnrich(stickerId: bigint): Promise<EnrichResult> 
   return {
     aiCaption: prose.slice(0, 1000),
     aiScenario: "Reaction sticker in chat",
-    aiVisualTags: ["STICKER", "MEME", "REACTION"],
+    aiVisualTags: ["STICKER", "REACTION", "CHAT"],
   };
 }
 

@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 import { isOllamaConfigured, ollamaChat } from "@/lib/ollama/client";
+import {
+  getResolvedSearchPrompts,
+  searchAgentPromptFromResolved,
+} from "@/lib/search/prompts";
 import { meiliFederatedSearch } from "@/lib/search/query";
 
 /**
@@ -23,11 +27,10 @@ export async function POST(request: Request) {
   }
 
   const model = process.env.OLLAMA_AGENT_MODEL?.trim() || "qwen2.5:3b";
+  const prompts = await getResolvedSearchPrompts();
   const planRaw = await ollamaChat({
     model,
-    prompt: `You help search a sticker site. Given the user query, reply with ONLY JSON:
-{"q":"rewritten keyword/semantic query","mode":"hybrid"|"semantic"|"keywords","filter":"optional meilisearch filter or empty string"}
-User query: ${userQ}`,
+    prompt: searchAgentPromptFromResolved(prompts, userQ),
   });
 
   let plan = {

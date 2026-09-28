@@ -22,11 +22,15 @@ import { JOB_TYPE } from "../lib/jobs/types";
 import { ensureNodeCanvas } from "../lib/node-canvas";
 import { visionImageBase64 } from "../lib/search/vision-image";
 import {
+  defaultResolvedMetaPrompts,
+  structurePromptFromResolved,
+  visionJsonPromptFromResolved,
+  type ResolvedMetaPrompts,
+} from "../lib/search/prompt-defaults";
+import {
+  describePromptFromResolved,
   isSparseEnrich,
   parseVisionEnrichResult,
-  structureEnrichFromImagePrompt,
-  structureEnrichPrompt,
-  visionDescribePrompt,
 } from "../lib/search/vision-parse";
 import {
   isOllamaRepeatLimitError,
@@ -159,12 +163,16 @@ async function runSearchEnrich(
   const key = process.env.OLLAMA_API_KEY?.trim();
   if (key) headers.Authorization = `Bearer ${key}`;
 
+  const prompts: ResolvedMetaPrompts =
+    payload.prompts ?? defaultResolvedMetaPrompts();
+  const describe = describePromptFromResolved(prompts, visionModel);
+
   const chatOnce = () =>
     ollamaChatWorkerSafe({
       base: ollamaBase,
       headers,
       model: visionModel,
-      content: visionDescribePrompt(visionModel),
+      content: describe,
       images: [b64],
       options: ollamaChatOptions("describe"),
     });
@@ -185,13 +193,14 @@ async function runSearchEnrich(
     }
   };
 
+  const structureOnce = structurePromptFromResolved(prompts, prose);
   const jsonOpts = ollamaChatOptions("json");
   let result = tryParse(
     await ollamaChatWorkerSafe({
       base: ollamaBase,
       headers,
       model: agentModel,
-      content: structureEnrichPrompt(prose),
+      content: structureOnce,
       options: jsonOpts,
     }),
   );
@@ -201,7 +210,7 @@ async function runSearchEnrich(
         base: ollamaBase,
         headers,
         model: agentModel,
-        content: `${structureEnrichPrompt(prose)}\n\nYour previous reply was missing scenario or tags. Fill ALL three fields.`,
+        content: `${structureOnce}\n\nYour previous reply was missing scenario or tags. Fill ALL three fields.`,
         options: jsonOpts,
       }),
     );
@@ -212,7 +221,7 @@ async function runSearchEnrich(
         base: ollamaBase,
         headers,
         model: visionModel,
-        content: structureEnrichFromImagePrompt(visionModel),
+        content: visionJsonPromptFromResolved(prompts),
         images: [b64],
         options: jsonOpts,
       }),
@@ -227,8 +236,8 @@ async function runSearchEnrich(
       result.aiVisualTags = [
         ...result.aiVisualTags,
         "STICKER",
-        "MEME",
         "REACTION",
+        "CHAT",
       ].filter((t, i, a) => a.indexOf(t) === i);
     }
     return result;
@@ -236,7 +245,7 @@ async function runSearchEnrich(
   return {
     aiCaption: prose.slice(0, 1000),
     aiScenario: "Reaction sticker in chat",
-    aiVisualTags: ["STICKER", "MEME", "REACTION"],
+    aiVisualTags: ["STICKER", "REACTION", "CHAT"],
   };
 }
 

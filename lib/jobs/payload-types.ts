@@ -56,6 +56,13 @@ export type SearchEnrichJobPayload = {
   title: string;
   glassObjectId: string;
   mimeType: string;
+  /** Resolved at enqueue (worker is Prisma-free). Optional for old jobs. */
+  prompts?: {
+    visionDescribe: string;
+    structure: string;
+    visionJson: string;
+    outputExample: string;
+  };
 };
 
 export type JobPayload =

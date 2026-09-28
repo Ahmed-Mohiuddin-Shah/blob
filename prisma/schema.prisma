@@ -196,6 +196,16 @@ model PublicPrism {
   @@map("public_prism")
 }
 
+/// Superadmin-tunable LLM prompt bodies (search metadata + search agent).
+model LlmPrompt {
+  key         String   @id @db.VarChar(64)
+  body        String
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedById BigInt?  @map("updated_by_id")
+
+  @@map("llm_prompts")
+}
+
 model Category {
   id          BigInt    @id @default(autoincrement())
   parentId    BigInt?   @map("parent_id")

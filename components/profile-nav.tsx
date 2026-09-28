@@ -18,6 +18,7 @@ import {
   Sparkles,
   Upload,
   Users,
+  Wand2,
   type LucideIcon,
 } from "lucide-react";
 
@@ -193,6 +194,13 @@ export function ProfileNav({
           label: "Logs",
           icon: ScrollText,
           active: (p) => p.startsWith("/profile/logs"),
+          superadmin: true,
+        },
+        {
+          href: "/profile/prompts",
+          label: "Prompts",
+          icon: Wand2,
+          active: (p) => p.startsWith("/profile/prompts"),
           superadmin: true,
         },
         {
