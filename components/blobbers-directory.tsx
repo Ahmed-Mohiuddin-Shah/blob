@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Skeleton } from "./skeleton";
 import { StickerMedia } from "./sticker-media";
 
 type PreviewSticker = {
@@ -81,7 +82,25 @@ export function BlobbersDirectory({ initialQ }: { initialQ: string }) {
       </form>
 
       {loading ? (
-        <p className="text-sm text-secondary">Loading…</p>
+        <div className="space-y-12" aria-busy="true" aria-label="Loading">
+          {Array.from({ length: 3 }, (_, i) => (
+            <section key={i}>
+              <Skeleton height={12} width={72} borderRadius="0.5rem" />
+              <Skeleton className="mt-2" height={28} width="40%" borderRadius="0.5rem" />
+              <div className="mt-4 flex gap-3">
+                {Array.from({ length: 4 }, (_, j) => (
+                  <Skeleton
+                    key={j}
+                    width={112}
+                    height={112}
+                    borderRadius="1.5rem"
+                    containerClassName="leading-none"
+                  />
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
       ) : items.length === 0 ? (
         <p className="text-sm text-secondary">No Blobbers found.</p>
       ) : (

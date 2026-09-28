@@ -1,6 +1,9 @@
 /** Shared sticker constants and small helpers. */
 
 import { MODERATION_STATUS } from "@/lib/moderation";
+import { WHATSAPP_OG_MAX_BYTES } from "@/lib/whatsapp-og-encode";
+
+export { WHATSAPP_OG_MAX_BYTES };
 
 export const VISIBILITY = {
   public: "public",
@@ -31,6 +34,8 @@ export const MEDIA_KIND = {
   mask: "mask",
   gif: "gif",
   video: "video",
+  /** WhatsApp / social link-preview JPEG (hidden from downloads). */
+  og: "og",
   prevThumbnail: "prev_thumbnail",
 } as const;
 
@@ -254,20 +259,64 @@ export function previewMediaKind(media: PreviewMediaRow[]): MediaKind {
   return MEDIA_KIND.thumbnail;
 }
 
-/** Card/list preview URL; VIDEO uses gif when ready, else still thumbnail. */
+/** Card/list preview URL — always still (never GIF/video) for grid payload. */
 export function stickerPreviewUrl(
   stickerId: string | bigint,
   media: PreviewMediaRow[],
 ): string {
   const kinds = media.filter(isReady).map((m) => m.kind);
-  const type = stickerTypeFromKinds(kinds);
-  const kind =
-    type === "VIDEO" && kinds.includes(MEDIA_KIND.gif)
-      ? MEDIA_KIND.gif
-      : kinds.includes(MEDIA_KIND.thumbnail)
-        ? MEDIA_KIND.thumbnail
-        : previewMediaKind(media);
+  const kind = kinds.includes(MEDIA_KIND.thumbnail)
+    ? MEDIA_KIND.thumbnail
+    : kinds.includes(MEDIA_KIND.chat)
+      ? MEDIA_KIND.chat
+      : kinds.includes(MEDIA_KIND.image)
+        ? MEDIA_KIND.image
+        : MEDIA_KIND.thumbnail;
   return `/api/stickers/${stickerId}/media/${kind}`;
+}
+
+/** WhatsApp link-preview og:image min width (developers.facebook.com WhatsApp Link Previews). */
+export const WHATSAPP_OG_MIN_WIDTH = 300;
+
+type OgMediaRow = {
+  kind: string;
+  status?: string | null;
+  width?: number | null;
+  sizeBytes?: number | bigint | null;
+};
+
+function ogWidth(m: OgMediaRow): number {
+  if (m.width && m.width > 0) return m.width;
+  // Known encode sizes when width wasn't stored.
+  if (m.kind === MEDIA_KIND.image) return 1024;
+  if (m.kind === MEDIA_KIND.gif || m.kind === MEDIA_KIND.og) return 512;
+  return 0;
+}
+
+function meetsWhatsAppOg(m: OgMediaRow): boolean {
+  const bytes = Number(m.sizeBytes ?? 0);
+  return (
+    ogWidth(m) >= WHATSAPP_OG_MIN_WIDTH &&
+    bytes > 0 &&
+    bytes <= WHATSAPP_OG_MAX_BYTES
+  );
+}
+
+/**
+ * Pick an existing media kind for WhatsApp og:image.
+ * Prefer dedicated `og` (512 JPEG ≤600KB); else image/gif under budget; else over-budget image.
+ * Never chat/thumbnail (under 300px) or video.
+ */
+export function whatsappOgImageKind(media: OgMediaRow[]): MediaKind | null {
+  const ready = media.filter(isReady);
+  const og = ready.find((m) => m.kind === MEDIA_KIND.og);
+  if (og) return MEDIA_KIND.og;
+  const image = ready.find((m) => m.kind === MEDIA_KIND.image);
+  const gif = ready.find((m) => m.kind === MEDIA_KIND.gif);
+  if (image && meetsWhatsAppOg(image)) return MEDIA_KIND.image;
+  if (gif && meetsWhatsAppOg(gif)) return MEDIA_KIND.gif;
+  if (image) return MEDIA_KIND.image;
+  return null;
 }
 
 /** Whether the downloadable VIDEO has muxed audio; null if not a video sticker. */

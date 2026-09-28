@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { StickerGrid } from "./sticker-grid";
 import type { StickerCardProps } from "./sticker-card";
+import { StickerGridSkeleton } from "./skeleton";
 
 type Item = {
   id: string;
@@ -99,20 +100,17 @@ export function PrintStickersInfiniteGrid({
         </p>
       ) : null}
       {loading ? (
-        <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div
-              key={i}
-              className="aspect-square animate-pulse rounded-[1.5rem] bg-badge"
-            />
-          ))}
+        <div className="mt-6">
+          <StickerGridSkeleton count={6} />
         </div>
       ) : (
         <div className="mt-6">
           <StickerGrid items={cards} />
           <div ref={loadMoreRef} className="h-8" aria-hidden />
           {loadingMore ? (
-            <p className="py-4 text-center text-sm text-secondary">Loading…</p>
+            <div className="py-4">
+              <StickerGridSkeleton count={6} />
+            </div>
           ) : null}
         </div>
       )}

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { SearchBar } from "@/components/search-bar";
 import { CollectionCard, type CollectionCardProps } from "./collection-card";
 import { LibrarySearchSentinel, useSearchDock } from "./library-search";
+import { StickerGridSkeleton } from "./skeleton";
 
 type ApiItem = CollectionCardProps & { id: string; slug: string };
 
@@ -140,7 +141,7 @@ export function CollectionsLibrary({
         ) : null}
 
         {loading ? (
-          <p className="py-16 text-center text-sm text-secondary">Loading…</p>
+          <StickerGridSkeleton />
         ) : items.length === 0 ? (
           <p className="py-16 text-center text-sm text-secondary">
             No collections yet.
@@ -155,7 +156,9 @@ export function CollectionsLibrary({
 
         <div ref={loadMoreRef} className="h-8" aria-hidden />
         {loadingMore ? (
-          <p className="pb-12 text-center text-xs text-secondary">Loading more…</p>
+          <div className="pb-12">
+            <StickerGridSkeleton count={6} />
+          </div>
         ) : null}
       </div>
     </>

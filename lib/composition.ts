@@ -22,6 +22,7 @@ import {
   type DetectedKind,
   type Visibility,
 } from "@/lib/stickers";
+import { encodeWhatsAppOg } from "@/lib/whatsapp-og-encode";
 
 export async function uniqueStickerSlug(title: string): Promise<string> {
   const baseSlug = slugify(title);
@@ -183,6 +184,46 @@ export async function upsertStillExports(opts: {
       },
     });
   }
+
+  const og = await encodeWhatsAppOg(opts.full);
+  const ogUp = await glass.objects.upload({
+    prismId: opts.prismId,
+    file: og.bytes,
+    title: `${opts.slug}-og`,
+    filename: `${opts.slug}-og.${og.ext}`,
+    fileExtension: og.ext,
+  });
+  await prisma.mediaAsset.upsert({
+    where: {
+      stickerId_kind: { stickerId: opts.stickerId, kind: MEDIA_KIND.og },
+    },
+    create: {
+      stickerId: opts.stickerId,
+      compositionRevisionId: opts.revisionId,
+      kind: MEDIA_KIND.og,
+      mimeType: og.mime,
+      fileExtension: og.ext,
+      width: og.width,
+      height: og.height,
+      sizeBytes: BigInt(og.bytes.length),
+      checksumSha256: createHash("sha256").update(og.bytes).digest("hex"),
+      glassObjectId: ogUp.object_id,
+      glassPrismId: opts.prismId,
+      status: MEDIA_ASSET_STATUS.ready,
+    },
+    update: {
+      compositionRevisionId: opts.revisionId,
+      mimeType: og.mime,
+      fileExtension: og.ext,
+      width: og.width,
+      height: og.height,
+      sizeBytes: BigInt(og.bytes.length),
+      checksumSha256: createHash("sha256").update(og.bytes).digest("hex"),
+      glassObjectId: ogUp.object_id,
+      glassPrismId: opts.prismId,
+      status: MEDIA_ASSET_STATUS.ready,
+    },
+  });
 }
 
 /** Keep prior thumbnail under prev_thumbnail for open-queue still diffs (unique kind constraint). */

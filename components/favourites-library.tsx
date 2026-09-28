@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Search } from "lucide-react";
 import { FAVORITE_SUBJECT, type FavoriteUiType } from "@/lib/favorites";
 import { FavouriteButton } from "./favourite-button";
+import { FavouritesListSkeleton } from "./skeleton";
 import { StickerMedia } from "./sticker-media";
 
 type FavItem = {
@@ -123,7 +124,7 @@ export function FavouritesLibrary({ initialQ }: { initialQ: string }) {
       ) : null}
 
       {loading ? (
-        <p className="py-16 text-center text-sm text-secondary">Loading…</p>
+        <FavouritesListSkeleton />
       ) : items.length === 0 ? (
         <p className="py-16 text-center text-sm text-secondary">
           No favourites yet. Tap the heart on a sticker or collection.

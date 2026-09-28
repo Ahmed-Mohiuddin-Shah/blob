@@ -1,52 +1,15 @@
 @import "tailwindcss";
 @import "blobatar/motion.css";
 
-@font-face {
-  font-family: "Segoe UI";
-  font-style: normal;
-  font-weight: 300;
-  font-display: swap;
-  src: url("/fonts/Segoe%20UI%20Light.ttf") format("truetype");
-}
-
-@font-face {
-  font-family: "Segoe UI";
-  font-style: italic;
-  font-weight: 300;
-  font-display: swap;
-  src: url("/fonts/Segoe%20UI%20LightItalic.ttf") format("truetype");
-}
-
-@font-face {
-  font-family: "Segoe UI";
-  font-style: normal;
-  font-weight: 350;
-  font-display: swap;
-  src: url("/fonts/Segoe%20UI%20SemiLight.ttf") format("truetype");
-}
-
-@font-face {
-  font-family: "Segoe UI";
-  font-style: italic;
-  font-weight: 350;
-  font-display: swap;
-  src: url("/fonts/Segoe%20UI%20SemiLightItalic.ttf") format("truetype");
-}
-
+/* Critical faces only (woff2). Light/italic fall back to nearest weight / system. */
 @font-face {
   font-family: "Segoe UI";
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url("/fonts/Segoe%20UI.ttf") format("truetype");
-}
-
-@font-face {
-  font-family: "Segoe UI";
-  font-style: italic;
-  font-weight: 400;
-  font-display: swap;
-  src: url("/fonts/Segoe%20UI%20Italic.ttf") format("truetype");
+  src:
+    url("/fonts/Segoe%20UI.woff2") format("woff2"),
+    url("/fonts/Segoe%20UI.ttf") format("truetype");
 }
 
 @font-face {
@@ -54,15 +17,9 @@
   font-style: normal;
   font-weight: 600;
   font-display: swap;
-  src: url("/fonts/Segoe%20UI%20Semibold.ttf") format("truetype");
-}
-
-@font-face {
-  font-family: "Segoe UI";
-  font-style: italic;
-  font-weight: 600;
-  font-display: swap;
-  src: url("/fonts/Segoe%20UI%20Semibold%20Italic.ttf") format("truetype");
+  src:
+    url("/fonts/Segoe%20UI%20Semibold.woff2") format("woff2"),
+    url("/fonts/Segoe%20UI%20Semibold.ttf") format("truetype");
 }
 
 @font-face {
@@ -70,15 +27,9 @@
   font-style: normal;
   font-weight: 700;
   font-display: swap;
-  src: url("/fonts/Segoe%20UI%20Bold.ttf") format("truetype");
-}
-
-@font-face {
-  font-family: "Segoe UI";
-  font-style: italic;
-  font-weight: 700;
-  font-display: swap;
-  src: url("/fonts/Segoe%20UI%20BoldItalic.ttf") format("truetype");
+  src:
+    url("/fonts/Segoe%20UI%20Bold.woff2") format("woff2"),
+    url("/fonts/Segoe%20UI%20Bold.ttf") format("truetype");
 }
 
 @theme {

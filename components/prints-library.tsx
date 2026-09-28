@@ -7,6 +7,7 @@ import { SearchBar } from "@/components/search-bar";
 import { AddToCollectionButton } from "./add-to-collection-button";
 import { FavouriteButton } from "./favourite-button";
 import { LibrarySearchSentinel, useSearchDock } from "./library-search";
+import { PrintGridSkeleton } from "./skeleton";
 import { COLLECTION_ITEM } from "@/lib/collections";
 import { FAVORITE_SUBJECT } from "@/lib/favorites";
 
@@ -197,14 +198,7 @@ export function PrintsLibrary({
       </div>
 
       {loading ? (
-        <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div
-              key={i}
-              className="aspect-[3/4] animate-pulse rounded-[1.5rem] bg-badge"
-            />
-          ))}
-        </div>
+        <PrintGridSkeleton />
       ) : items.length === 0 ? (
         <p className="mt-10 text-center text-sm text-secondary">
           No {tab} yet.

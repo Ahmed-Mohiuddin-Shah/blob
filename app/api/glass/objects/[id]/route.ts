@@ -14,7 +14,12 @@ export async function GET(
   try {
     // Prefer public URL redirect when available
     try {
-      return NextResponse.redirect(glassPublicObjectUrl(id), 302);
+      const res = NextResponse.redirect(glassPublicObjectUrl(id), 302);
+      res.headers.set(
+        "Cache-Control",
+        "public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800",
+      );
+      return res;
     } catch {
       /* fall through to download */
     }
@@ -29,7 +34,8 @@ export async function GET(
     return new NextResponse(bytes, {
       headers: {
         "Content-Type": contentType,
-        "Cache-Control": "public, max-age=300",
+        "Cache-Control":
+          "public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800",
       },
     });
   } catch (err) {

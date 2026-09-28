@@ -80,16 +80,18 @@ export default async function SheetDetailPage({
       </p>
 
       <div className="mt-6 grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
-        <div className="overflow-hidden rounded-[2rem] border border-divider bg-badge">
+        <div className="aspect-[3/4] overflow-hidden rounded-[2rem] border border-divider bg-badge">
           {ready && sheet.pngGlassObjectId ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={`/api/sheets/${sheet.id}/media/png`}
               alt={sheet.name}
-              className="w-full object-contain"
+              className="h-full w-full object-contain"
+              loading="eager"
+              decoding="async"
             />
           ) : (
-            <div className="flex aspect-[3/4] flex-col items-center justify-center gap-2 p-8 text-center">
+            <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center">
               <div className="h-24 w-24 animate-pulse rounded-[2rem] bg-surface" />
               <p className="text-sm text-secondary">
                 {sheet.status === PRINT_STATUS.failed

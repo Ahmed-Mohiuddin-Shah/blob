@@ -4,6 +4,7 @@ import { Search, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { BusyButton } from "./busy-button";
+import { Skeleton } from "./skeleton";
 import { StickerMedia } from "./sticker-media";
 import { MAX_SHEET_STICKERS } from "@/lib/prints";
 import { VISIBILITY } from "@/lib/stickers";
@@ -192,11 +193,18 @@ export function StickerPickerDialog({
             </p>
           ) : null}
           {loading ? (
-            <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
+            <div
+              className="grid grid-cols-3 gap-3 sm:grid-cols-4"
+              aria-busy="true"
+              aria-label="Loading"
+            >
               {Array.from({ length: 8 }).map((_, i) => (
-                <div
+                <Skeleton
                   key={i}
-                  className="aspect-square animate-pulse rounded-[1.25rem] bg-badge"
+                  className="!rounded-[1.25rem]"
+                  containerClassName="block aspect-square leading-none"
+                  height="100%"
+                  width="100%"
                 />
               ))}
             </div>

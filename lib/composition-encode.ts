@@ -19,6 +19,7 @@ import {
   MAX_GIF_BYTES,
   MAX_IMAGE_BYTES,
   MAX_VIDEO_BYTES,
+  WHATSAPP_OG_MAX_BYTES,
   maxDurationMsForKind,
   MEDIA_ASSET_STATUS,
   MEDIA_KIND,
@@ -26,6 +27,7 @@ import {
   primaryMediaKind,
   PROCESSING_STATUS,
 } from "@/lib/stickers";
+import { encodeWhatsAppOg } from "@/lib/whatsapp-og-encode";
 
 // napi Image is CanvasImageSource-compatible at runtime; DOM typings disagree.
 type FrameResolver = (
@@ -140,6 +142,7 @@ async function processComposition(stickerId: bigint): Promise<void> {
   const needsAnimated = compositionNeedsAnimatedEncode(doc);
   if (!needsAnimated && (await hasClientStills(stickerId, revision.id))) {
     // Client stills are the product for static stickers (overlays not asset-persisted).
+    await ensureWhatsAppOg(stickerId, revision.id, sticker.slug);
     await markReady(stickerId);
     return;
   }
@@ -211,6 +214,7 @@ async function processComposition(stickerId: bigint): Promise<void> {
 
     if (!prismId) {
       if (!needsAnimated && (await hasClientStills(stickerId, revision.id))) {
+        await ensureWhatsAppOg(stickerId, revision.id, sticker.slug);
         await markReady(stickerId);
         return;
       }
@@ -277,6 +281,17 @@ async function processComposition(stickerId: bigint): Promise<void> {
       });
     }
 
+    const og = await encodeWhatsAppOg(encoded.exports.full);
+    assertDerivativeBudget("og", og.bytes, WHATSAPP_OG_MAX_BYTES);
+    kinds.push({
+      kind: MEDIA_KIND.og,
+      bytes: og.bytes,
+      mime: og.mime,
+      ext: og.ext,
+      w: og.width,
+      h: og.height,
+    });
+
     for (const item of kinds) {
       if (item.kind === MEDIA_KIND.thumbnail) {
         const existing = await prisma.mediaAsset.findUnique({
@@ -341,6 +356,7 @@ async function processComposition(stickerId: bigint): Promise<void> {
     await markReady(stickerId);
   } catch (err) {
     if (!needsAnimated && (await hasClientStills(stickerId, revision.id))) {
+      await ensureWhatsAppOg(stickerId, revision.id, sticker.slug);
       await markReady(stickerId);
       return;
     }
@@ -367,6 +383,81 @@ function collectAssetIds(doc: CompositionDocument): string[] {
 
 function sha256Hex(buf: Uint8Array): string {
   return createHash("sha256").update(buf).digest("hex");
+}
+
+/**
+ * If current revision lacks ready `og`, build JPEG from existing full `image` in Glass.
+ * Used when client stills skip full re-encode (legacy stickers / reprocess).
+ */
+async function ensureWhatsAppOg(
+  stickerId: bigint,
+  revisionId: bigint,
+  slug: string,
+): Promise<void> {
+  const existingOg = await prisma.mediaAsset.findUnique({
+    where: { stickerId_kind: { stickerId, kind: MEDIA_KIND.og } },
+  });
+  if (
+    existingOg?.status === MEDIA_ASSET_STATUS.ready &&
+    existingOg.compositionRevisionId === revisionId
+  ) {
+    return;
+  }
+
+  const image = await prisma.mediaAsset.findUnique({
+    where: { stickerId_kind: { stickerId, kind: MEDIA_KIND.image } },
+  });
+  if (
+    !image ||
+    image.status !== MEDIA_ASSET_STATUS.ready ||
+    !image.glassObjectId
+  ) {
+    return;
+  }
+
+  const glass = getGlass();
+  const res = await glass.objects.download(image.glassObjectId);
+  const fullBytes = new Uint8Array(await res.arrayBuffer());
+  const og = await encodeWhatsAppOg(fullBytes);
+  assertDerivativeBudget("og", og.bytes, WHATSAPP_OG_MAX_BYTES);
+
+  const prismId = image.glassPrismId;
+  const up = await glass.objects.upload({
+    prismId,
+    file: og.bytes,
+    title: `${slug}-og`,
+    filename: `${slug}-og.${og.ext}`,
+    fileExtension: og.ext,
+  });
+  await prisma.mediaAsset.upsert({
+    where: { stickerId_kind: { stickerId, kind: MEDIA_KIND.og } },
+    create: {
+      stickerId,
+      compositionRevisionId: revisionId,
+      kind: MEDIA_KIND.og,
+      mimeType: og.mime,
+      fileExtension: og.ext,
+      width: og.width,
+      height: og.height,
+      sizeBytes: BigInt(og.bytes.length),
+      checksumSha256: sha256Hex(og.bytes),
+      glassObjectId: up.object_id,
+      glassPrismId: prismId,
+      status: MEDIA_ASSET_STATUS.ready,
+    },
+    update: {
+      compositionRevisionId: revisionId,
+      mimeType: og.mime,
+      fileExtension: og.ext,
+      width: og.width,
+      height: og.height,
+      sizeBytes: BigInt(og.bytes.length),
+      checksumSha256: sha256Hex(og.bytes),
+      glassObjectId: up.object_id,
+      glassPrismId: prismId,
+      status: MEDIA_ASSET_STATUS.ready,
+    },
+  });
 }
 
 async function fail(

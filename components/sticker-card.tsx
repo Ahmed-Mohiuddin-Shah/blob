@@ -31,6 +31,8 @@ export type StickerCardProps = {
   /** Owner remove from this collection (min 1 sticker enforced by API). */
   collectionSlug?: string | null;
   canRemoveFromCollection?: boolean;
+  /** Above-fold media priority for LCP. */
+  priority?: boolean;
 };
 
 export function StickerCard({
@@ -52,6 +54,7 @@ export function StickerCard({
   showActions = false,
   collectionSlug,
   canRemoveFromCollection = false,
+  priority = false,
 }: StickerCardProps) {
   const actions = showActions && stickerId;
   const showSound = type === "VIDEO" && hasAudio !== null && hasAudio !== undefined;
@@ -65,6 +68,7 @@ export function StickerCard({
             src={thumbUrl ?? null}
             seed={title}
             alt={title}
+            priority={priority}
           />
         </Link>
 

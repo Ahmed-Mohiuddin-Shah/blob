@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Gift, Link2, MessageCircleHeart } from "lucide-react";
 import { blobberMediaUrl } from "@/lib/blobber-media-url";
 import { StickerCard, type StickerCardProps } from "./sticker-card";
+import { StickerGridSkeleton } from "./skeleton";
 import { UserBlobatar } from "./user-blobatar";
 
 type Social = { linkType: string; handle: string; url: string };
@@ -242,7 +243,7 @@ export function BlobberProfile({ profile }: { profile: Profile }) {
 
       <div className="mt-8">
         {loading ? (
-          <p className="text-sm text-secondary">Loading…</p>
+          <StickerGridSkeleton count={8} />
         ) : section === "stickers" ? (
           items.length ? (
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">

@@ -26,9 +26,11 @@ import {
   structureEnrichPrompt,
   VISION_DESCRIBE_PROMPT,
 } from "../lib/search/vision-parse";
+import { encodeWhatsAppOg } from "../lib/whatsapp-og-encode";
 import {
   MAX_GIF_BYTES,
   MAX_IMAGE_BYTES,
+  MAX_OG_BYTES,
   MAX_VIDEO_BYTES,
   MEDIA_KIND,
   mimeToExt,
@@ -278,6 +280,17 @@ async function runComposition(
       ext: "mp4",
     });
   }
+
+  const og = await encodeWhatsAppOg(encoded.exports.full);
+  assertBudget("og", og.bytes, MAX_OG_BYTES);
+  kinds.push({
+    kind: MEDIA_KIND.og,
+    bytes: og.bytes,
+    mime: og.mime,
+    ext: og.ext,
+    w: og.width,
+    h: og.height,
+  });
 
   const derivatives = [];
   for (const item of kinds) {

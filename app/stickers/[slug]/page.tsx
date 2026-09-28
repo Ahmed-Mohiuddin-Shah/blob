@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { Blender, Volume2, VolumeX } from "lucide-react";
@@ -10,6 +11,7 @@ import { StickerCard, type StickerCardProps } from "@/components/sticker-card";
 import { StickerDownloadButtons } from "@/components/sticker-download-buttons";
 import { StickerFailedActions } from "@/components/sticker-failed-actions";
 import { StickerMedia } from "@/components/sticker-media";
+import { WhatsAppShareButton } from "@/components/whatsapp-share-button";
 import { getSession, signInUrl } from "@/lib/auth";
 import { CLAIM_STATUS } from "@/lib/attribution";
 import { canModerate, canUpload } from "@/lib/capabilities";
@@ -28,7 +30,78 @@ import {
   previewMediaKind,
   stickerTypeFromKinds,
   videoHasAudio,
+  whatsappOgImageKind,
 } from "@/lib/stickers";
+
+function publicBase(): string {
+  return (process.env.AUTH_URL || "http://localhost:3000").replace(/\/$/, "");
+}
+
+/** WhatsApp: ~80 chars suffice for og:description. */
+function ogDescription(raw: string | null | undefined): string {
+  const d = (raw ?? "").trim();
+  if (!d) return "A sticker.";
+  if (d.length <= 80) return d;
+  return `${d.slice(0, 77)}...`;
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const sticker = await prisma.sticker.findUnique({
+    where: { slug },
+    select: {
+      id: true,
+      slug: true,
+      title: true,
+      description: true,
+      visibility: true,
+      moderationStatus: true,
+      processingStatus: true,
+      uploadedById: true,
+      createdById: true,
+      media: {
+        select: { kind: true, status: true, width: true, sizeBytes: true },
+      },
+    },
+  });
+  if (!sticker) return { title: "Sticker" };
+
+  const shareable = canAccessSticker(sticker, {
+    viewerId: null,
+    isAdmin: false,
+  });
+  if (!shareable) return { title: sticker.title };
+
+  const base = publicBase();
+  const desc = ogDescription(sticker.description);
+  const pageUrl = `${base}/stickers/${sticker.slug}`;
+  const kind = whatsappOgImageKind(sticker.media);
+  const imageUrl = kind
+    ? `${base}/api/stickers/${sticker.id}/media/${kind}`
+    : undefined;
+
+  return {
+    metadataBase: new URL(base),
+    title: sticker.title,
+    description: desc,
+    openGraph: {
+      title: sticker.title,
+      description: desc,
+      url: pageUrl,
+      ...(imageUrl ? { images: [{ url: imageUrl }] } : {}),
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: sticker.title,
+      description: desc,
+      ...(imageUrl ? { images: [imageUrl] } : {}),
+    },
+  };
+}
 
 export default async function StickerDetailPage({
   params,
@@ -301,6 +374,11 @@ export default async function StickerDetailPage({
               signInHref={signInUrl({ redirectTo: `/stickers/${sticker.slug}` })}
               variant="pill"
             />
+            {canAccessSticker(sticker, { viewerId: null, isAdmin: false }) ? (
+              <WhatsAppShareButton
+                pageUrl={`${publicBase()}/stickers/${sticker.slug}`}
+              />
+            ) : null}
             {canRemix ? (
               <Link
                 href={`/stickers/${sticker.slug}/remix`}

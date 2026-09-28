@@ -2,9 +2,14 @@ import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { getSession } from "@/lib/auth";
 import { canModerate } from "@/lib/capabilities";
-import { getGlass } from "@/lib/glass";
+import { getGlass, glassPublicObjectUrl } from "@/lib/glass";
 import { prisma } from "@/lib/prisma";
-import { canAccessSticker, isPublicBrowseable, MEDIA_ASSET_STATUS, MEDIA_KIND } from "@/lib/stickers";
+import {
+  canAccessSticker,
+  isPublicBrowseable,
+  MEDIA_ASSET_STATUS,
+  MEDIA_KIND,
+} from "@/lib/stickers";
 
 async function sessionUser() {
   const reqHeaders = await headers();
@@ -16,6 +21,10 @@ async function sessionUser() {
 }
 
 const ALLOWED_KINDS = new Set<string>(Object.values(MEDIA_KIND));
+
+const PUBLIC_CACHE =
+  "public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800";
+const PRIVATE_CACHE = "private, max-age=60";
 
 export async function GET(
   _request: Request,
@@ -54,15 +63,16 @@ export async function GET(
   let asset = sticker.media.find(
     (m) => m.kind === kind && m.status === MEDIA_ASSET_STATUS.ready,
   );
+  // Thumbnail miss: prefer small chat over full 1024 image for grids.
   if (!asset && kind === MEDIA_KIND.thumbnail) {
     asset =
       sticker.media.find(
         (m) =>
-          m.kind === MEDIA_KIND.image && m.status === MEDIA_ASSET_STATUS.ready,
+          m.kind === MEDIA_KIND.chat && m.status === MEDIA_ASSET_STATUS.ready,
       ) ??
       sticker.media.find(
         (m) =>
-          m.kind === MEDIA_KIND.chat && m.status === MEDIA_ASSET_STATUS.ready,
+          m.kind === MEDIA_KIND.image && m.status === MEDIA_ASSET_STATUS.ready,
       );
   }
   if (
@@ -79,19 +89,32 @@ export async function GET(
     return NextResponse.json({ error: "No media" }, { status: 404 });
   }
 
+  const isPublic = isPublicBrowseable(sticker);
+
+  // Public browseable: redirect to Glass so Next doesn't buffer every thumb.
+  if (isPublic && asset.glassObjectId) {
+    try {
+      const res = NextResponse.redirect(
+        glassPublicObjectUrl(asset.glassObjectId),
+        302,
+      );
+      res.headers.set("Cache-Control", PUBLIC_CACHE);
+      return res;
+    } catch {
+      /* fall through to authenticated download */
+    }
+  }
+
   try {
     const glass = getGlass();
     const res = await glass.objects.download(asset.glassObjectId);
     const buf = Buffer.from(await res.arrayBuffer());
     // Prefer DB mime — Glass may guess Content-Type from object title.
     const contentType = asset.mimeType || "application/octet-stream";
-    const cache = isPublicBrowseable(sticker)
-      ? "public, max-age=300"
-      : "private, max-age=60";
     return new NextResponse(buf, {
       headers: {
         "Content-Type": contentType,
-        "Cache-Control": cache,
+        "Cache-Control": isPublic ? PUBLIC_CACHE : PRIVATE_CACHE,
       },
     });
   } catch (err) {
