@@ -63,10 +63,6 @@ export function PromptsAdmin({ initial }: { initial: Bodies }) {
     applyMetaPromptsAction,
     initialApply,
   );
-  const [metaTest, metaTestAction, metaTestPending] = useActionState(
-    testMetaPromptAction,
-    initialMetaTest,
-  );
   const [searchApply, searchApplyAction, searchApplyPending] = useActionState(
     applySearchPromptsAction,
     initialApply,
@@ -92,7 +88,9 @@ export function PromptsAdmin({ initial }: { initial: Bodies }) {
   const [searchOutput, setSearchOutput] = useState(
     initial[LLM_PROMPT_KEY.searchOutputExample],
   );
-  const [metaResizing, setMetaResizing] = useState(false);
+  const [metaTest, setMetaTest] = useState<MetaTestState>(initialMetaTest);
+  const [metaTestBusy, setMetaTestBusy] = useState(false);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
 
   const metaHidden = (
     <>
@@ -102,6 +100,33 @@ export function PromptsAdmin({ initial }: { initial: Bodies }) {
       <input type="hidden" name="outputExample" value={metaOutput} />
     </>
   );
+
+  async function runMetaTest() {
+    if (!photoFile) {
+      setMetaTest({ error: "Choose a photo to test" });
+      return;
+    }
+    setMetaTestBusy(true);
+    setMetaTest({});
+    try {
+      const handoff = await fileToHandoff(photoFile);
+      const fd = new FormData();
+      fd.set("visionDescribe", visionDescribe);
+      fd.set("structure", structure);
+      fd.set("visionJson", visionJson);
+      fd.set("outputExample", metaOutput);
+      fd.set("photoData", handoff.data);
+      fd.set("photoMime", handoff.mime);
+      const result = await testMetaPromptAction({}, fd);
+      setMetaTest(result);
+    } catch (err) {
+      setMetaTest({
+        error: err instanceof Error ? err.message : "Test failed",
+      });
+    } finally {
+      setMetaTestBusy(false);
+    }
+  }
 
   return (
     <div className="space-y-8">
@@ -153,28 +178,7 @@ export function PromptsAdmin({ initial }: { initial: Bodies }) {
           />
         </div>
 
-        <form
-          action={async (fd) => {
-            const file = fd.get("photo");
-            if (!(file instanceof File) || file.size === 0) return;
-            setMetaResizing(true);
-            try {
-              // Resize client-side so Server Actions stay under the 1MB body cap.
-              const handoff = await fileToHandoff(file);
-              const next = new FormData();
-              next.set("visionDescribe", visionDescribe);
-              next.set("structure", structure);
-              next.set("visionJson", visionJson);
-              next.set("outputExample", metaOutput);
-              next.set("photoData", handoff.data);
-              next.set("photoMime", handoff.mime);
-              await metaTestAction(next);
-            } finally {
-              setMetaResizing(false);
-            }
-          }}
-          className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-end"
-        >
+        <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-end">
           <label className="block flex-1">
             <span className="text-xs font-bold uppercase tracking-wider text-inactive">
               Test photo
@@ -184,20 +188,24 @@ export function PromptsAdmin({ initial }: { initial: Bodies }) {
             </p>
             <input
               type="file"
-              name="photo"
               accept="image/*"
-              required
               className="mt-2 block w-full text-sm text-secondary file:mr-3 file:rounded-full file:border-0 file:bg-accent-gradient file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white"
+              onChange={(e) => {
+                setPhotoFile(e.target.files?.[0] ?? null);
+                setMetaTest({});
+              }}
             />
           </label>
           <BusyButton
-            type="submit"
-            busy={metaTestPending || metaResizing}
+            type="button"
+            busy={metaTestBusy}
+            disabled={metaTestBusy || !photoFile}
+            onClick={() => void runMetaTest()}
             className="rounded-full border border-divider bg-background px-5 py-2.5 text-sm font-semibold hover:border-accent-pink/40"
           >
             Test prompt
           </BusyButton>
-        </form>
+        </div>
 
         <form action={metaApplyAction} className="mt-3">
           {metaHidden}

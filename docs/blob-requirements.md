@@ -825,11 +825,10 @@ GET    /api/packs/{id}/stickers
 ### Should have (after Must)
 
 - [ ] Flutter editor shell consuming published Dart package and APIs exposed for Flutter app with Deeplink support
-- [ ] Filters beyond cutout; richer masks
 - [ ] Server composer parity hardening / golden-image tests across platforms
-- [ ] Tag aliases table + expansion in search
-- [ ] **Meilisearch** search (replace/augment PG FTS)
-- [ ] Related stickers
+- [x] Tag aliases table + expansion in search
+- [x] **Meilisearch** search (replace/augment PG FTS)
+- [x] Related stickers
 
 ---
 
