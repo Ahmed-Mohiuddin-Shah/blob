@@ -1,8 +1,8 @@
 "use client";
 
-import { Camera, Search, Sparkles } from "lucide-react";
+import { Camera, Search, Sparkles, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { BusyButton } from "@/components/busy-button";
 import {
   fileToHandoff,
@@ -24,7 +24,7 @@ type Props = {
   submitLabel?: string;
   /** Text submit. If omitted and navigateTo set, pushes navigateTo?q= */
   onSubmit?: (q: string) => void;
-  /** Image picked / dropped. If omitted, handoff → /search?mode=image */
+  /** Image picked / dropped / pasted. If omitted, handoff → /search?mode=image */
   onImageSearch?: (file: File) => void;
   onAgentSearch?: (q: string) => void;
   /** GET-style navigation target for text search when onSubmit omitted */
@@ -32,7 +32,27 @@ type Props = {
   className?: string;
   /** Hide gradient Search button (e.g. docked library) */
   hideSubmit?: boolean;
+  /** Controlled preview (e.g. handoff on /search). Overrides internal preview. */
+  imagePreviewUrl?: string | null;
+  onClearImagePreview?: () => void;
 };
+
+function fileFromClipboard(e: React.ClipboardEvent): File | null {
+  const items = e.clipboardData?.items;
+  if (!items) return null;
+  for (const item of items) {
+    if (item.kind === "file" && item.type.startsWith("image/")) {
+      return item.getAsFile();
+    }
+  }
+  const files = e.clipboardData?.files;
+  if (files?.length) {
+    for (const file of files) {
+      if (file.type.startsWith("image/")) return file;
+    }
+  }
+  return null;
+}
 
 export function SearchBar({
   variant = "hero",
@@ -51,18 +71,48 @@ export function SearchBar({
   navigateTo,
   className = "",
   hideSubmit = false,
+  imagePreviewUrl,
+  onClearImagePreview,
 }: Props) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
   const [internal, setInternal] = useState(defaultValue);
   const [dragging, setDragging] = useState(false);
+  const [localPreview, setLocalPreview] = useState<string | null>(null);
+  const localPreviewRef = useRef<string | null>(null);
   const q = value !== undefined ? value : internal;
   const dropEnabled = enableImageDrop ?? showCamera;
   const compact = variant === "library";
+  const preview =
+    imagePreviewUrl !== undefined ? imagePreviewUrl : localPreview;
+
+  useEffect(() => {
+    return () => {
+      if (localPreviewRef.current?.startsWith("blob:")) {
+        URL.revokeObjectURL(localPreviewRef.current);
+      }
+    };
+  }, []);
+
+  function setLocalPreviewUrl(url: string | null) {
+    if (localPreviewRef.current?.startsWith("blob:")) {
+      URL.revokeObjectURL(localPreviewRef.current);
+    }
+    localPreviewRef.current = url;
+    setLocalPreview(url);
+  }
 
   function setQ(next: string) {
     if (value === undefined) setInternal(next);
     onChange?.(next);
+  }
+
+  function clearPreview() {
+    if (imagePreviewUrl !== undefined) {
+      onClearImagePreview?.();
+      return;
+    }
+    setLocalPreviewUrl(null);
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -82,6 +132,9 @@ export function SearchBar({
 
   async function handleImage(file: File | null) {
     if (!file || !file.type.startsWith("image/")) return;
+    if (imagePreviewUrl === undefined) {
+      setLocalPreviewUrl(URL.createObjectURL(file));
+    }
     if (onImageSearch) {
       onImageSearch(file);
       return;
@@ -90,6 +143,16 @@ export function SearchBar({
     stashImageHandoff(payload);
     router.push("/search?mode=image");
   }
+
+  function handlePaste(e: React.ClipboardEvent) {
+    if (!dropEnabled) return;
+    const file = fileFromClipboard(e);
+    if (!file) return;
+    e.preventDefault();
+    void handleImage(file);
+  }
+
+  const thumb = compact ? "h-7 w-7" : "h-9 w-9";
 
   return (
     <form
@@ -137,12 +200,36 @@ export function SearchBar({
             aria-hidden
           />
         </div>
+        {preview ? (
+          <div className={`relative mr-1 shrink-0 ${thumb}`}>
+            {/* eslint-disable-next-line @next/next/no-img-element -- blob/data URL preview */}
+            <img
+              src={preview}
+              alt="Search image"
+              className={`${thumb} rounded-full object-cover ring-1 ring-divider`}
+            />
+            <button
+              type="button"
+              aria-label="Clear search image"
+              title="Clear search image"
+              onClick={clearPreview}
+              className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-foreground text-background shadow"
+            >
+              <X className="h-2.5 w-2.5" strokeWidth={2.5} aria-hidden />
+            </button>
+          </div>
+        ) : null}
         <input
           type="search"
           name="q"
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder={placeholder}
+          onPaste={handlePaste}
+          placeholder={
+            preview
+              ? "Image search — add text or clear the thumb"
+              : placeholder
+          }
           className={`min-w-0 flex-1 bg-transparent outline-none placeholder:text-inactive ${
             compact ? "px-1 text-sm" : "px-2 text-base"
           }`}
@@ -154,7 +241,7 @@ export function SearchBar({
               <button
                 type="button"
                 aria-label="Search with image"
-                title="Search with image"
+                title="Search with image (or paste)"
                 className="flex h-9 w-9 items-center justify-center rounded-full text-inactive transition-colors hover:bg-black/5 hover:text-accent-pink"
                 onClick={() => fileRef.current?.click()}
               >
@@ -177,7 +264,7 @@ export function SearchBar({
               type="button"
               aria-label="Agent search"
               title="Agent search"
-                className="flex h-9 w-9 items-center justify-center rounded-full text-inactive transition-colors hover:bg-black/5 hover:text-accent-pink"
+              className="flex h-9 w-9 items-center justify-center rounded-full text-inactive transition-colors hover:bg-black/5 hover:text-accent-pink"
               onClick={() => onAgentSearch?.(q.trim())}
             >
               <Sparkles className="h-4 w-4" strokeWidth={1.75} aria-hidden />

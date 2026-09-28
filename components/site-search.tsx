@@ -74,6 +74,7 @@ export function SiteSearch({ initialQ = "", initialMode = "hybrid" }: Props) {
   const [suggestions, setSuggestions] = useState<
     { id: string; slug?: string; title?: string }[]
   >([]);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -139,6 +140,7 @@ export function SiteSearch({ initialQ = "", initialMode = "hybrid" }: Props) {
   function runImageSearch(media: ImageHandoff) {
     setError(null);
     setMode("image");
+    setImagePreview(`data:${media.mime};base64,${media.data}`);
     startTransition(async () => {
       try {
         const res = await fetch("/api/search", {
@@ -162,6 +164,7 @@ export function SiteSearch({ initialQ = "", initialMode = "hybrid" }: Props) {
   useEffect(() => {
     const handoff = takeImageHandoff();
     if (handoff) {
+      setImagePreview(`data:${handoff.mime};base64,${handoff.data}`);
       runImageSearch(handoff);
       return;
     }
@@ -199,6 +202,8 @@ export function SiteSearch({ initialQ = "", initialMode = "hybrid" }: Props) {
         showCamera
         showAgent
         placeholder="Stickers, collections, prints, blobbers…"
+        imagePreviewUrl={imagePreview}
+        onClearImagePreview={() => setImagePreview(null)}
         onSubmit={(next) => runSearch(next, mode === "image" ? "hybrid" : mode)}
         onImageSearch={(file) => {
           void fileToHandoff(file).then(runImageSearch);
