@@ -1,9 +1,6 @@
 /** Shared sticker constants and small helpers. */
 
 import { MODERATION_STATUS } from "@/lib/moderation";
-import { WHATSAPP_OG_MAX_BYTES } from "@/lib/whatsapp-og-encode";
-
-export { WHATSAPP_OG_MAX_BYTES };
 
 export const VISIBILITY = {
   public: "public",
@@ -275,7 +272,8 @@ export function stickerPreviewUrl(
   return `/api/stickers/${stickerId}/media/${kind}`;
 }
 
-/** WhatsApp link-preview og:image min width (developers.facebook.com WhatsApp Link Previews). */
+/** WhatsApp link-preview og:image caps (developers.facebook.com). Keep value in sync with lib/whatsapp-og-encode.ts — do not import that module here (sharp must stay server-only). */
+export const WHATSAPP_OG_MAX_BYTES = 600_000;
 export const WHATSAPP_OG_MIN_WIDTH = 300;
 
 type OgMediaRow = {
