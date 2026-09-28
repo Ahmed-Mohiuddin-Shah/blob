@@ -123,12 +123,14 @@ export async function testMetaPromptAction(
   const user = await requireSuperadminUser();
   if (!user) return { error: "Forbidden" };
 
-  const file = formData.get("photo");
-  if (!(file instanceof File) || file.size === 0) {
+  // Client sends resized JPEG base64 (fileToHandoff) — not the raw wallpaper.
+  const photoData = String(formData.get("photoData") ?? "").trim();
+  if (!photoData) {
     return { error: "Choose a photo to test" };
   }
-  if (file.size > 8 * 1024 * 1024) {
-    return { error: "Image too large (max 8 MiB)" };
+  // ~1MB raw base64 ≈ 750KB decoded; vision handoff is far smaller.
+  if (photoData.length > 1_200_000) {
+    return { error: "Resized image still too large — try a smaller photo" };
   }
 
   const prompts = metaPromptsFromDraft({
@@ -139,7 +141,8 @@ export async function testMetaPromptAction(
   });
 
   try {
-    const buf = Buffer.from(await file.arrayBuffer());
+    const buf = Buffer.from(photoData, "base64");
+    if (!buf.length) return { error: "Invalid photo data" };
     const out = await testMetaPrompts(prompts, buf);
     if (out.error) return { error: out.error, prose: out.prose };
     return {

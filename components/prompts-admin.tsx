@@ -11,6 +11,7 @@ import {
   type SearchTestState,
 } from "@/app/actions/admin-prompts";
 import { BusyButton } from "./busy-button";
+import { fileToHandoff } from "@/lib/search/image-handoff";
 import { LLM_PROMPT_KEY, type LlmPromptKey } from "@/lib/search/prompt-defaults";
 
 type Bodies = Record<LlmPromptKey, string>;
@@ -91,6 +92,7 @@ export function PromptsAdmin({ initial }: { initial: Bodies }) {
   const [searchOutput, setSearchOutput] = useState(
     initial[LLM_PROMPT_KEY.searchOutputExample],
   );
+  const [metaResizing, setMetaResizing] = useState(false);
 
   const metaHidden = (
     <>
@@ -152,14 +154,34 @@ export function PromptsAdmin({ initial }: { initial: Bodies }) {
         </div>
 
         <form
-          action={metaTestAction}
+          action={async (fd) => {
+            const file = fd.get("photo");
+            if (!(file instanceof File) || file.size === 0) return;
+            setMetaResizing(true);
+            try {
+              // Resize client-side so Server Actions stay under the 1MB body cap.
+              const handoff = await fileToHandoff(file);
+              const next = new FormData();
+              next.set("visionDescribe", visionDescribe);
+              next.set("structure", structure);
+              next.set("visionJson", visionJson);
+              next.set("outputExample", metaOutput);
+              next.set("photoData", handoff.data);
+              next.set("photoMime", handoff.mime);
+              await metaTestAction(next);
+            } finally {
+              setMetaResizing(false);
+            }
+          }}
           className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-end"
         >
-          {metaHidden}
           <label className="block flex-1">
             <span className="text-xs font-bold uppercase tracking-wider text-inactive">
               Test photo
             </span>
+            <p className="mt-0.5 text-xs text-secondary">
+              Sent as 512px JPEG — wallpapers are fine.
+            </p>
             <input
               type="file"
               name="photo"
@@ -170,7 +192,7 @@ export function PromptsAdmin({ initial }: { initial: Bodies }) {
           </label>
           <BusyButton
             type="submit"
-            busy={metaTestPending}
+            busy={metaTestPending || metaResizing}
             className="rounded-full border border-divider bg-background px-5 py-2.5 text-sm font-semibold hover:border-accent-pink/40"
           >
             Test prompt
