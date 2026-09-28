@@ -107,6 +107,20 @@ export async function failJob(opts: {
   const job = await prisma.job.findUnique({ where: { id: opts.jobId } });
   if (!job) return;
 
+  // Worker raced past concurrency — release lease, don't fail the subject.
+  if (opts.message === "no free slots") {
+    await prisma.job.update({
+      where: { id: opts.jobId },
+      data: {
+        status: JOB_STATUS.pending,
+        workerId: null,
+        leaseExpiresAt: null,
+        lastError: "no free slots (requeued)",
+      },
+    });
+    return;
+  }
+
   await prisma.job.update({
     where: { id: opts.jobId },
     data: {

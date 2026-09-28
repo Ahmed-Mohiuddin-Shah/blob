@@ -4,6 +4,7 @@ import { canManageAdmins, canManageUsers, canUpload } from "@/lib/capabilities";
 import { MODERATION_STATUS } from "@/lib/moderation";
 import { prisma } from "@/lib/prisma";
 import { requireSessionUser } from "@/lib/require-user";
+import { SEARCH_META_STATUS } from "@/lib/search/constants";
 
 export default async function ProfileLayout({
   children,
@@ -15,34 +16,46 @@ export default async function ProfileLayout({
   const isAdmin = canManageUsers(caps);
   const isSuperadmin = canManageAdmins(caps);
 
-  const [pendingCount, needsEditCount, claimsCount, blobberEditsCount, blobberAssocCount] =
-    await Promise.all([
-      prisma.sticker.count({
-        where: {
-          moderationStatus: MODERATION_STATUS.pendingReview,
-          ...(isAdmin ? {} : { uploadedById: user.id }),
-        },
-      }),
-      prisma.sticker.count({
-        where: {
-          moderationStatus: MODERATION_STATUS.needsEdit,
-          uploadedById: user.id,
-        },
-      }),
-      isAdmin
-        ? prisma.attributionClaim.count({
-            where: { status: CLAIM_STATUS.pending },
-          })
-        : Promise.resolve(0),
-      isAdmin
-        ? prisma.blobberEditRequest.count({ where: { status: "pending" } })
-        : Promise.resolve(0),
-      isAdmin
-        ? prisma.blobberAssociationRequest.count({
-            where: { status: "pending" },
-          })
-        : Promise.resolve(0),
-    ]);
+  const [
+    pendingReviewCount,
+    pendingSearchMetaCount,
+    needsEditCount,
+    claimsCount,
+    blobberEditsCount,
+    blobberAssocCount,
+  ] = await Promise.all([
+    prisma.sticker.count({
+      where: {
+        moderationStatus: MODERATION_STATUS.pendingReview,
+        ...(isAdmin ? {} : { uploadedById: user.id }),
+      },
+    }),
+    isAdmin
+      ? prisma.sticker.count({
+          where: { searchMetaStatus: SEARCH_META_STATUS.pendingSearchMeta },
+        })
+      : Promise.resolve(0),
+    prisma.sticker.count({
+      where: {
+        moderationStatus: MODERATION_STATUS.needsEdit,
+        uploadedById: user.id,
+      },
+    }),
+    isAdmin
+      ? prisma.attributionClaim.count({
+          where: { status: CLAIM_STATUS.pending },
+        })
+      : Promise.resolve(0),
+    isAdmin
+      ? prisma.blobberEditRequest.count({ where: { status: "pending" } })
+      : Promise.resolve(0),
+    isAdmin
+      ? prisma.blobberAssociationRequest.count({
+          where: { status: "pending" },
+        })
+      : Promise.resolve(0),
+  ]);
+  const pendingCount = pendingReviewCount + pendingSearchMetaCount;
 
   return (
     <section className="mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-16">
