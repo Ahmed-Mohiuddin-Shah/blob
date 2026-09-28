@@ -47,6 +47,7 @@ describe("search constants", () => {
       "a blackboard on a wall",
     );
     expect(structureEnrichPrompt("x")).toContain("ONLY JSON");
+    expect(structureEnrichPrompt("x")).toContain("5 to 12");
   });
 
   it("rejects empty or schema-echo agent captions", () => {
@@ -61,6 +62,11 @@ describe("search constants", () => {
         '{"caption":"one sentence visual description","scenario":"","tags":[]}',
       ),
     ).toThrow(/empty or placeholder/);
+    expect(() =>
+      parseVisionEnrichResult(
+        '{"caption":"VOID","scenario":"VOID","tags":["VOID"]}',
+      ),
+    ).toThrow(/empty or placeholder/);
     const ok = parseVisionEnrichResult(
       '{"caption":"a blue cat under rain","scenario":"weather chat","tags":["CAT","RAIN"]}',
     );
@@ -68,13 +74,31 @@ describe("search constants", () => {
     expect(ok.aiVisualTags).toEqual(["CAT", "RAIN"]);
   });
 
-  it("picks thumbnail over gif for enrich preview", () => {
+  it("splits comma-joined tags and drops SHORT/TAGS placeholders", () => {
+    const ok = parseVisionEnrichResult(
+      '{"caption":"fierce anime fighter","scenario":"hype reply","tags":["SHORT","TAGS","CHARACTER,FIERCE,MALE,MUSCULAR"]}',
+    );
+    expect(ok.aiVisualTags).toEqual([
+      "CHARACTER",
+      "FIERCE",
+      "MALE",
+      "MUSCULAR",
+    ]);
+  });
+
+  it("picks image thumbnail over gif; skips video/mp4 thumbnail", () => {
     expect(
       pickSearchEnrichMedia([
-        { kind: MEDIA_KIND.gif },
-        { kind: MEDIA_KIND.thumbnail },
+        { kind: MEDIA_KIND.gif, mimeType: "image/gif" },
+        { kind: MEDIA_KIND.thumbnail, mimeType: "image/png" },
       ])?.kind,
     ).toBe(MEDIA_KIND.thumbnail);
+    expect(
+      pickSearchEnrichMedia([
+        { kind: MEDIA_KIND.thumbnail, mimeType: "video/mp4" },
+        { kind: MEDIA_KIND.video, mimeType: "video/mp4" },
+      ]),
+    ).toBeNull();
     expect(pickSearchEnrichMedia([{ kind: MEDIA_KIND.gif }])).toBeNull();
   });
 

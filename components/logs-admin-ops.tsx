@@ -23,7 +23,7 @@ const OP_COPY: Record<
   },
   og: {
     title: "Re-encode missing WhatsApp OG",
-    body: "Queue composition encode for stickers that have a full image but no WhatsApp OG JPEG. This is a heavy operation and may hog CPU / workers / Glass. Prefer off-peak.",
+    body: "Queue composition encode for stickers that have a full image but no WhatsApp OG JPEG (includes failed leftovers). This is a heavy operation and may hog CPU / workers / Glass. Prefer off-peak.",
     confirmLabel: "Queue OG re-encodes",
   },
   enrich: {

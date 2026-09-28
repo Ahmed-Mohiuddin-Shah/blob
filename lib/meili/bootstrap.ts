@@ -216,10 +216,11 @@ export async function ensureMeiliIndexes(): Promise<boolean> {
       name: string,
       settings: Record<string, unknown>,
     ) {
+      // Client HTTP timeout is 120s; waitTask defaults to 5s and fails cold Ollama/CLIP.
       const task = await client
         .index(uid)
         .updateEmbedders({ [name]: settings } as never)
-        .waitTask();
+        .waitTask({ timeout: 120_000 });
       if (task.status === "failed") {
         throw new Error(
           task.error?.message ?? `Meili embedder ${uid}/${name} failed`,

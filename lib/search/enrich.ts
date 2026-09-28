@@ -1,7 +1,10 @@
 import { isOllamaConfigured, ollamaChat } from "@/lib/ollama/client";
 import { prisma } from "@/lib/prisma";
 import { SEARCH_META_STATUS } from "@/lib/search/constants";
-import { visionImageBase64 } from "@/lib/search/vision-image";
+import {
+  isVisionImageMime,
+  visionImageBase64,
+} from "@/lib/search/vision-image";
 import {
   parseVisionEnrichResult,
   structureEnrichPrompt,
@@ -13,16 +16,47 @@ import { MEDIA_ASSET_STATUS, MEDIA_KIND } from "@/lib/stickers";
 
 export type { EnrichResult };
 
-/** Still preview for vision — thumbnail first; never raw gif/video. */
-export function pickSearchEnrichMedia<T extends { kind: string }>(
-  media: T[],
-): T | null {
-  return (
-    media.find((m) => m.kind === MEDIA_KIND.thumbnail) ||
-    media.find((m) => m.kind === MEDIA_KIND.image) ||
-    media.find((m) => m.kind === MEDIA_KIND.chat) ||
-    null
-  );
+const STILL_KIND_ORDER = [
+  MEDIA_KIND.thumbnail,
+  MEDIA_KIND.image,
+  MEDIA_KIND.chat,
+] as const;
+
+/** Still preview for vision — image mime only; never raw mp4/video. */
+export function pickSearchEnrichMedia<
+  T extends { kind: string; mimeType?: string | null },
+>(media: T[]): T | null {
+  for (const kind of STILL_KIND_ORDER) {
+    const hit = media.find(
+      (m) => m.kind === kind && isVisionImageMime(m.mimeType),
+    );
+    if (hit) return hit;
+  }
+  // Kind match without mime (tests / legacy) — still skip obvious video kinds.
+  for (const kind of STILL_KIND_ORDER) {
+    const hit = media.find(
+      (m) =>
+        m.kind === kind &&
+        (m.mimeType == null || !String(m.mimeType).startsWith("video/")),
+    );
+    if (hit) return hit;
+  }
+  return null;
+}
+
+/** Ordered still candidates for vision (image mime preferred). */
+export function searchEnrichMediaCandidates<
+  T extends { kind: string; mimeType?: string | null },
+>(media: T[]): T[] {
+  const out: T[] = [];
+  for (const kind of STILL_KIND_ORDER) {
+    for (const m of media) {
+      if (m.kind !== kind) continue;
+      if (m.mimeType != null && !isVisionImageMime(m.mimeType)) continue;
+      out.push(m);
+    }
+  }
+  return out;
 }
 
 /** Download sticker preview, resize to JPEG base64 for Ollama vision. */
@@ -30,12 +64,56 @@ async function stickerPreviewBase64(stickerId: bigint): Promise<string | null> {
   const media = await prisma.mediaAsset.findMany({
     where: { stickerId, status: MEDIA_ASSET_STATUS.ready },
   });
-  const asset = pickSearchEnrichMedia(media);
-  if (!asset) return null;
+  const candidates = searchEnrichMediaCandidates(media);
+  if (candidates.length === 0) {
+    // Video-only (e.g. thumbnail wrongly stored as mp4) — nothing sharp can decode.
+    if (media.some((m) => String(m.mimeType).startsWith("video/"))) {
+      throw new Error(
+        "No still image for vision (video-only sticker — re-encode stills)",
+      );
+    }
+    return null;
+  }
   const glass = getGlass();
-  const res = await glass.objects.download(asset.glassObjectId);
-  const buf = Buffer.from(await res.arrayBuffer());
-  return visionImageBase64(buf);
+  let lastErr: unknown;
+  for (const asset of candidates) {
+    try {
+      const res = await glass.objects.download(asset.glassObjectId);
+      const buf = Buffer.from(await res.arrayBuffer());
+      return await visionImageBase64(buf);
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  throw lastErr instanceof Error
+    ? lastErr
+    : new Error("Vision image decode failed for all candidates");
+}
+
+async function visionProse(
+  visionModel: string,
+  b64: string,
+): Promise<string> {
+  const once = () =>
+    ollamaChat({
+      model: visionModel,
+      prompt: VISION_DESCRIBE_PROMPT,
+      images: [b64],
+    });
+  let prose = (await once()).trim();
+  if (!prose) {
+    // Cold / overloaded moondream often returns empty once.
+    prose = (await once()).trim();
+  }
+  return prose;
+}
+
+function fallbackEnrichFromProse(prose: string): EnrichResult {
+  return {
+    aiCaption: prose.slice(0, 1000),
+    aiScenario: "",
+    aiVisualTags: [],
+  };
 }
 
 export async function runSearchEnrich(stickerId: bigint): Promise<EnrichResult> {
@@ -47,20 +125,23 @@ export async function runSearchEnrich(stickerId: bigint): Promise<EnrichResult> 
   const b64 = await stickerPreviewBase64(stickerId);
   if (!b64) throw new Error("No preview media for caption");
 
-  const prose = (
-    await ollamaChat({
-      model: visionModel,
-      prompt: VISION_DESCRIBE_PROMPT,
-      images: [b64],
-    })
-  ).trim();
-  if (!prose) throw new Error("Vision description empty");
+  const prose = await visionProse(visionModel, b64);
+  if (!prose) {
+    throw new Error(
+      `Vision description empty (${visionModel}) — check Ollama vision model`,
+    );
+  }
 
   const structured = await ollamaChat({
     model: agentModel,
     prompt: structureEnrichPrompt(prose),
   });
-  return parseVisionEnrichResult(structured);
+  try {
+    return parseVisionEnrichResult(structured);
+  } catch {
+    // Agent echoed VOID/SHORT or bad JSON — keep the vision prose as caption.
+    return fallbackEnrichFromProse(prose);
+  }
 }
 
 /** Apply enrich result and move to pending_search_meta. */

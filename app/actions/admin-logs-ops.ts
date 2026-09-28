@@ -44,25 +44,30 @@ async function requireSuperadminUser() {
   return user;
 }
 
-/** Stickers ready with full image but no ready og row. */
+/** Stickers with full image but no ready og (includes failed “no free slots”). */
+function missingOgWhere() {
+  return {
+    // Skip in-flight encodes; include failed leftovers from concurrency races.
+    processingStatus: {
+      in: [PROCESSING_STATUS.ready, PROCESSING_STATUS.failed],
+    },
+    media: {
+      some: {
+        kind: MEDIA_KIND.image,
+        status: MEDIA_ASSET_STATUS.ready,
+      },
+      none: {
+        kind: MEDIA_KIND.og,
+        status: MEDIA_ASSET_STATUS.ready,
+      },
+    },
+  };
+}
+
 export async function countMissingWhatsAppOg(): Promise<number> {
   const user = await requireSuperadminUser();
   if (!user) return 0;
-  return prisma.sticker.count({
-    where: {
-      processingStatus: PROCESSING_STATUS.ready,
-      media: {
-        some: {
-          kind: MEDIA_KIND.image,
-          status: MEDIA_ASSET_STATUS.ready,
-        },
-        none: {
-          kind: MEDIA_KIND.og,
-          status: MEDIA_ASSET_STATUS.ready,
-        },
-      },
-    },
-  });
+  return prisma.sticker.count({ where: missingOgWhere() });
 }
 
 /** Stickers needing AI search enrich. */
@@ -113,17 +118,7 @@ export async function backfillWhatsAppOgAction(
   for (;;) {
     const rows = await prisma.sticker.findMany({
       where: {
-        processingStatus: PROCESSING_STATUS.ready,
-        media: {
-          some: {
-            kind: MEDIA_KIND.image,
-            status: MEDIA_ASSET_STATUS.ready,
-          },
-          none: {
-            kind: MEDIA_KIND.og,
-            status: MEDIA_ASSET_STATUS.ready,
-          },
-        },
+        ...missingOgWhere(),
         ...(cursor ? { id: { gt: cursor } } : {}),
       },
       orderBy: { id: "asc" },

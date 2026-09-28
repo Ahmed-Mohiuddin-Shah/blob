@@ -134,14 +134,21 @@ async function runSearchEnrich(
   const key = process.env.OLLAMA_API_KEY?.trim();
   if (key) headers.Authorization = `Bearer ${key}`;
 
-  const prose = await ollamaChatWorker({
-    base: ollamaBase,
-    headers,
-    model: visionModel,
-    content: VISION_DESCRIBE_PROMPT,
-    images: [b64],
-  });
-  if (!prose) throw new Error("Vision description empty");
+  const chatOnce = () =>
+    ollamaChatWorker({
+      base: ollamaBase,
+      headers,
+      model: visionModel,
+      content: VISION_DESCRIBE_PROMPT,
+      images: [b64],
+    });
+  let prose = await chatOnce();
+  if (!prose) prose = await chatOnce();
+  if (!prose) {
+    throw new Error(
+      `Vision description empty (${visionModel}) — check Ollama vision model`,
+    );
+  }
 
   const structured = await ollamaChatWorker({
     base: ollamaBase,
@@ -149,7 +156,16 @@ async function runSearchEnrich(
     model: agentModel,
     content: structureEnrichPrompt(prose),
   });
-  return parseVisionEnrichResult(structured);
+  try {
+    return parseVisionEnrichResult(structured);
+  } catch {
+    // Agent VOID/SHORT/bad JSON — keep vision prose.
+    return {
+      aiCaption: prose.slice(0, 1000),
+      aiScenario: "",
+      aiVisualTags: [],
+    };
+  }
 }
 
 async function runComposition(

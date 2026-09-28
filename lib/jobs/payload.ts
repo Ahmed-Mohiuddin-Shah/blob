@@ -8,6 +8,7 @@ import {
 } from "@/lib/jobs/payload-types";
 import { JOB_TYPE, type JobType } from "@/lib/jobs/types";
 import { prisma } from "@/lib/prisma";
+import { pickSearchEnrichMedia } from "@/lib/search/enrich";
 import {
   maxDurationMsForKind,
   MEDIA_ASSET_STATUS,
@@ -48,12 +49,15 @@ async function buildSearchEnrichPayload(
   });
   if (!sticker) throw new Error("Missing sticker");
   const media = sticker.media.filter((m) => m.status === MEDIA_ASSET_STATUS.ready);
-  // Thumbnail first; never raw gif/video for vision.
-  const asset =
-    media.find((m) => m.kind === MEDIA_KIND.thumbnail) ||
-    media.find((m) => m.kind === MEDIA_KIND.image) ||
-    media.find((m) => m.kind === MEDIA_KIND.chat);
-  if (!asset) throw new Error("No preview media for search_enrich");
+  // Image mime only — Math Cat had thumbnail stored as video/mp4.
+  const asset = pickSearchEnrichMedia(media);
+  if (!asset) {
+    throw new Error(
+      media.some((m) => m.mimeType.startsWith("video/"))
+        ? "No still image for search_enrich (video-only sticker)"
+        : "No preview media for search_enrich",
+    );
+  }
   return {
     kind: JOB_TYPE.searchEnrich,
     stickerId: sticker.id.toString(),
