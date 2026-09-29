@@ -1,10 +1,16 @@
 import { NextResponse } from "next/server";
+import { getSession } from "@/lib/auth";
+import {
+  allowedSearchModes,
+  canUseSearchMode,
+  type CapabilityUser,
+} from "@/lib/capabilities";
+import { MEILI_INDEX } from "@/lib/meili/indexes";
 import {
   meiliFederatedSearch,
   meiliScopedSearch,
   type SearchMode,
 } from "@/lib/search/query";
-import { MEILI_INDEX } from "@/lib/meili/indexes";
 
 const MODES = new Set(["keywords", "hybrid", "semantic", "image"]);
 
@@ -12,6 +18,26 @@ function searchError(err: unknown) {
   const message = err instanceof Error ? err.message : "Search failed";
   console.error("search route:", err);
   return NextResponse.json({ error: message }, { status: 500 });
+}
+
+async function capUser(request: Request): Promise<CapabilityUser | null> {
+  const session = await getSession(request);
+  if (!session?.user?.id) return null;
+  return {
+    role: session.user.role ?? "user",
+    accountStatus: session.user.accountStatus ?? "active",
+  };
+}
+
+function forbidMode(user: CapabilityUser | null, mode: string) {
+  const allowed = [...allowedSearchModes(user)];
+  return NextResponse.json(
+    {
+      error: `Search mode "${mode}" requires a higher account tier`,
+      allowedModes: allowed,
+    },
+    { status: 403 },
+  );
 }
 
 export async function GET(request: Request) {
@@ -29,6 +55,7 @@ export async function GET(request: Request) {
     const suggest = url.searchParams.get("suggest") === "1";
 
     if (suggest) {
+      // Typeahead stays keywords — cheap for everyone.
       const result = await meiliScopedSearch({
         index: "stickers",
         q,
@@ -43,6 +70,11 @@ export async function GET(request: Request) {
           title: h.title ?? h.name,
         })),
       });
+    }
+
+    const user = await capUser(request);
+    if (!canUseSearchMode(user, mode)) {
+      return forbidMode(user, mode);
     }
 
     if (scope && scope !== "all" && scope in MEILI_INDEX === false) {
@@ -84,6 +116,11 @@ export async function POST(request: Request) {
 
     const modeRaw = body?.mode ?? "image";
     const mode = (MODES.has(modeRaw) ? modeRaw : "image") as SearchMode;
+    const user = await capUser(request);
+    if (!canUseSearchMode(user, mode)) {
+      return forbidMode(user, mode);
+    }
+
     const result = await meiliFederatedSearch({
       q: body?.q ?? "",
       mode,

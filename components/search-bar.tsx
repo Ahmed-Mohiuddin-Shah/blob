@@ -29,6 +29,8 @@ type Props = {
   onAgentSearch?: (q: string) => void;
   /** GET-style navigation target for text search when onSubmit omitted */
   navigateTo?: string;
+  /** Optional mode query param when navigating */
+  defaultMode?: string;
   className?: string;
   /** Hide gradient Search button (e.g. docked library) */
   hideSubmit?: boolean;
@@ -69,6 +71,7 @@ export function SearchBar({
   onImageSearch,
   onAgentSearch,
   navigateTo,
+  defaultMode,
   className = "",
   hideSubmit = false,
   imagePreviewUrl,
@@ -125,6 +128,7 @@ export function SearchBar({
     if (navigateTo) {
       const params = new URLSearchParams();
       if (trimmed) params.set("q", trimmed);
+      if (defaultMode) params.set("mode", defaultMode);
       const qs = params.toString();
       router.push(qs ? `${navigateTo}?${qs}` : navigateTo);
     }

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { canUpload } from "@/lib/capabilities";
+import { bestLibrarySearchMode, canUpload } from "@/lib/capabilities";
 import {
   COLLECTION_ITEM,
   subjectsInUserCollections,
@@ -90,10 +90,13 @@ export async function GET(request: Request) {
       const { meiliScopedSearch } = await import("@/lib/search/query");
       const { isMeiliConfigured } = await import("@/lib/meili/client");
       if (isMeiliConfigured()) {
+        const u = await sessionUser();
         const found = await meiliScopedSearch({
           index: "prints",
           q,
-          mode: "hybrid",
+          mode: bestLibrarySearchMode(
+            u ? { role: u.role, accountStatus: u.accountStatus } : null,
+          ),
           limit: PAGE + 1,
           filter: 'kind = "sheet"',
         });

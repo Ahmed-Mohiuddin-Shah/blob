@@ -341,7 +341,7 @@ export function isPublicBrowseable(s: {
   );
 }
 
-/** View/media gate: approved private is owner-only (admins lose access after approve). */
+/** View/media gate: approved private is owner/editor-only (admins lose access after approve). */
 export function canAccessSticker(
   s: {
     visibility: string;
@@ -349,6 +349,8 @@ export function canAccessSticker(
     processingStatus: string;
     uploadedById: bigint;
     createdById: bigint;
+    /** Linked user of credited Blobber, if loaded. */
+    blobberUserId?: bigint | null;
   },
   viewer: { viewerId: bigint | null; isAdmin: boolean },
 ): boolean {
@@ -360,17 +362,39 @@ export function canAccessSticker(
   ) {
     return true;
   }
-  const isOwner =
-    viewer.viewerId !== null &&
-    (viewer.viewerId === s.uploadedById || viewer.viewerId === s.createdById);
-  if (isOwner) return true;
+  if (
+    viewer.viewerId != null &&
+    isStickerEditor(s, viewer.viewerId, s.blobberUserId ?? null)
+  ) {
+    return true;
+  }
   if (viewer.isAdmin && s.moderationStatus !== MODERATION_STATUS.approved) {
     return true;
   }
   return false;
 }
 
-/** Owner may edit metadata/composition only when approved or admin requested edits. */
+/**
+ * Who may edit metadata/composition (still gated by canOwnerEditSticker):
+ * uploader, creator, or the linked user of the credited Blobber.
+ */
+export function isStickerEditor(
+  sticker: { uploadedById: bigint; createdById: bigint },
+  viewerId: bigint,
+  creditedBlobberUserId: bigint | null = null,
+): boolean {
+  if (
+    viewerId === sticker.uploadedById ||
+    viewerId === sticker.createdById
+  ) {
+    return true;
+  }
+  return (
+    creditedBlobberUserId != null && creditedBlobberUserId === viewerId
+  );
+}
+
+/** Owner/editor may edit metadata/composition only when approved or admin requested edits. */
 export function canOwnerEditSticker(moderationStatus: string): boolean {
   return (
     moderationStatus === MODERATION_STATUS.approved ||

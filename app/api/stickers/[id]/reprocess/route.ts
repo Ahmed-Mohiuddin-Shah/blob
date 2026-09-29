@@ -4,7 +4,7 @@ import { getSession } from "@/lib/auth";
 import { canModerate } from "@/lib/capabilities";
 import { prisma } from "@/lib/prisma";
 import { enqueueCompositionEncode } from "@/lib/composition-encode";
-import { PROCESSING_STATUS } from "@/lib/stickers";
+import { isStickerEditor, PROCESSING_STATUS } from "@/lib/stickers";
 
 async function sessionUser() {
   const reqHeaders = await headers();
@@ -28,7 +28,10 @@ export async function POST(
   const { id } = await context.params;
   const sticker = await prisma.sticker.findUnique({
     where: { id: BigInt(id) },
-    include: { composition: true },
+    include: {
+      composition: true,
+      blobber: { select: { userId: true } },
+    },
   });
   if (!sticker?.composition) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -38,9 +41,12 @@ export async function POST(
     role: user.role,
     accountStatus: user.accountStatus,
   });
-  const isOwner =
-    sticker.createdById === user.id || sticker.uploadedById === user.id;
-  if (!isAdmin && !isOwner) {
+  const isEditor = isStickerEditor(
+    sticker,
+    user.id,
+    sticker.blobber?.userId ?? null,
+  );
+  if (!isAdmin && !isEditor) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

@@ -51,6 +51,62 @@ export function hasMinRole(user: CapabilityUser, min: BlobRole): boolean {
   return rank >= order[min];
 }
 
+/** UI + API search modes (agent is UI/route-only, not Meili SearchMode). */
+export const SEARCH_UI_MODES = [
+  "keywords",
+  "hybrid",
+  "semantic",
+  "image",
+  "agent",
+] as const;
+export type SearchUiMode = (typeof SEARCH_UI_MODES)[number];
+
+const GUEST_MODES = new Set<SearchUiMode>(["keywords"]);
+const USER_MODES = new Set<SearchUiMode>(["keywords", "semantic"]);
+const MEMBER_MODES = new Set<SearchUiMode>([
+  "keywords",
+  "hybrid",
+  "semantic",
+  "image",
+  "agent",
+]);
+
+/** Guest / inactive → keywords; role=user → +semantic; member+ → full set. */
+export function allowedSearchModes(
+  user: CapabilityUser | null | undefined,
+): Set<SearchUiMode> {
+  if (!user || !isActive(user)) return new Set(GUEST_MODES);
+  if (hasMinRole(user, BLOB_ROLE.member)) return new Set(MEMBER_MODES);
+  return new Set(USER_MODES);
+}
+
+export function canUseSearchMode(
+  user: CapabilityUser | null | undefined,
+  mode: string,
+): boolean {
+  return allowedSearchModes(user).has(mode as SearchUiMode);
+}
+
+/** Default mode for /search UI. */
+export function defaultSearchMode(
+  user: CapabilityUser | null | undefined,
+): SearchUiMode {
+  const allowed = allowedSearchModes(user);
+  if (allowed.has("hybrid")) return "hybrid";
+  if (allowed.has("semantic")) return "semantic";
+  return "keywords";
+}
+
+/** Highest text mode for library list APIs (no image/agent). */
+export function bestLibrarySearchMode(
+  user: CapabilityUser | null | undefined,
+): "keywords" | "semantic" | "hybrid" {
+  const allowed = allowedSearchModes(user);
+  if (allowed.has("hybrid")) return "hybrid";
+  if (allowed.has("semantic")) return "semantic";
+  return "keywords";
+}
+
 export type RoleChangeActor = CapabilityUser & { id: string | bigint };
 export type RoleChangeTarget = CapabilityUser & { id: string | bigint };
 

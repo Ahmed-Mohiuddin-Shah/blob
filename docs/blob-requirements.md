@@ -133,26 +133,31 @@ Search must find what the user typed (title, aliases, tags, categories, keywords
 
 | Capability                                       | Anonymous | Registered (`user`) | Member | Admin | Super Admin |
 | ------------------------------------------------ | --------- | ------------------- | ------ | ----- | ----------- |
-| Browse / search public                           | Yes       | Yes                 | Yes    | Yes   | Yes         |
+| Browse public                                    | Yes       | Yes                 | Yes    | Yes   | Yes         |
+| Keyword search                                   | Yes       | Yes                 | Yes    | Yes   | Yes         |
+| Semantic search                                  | No        | Yes                 | Yes    | Yes   | Yes         |
+| Hybrid / image / agent search                    | No        | No                  | Yes    | Yes   | Yes         |
 | Favourite / like tally                           | No        | Yes*                | Yes*   | Yes*  | Yes*        |
 | Download                                         | Yes†      | Yes†                | Yes†   | Yes†  | Yes†        |
 | Create sticker (composition editor)              | No        | No                  | Yes    | Yes   | Yes         |
 | Remix sticker (snapshot composition)             | No        | No                  | Yes    | Yes   | Yes         |
-| Edit own composition (new revision)              | No        | No                  | Yes    | Yes   | Yes         |
-| Edit own sticker metadata                        | No        | No                  | Yes    | Yes   | Yes         |
+| Edit own / credited composition (new revision)   | No        | No                  | Yes‡   | Yes   | Yes         |
+| Edit own / credited sticker metadata             | No        | No                  | Yes‡   | Yes   | Yes         |
 | Manage own uploads (metadata, soft-hide request) | No        | No                  | Yes    | Yes   | Yes         |
 | Approve members (`user` ↔ `member`)              | No        | No                  | No     | Yes   | Yes         |
 | Promote / demote admins (`admin` only)           | No        | No                  | No     | No    | Yes         |
 | Assign `superadmin`                              | No††      | No††                | No††   | No††  | No††        |
 | Moderate any sticker                             | No        | No                  | No     | Yes   | Yes         |
 | Manage packs / sheets                            | No        | No                  | Yes    | Yes   | Yes         |
+| Curate landing (featured / categories)           | No        | No                  | No     | No    | Yes         |
 
 
  Requires `account_status = active`.  
 † Subject to sticker visibility and download policy; unlisted requires knowing the link; private only for authorized users.  
-†† `superadmin` is assigned only in Zitadel (or first-signup / one-shot bootstrap), never via BLOB UI/API.
+†† `superadmin` is assigned only in Zitadel (or first-signup / one-shot bootstrap), never via BLOB UI/API.  
+‡ Includes stickers credited to the member’s linked Blobber (`stickers.blobber_id` → `blobbers.user_id`), not only `created_by` / `uploaded_by`. Composition still requires `canUpload` (member+).
 
-**Registration defaults (locked):** `role = user` (Zitadel grant + local mirror), `account_status = active` — except the first signup, which is `superadmin`. New accounts are registered spectators (browse, search, favourite, download). Upload requires an admin or superadmin to grant Zitadel `member` (or higher) via BLOB admin UI. Only a superadmin may grant `admin` in-app; additional `superadmin` grants require Zitadel. `account_status` of `suspended` or `banned` blocks favourites, uploads, and management regardless of role. Use `pending` only when an admin deliberately gates an account before activation.
+**Registration defaults (locked):** `role = user` (Zitadel grant + local mirror), `account_status = active` — except the first signup, which is `superadmin`. New accounts are registered spectators (browse, keyword + semantic search, favourite, download). Hybrid / image / agent search and upload require an admin or superadmin to grant Zitadel `member` (or higher) via BLOB admin UI. Only a superadmin may grant `admin` in-app; additional `superadmin` grants require Zitadel. `account_status` of `suspended` or `banned` blocks favourites, uploads, and management regardless of role (search falls back to keywords only). Use `pending` only when an admin deliberately gates an account before activation.
 
 ---
 
@@ -429,9 +434,9 @@ All stickers are **1:1 square**. Canonical document is **1024×1024**. The user 
 | What                                                                  | When editable                                                                              |
 | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
 | Original `assets` binaries                                            | **Create/upload only** — immutable afterward                                               |
-| Composition document                                                  | New **revision** on save (create and post-create); owner for own stickers; admin as needed |
+| Composition document                                                  | New **revision** on save (create and post-create); owner **or linked Blobber user** for credited stickers; admin as needed |
 | Derived `media_assets`                                                | Regenerated from current revision (cache); not hand-edited                                 |
-| Title, description, tags, category, visibility, attribution, keywords | After create: owner (member) for own stickers; admin for any — subject to moderation rules |
+| Title, description, tags, category, visibility, attribution, keywords | After create: owner or linked Blobber user (member) for credited stickers; admin for any — subject to moderation rules |
 | Replacing original binary                                             | **Out of scope** — reject/delete and create/remix anew if needed                         |
 
 
@@ -500,7 +505,7 @@ Member saves composition → pending_review → Admin → approved | needs_edit 
 needs_edit → owner or admin edits metadata and/or composition (new revision) → pending_review
 ```
 
-Admins can: approve, **request edit** (required note/reason), reject (hard purge), hide, soft-delete (`moderation_status = deleted`), change tags/category, change ownership (`created_by` / `uploaded_by`). **Metadata and composition edits** (owner or admin) require `moderation_status` of `approved` or `needs_edit` — no role bypasses this gate (including admins). Pending / draft / rejected stickers cannot be edited until unlocked.
+Admins can: approve, **request edit** (required note/reason), reject (hard purge), hide, soft-delete (`moderation_status = deleted`), change tags/category, change ownership (`created_by` / `uploaded_by`). **Metadata and composition edits** (owner, **linked user of the credited Blobber**, or admin) require `moderation_status` of `approved` or `needs_edit` — no role bypasses this gate (including admins). Pending / draft / rejected stickers cannot be edited until unlocked. Credited Blobber edit rights do **not** change `created_by` / `uploaded_by`.
 
 **Reject (locked):** delete sticker-linked media objects from GLASS as required, then delete the local sticker row (cascades composition, media, tag pivots). Shared `assets` retained if still referenced by other compositions; otherwise eligible for GC. Record a `rejected` row in `moderation_events` before purge so history survives. Soft `rejected` status is not retained for this action.
 
@@ -531,7 +536,7 @@ Public browse/search includes only stickers that are:
 - `visibility = public`
 
 Unlisted: reachable by direct link when approved+ready; excluded from search/browse listings.  
-Private: only owner after approve; admins may view only while pending review or needs edit (not after approve).
+Private: only owner or linked credited Blobber user after approve; admins may view only while pending review or needs edit (not after approve).
 
 ---
 

@@ -2,14 +2,25 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { MeiliTypeahead } from "@/components/meili-typeahead";
 import { SearchBar } from "@/components/search-bar";
+import {
+  ThoughtLine,
+  type ThoughtStep,
+} from "@/components/thought-line";
+import {
+  allowedSearchModes,
+  defaultSearchMode,
+  type CapabilityUser,
+  type SearchUiMode,
+} from "@/lib/capabilities";
 import {
   fileToHandoff,
   takeImageHandoff,
   type ImageHandoff,
 } from "@/lib/search/image-handoff";
+import { signIn } from "@zitadel/next-auth/react";
 
 type Hit = {
   index: string;
@@ -22,18 +33,22 @@ type Hit = {
   previewUrl?: string;
 };
 
+type AgentPlan = { q: string; mode: string; filter: string };
+
 type Props = {
   initialQ?: string;
   initialMode?: string;
+  /** null = guest */
+  capUser?: CapabilityUser | null;
 };
 
 const MODES = [
-  { id: "hybrid", label: "Hybrid" },
-  { id: "keywords", label: "Keywords" },
-  { id: "semantic", label: "Semantic" },
-  { id: "image", label: "Image" },
-  { id: "agent", label: "Agent" },
-] as const;
+  { id: "hybrid" as const, label: "Hybrid" },
+  { id: "keywords" as const, label: "Keywords" },
+  { id: "semantic" as const, label: "Semantic" },
+  { id: "image" as const, label: "Image" },
+  { id: "agent" as const, label: "Agent" },
+];
 
 function hrefFor(hit: Hit): string {
   if (hit.index === "stickers" && hit.slug) return `/stickers/${hit.slug}`;
@@ -63,11 +78,58 @@ async function parseJsonResponse(res: Response): Promise<Record<string, unknown>
   }
 }
 
-export function SiteSearch({ initialQ = "", initialMode = "hybrid" }: Props) {
+function seedSteps(mode: string): ThoughtStep[] {
+  if (mode === "agent") {
+    return [{ label: "Planning query with agent…", done: false }];
+  }
+  if (mode === "image") {
+    return [
+      { label: "Encoding image…", done: false },
+      { label: "Image similarity search", done: false },
+    ];
+  }
+  if (mode === "semantic") {
+    return [
+      { label: "Embedding query…", done: false },
+      { label: "Semantic search", done: false },
+    ];
+  }
+  if (mode === "hybrid") {
+    return [
+      { label: "Hybrid keyword + semantic…", done: false },
+      { label: "Federated Meili search", done: false },
+    ];
+  }
+  return [
+    { label: "Keyword search", done: false },
+    { label: "Federated Meili search", done: false },
+  ];
+}
+
+function clampMode(
+  requested: string | undefined,
+  allowed: Set<SearchUiMode>,
+  fallback: SearchUiMode,
+): SearchUiMode {
+  if (requested && allowed.has(requested as SearchUiMode)) {
+    return requested as SearchUiMode;
+  }
+  return fallback;
+}
+
+export function SiteSearch({
+  initialQ = "",
+  initialMode,
+  capUser = null,
+}: Props) {
   const router = useRouter();
   const params = useSearchParams();
+  const allowed = useMemo(() => allowedSearchModes(capUser), [capUser]);
+  const fallback = defaultSearchMode(capUser);
   const [q, setQ] = useState(initialQ || params.get("q") || "");
-  const [mode, setMode] = useState(initialMode || params.get("mode") || "hybrid");
+  const [mode, setMode] = useState<SearchUiMode>(() =>
+    clampMode(initialMode || params.get("mode") || undefined, allowed, fallback),
+  );
   const [hits, setHits] = useState<Hit[]>([]);
   const [facets, setFacets] = useState<Record<string, Record<string, number>>>({});
   const [engine, setEngine] = useState<string>("");
@@ -77,6 +139,14 @@ export function SiteSearch({ initialQ = "", initialMode = "hybrid" }: Props) {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [steps, setSteps] = useState<ThoughtStep[]>([]);
+  const [thoughtLabel, setThoughtLabel] = useState("Searching…");
+  const [doneLabel, setDoneLabel] = useState("Thought for");
+  const [showThought, setShowThought] = useState(false);
+
+  const canImage = allowed.has("image");
+  const canAgent = allowed.has("agent");
+  const lockedModes = MODES.filter((m) => !allowed.has(m.id));
 
   useEffect(() => {
     if (!q.trim() || q.trim().length < 2) {
@@ -97,6 +167,50 @@ export function SiteSearch({ initialQ = "", initialMode = "hybrid" }: Props) {
     return () => clearTimeout(t);
   }, [q]);
 
+  function beginThought(nextMode: string) {
+    setShowThought(true);
+    setThoughtLabel(
+      nextMode === "agent"
+        ? "Agent thinking…"
+        : nextMode === "image"
+          ? "Searching by image…"
+          : "Searching…",
+    );
+    setDoneLabel("Thought for");
+    setSteps(seedSteps(nextMode));
+  }
+
+  function finishThought(opts: {
+    nextMode: string;
+    engineName: string;
+    plan?: AgentPlan | null;
+    hitCount: number;
+  }) {
+    const provenance = [
+      opts.nextMode,
+      opts.engineName || "search",
+      `${opts.hitCount} hit${opts.hitCount === 1 ? "" : "s"}`,
+    ].join(" · ");
+    setDoneLabel(`Done · ${provenance}`);
+    setSteps((prev) => {
+      const base = prev.map((s) => ({ ...s, done: true }));
+      if (opts.plan) {
+        const planBits = [
+          `Plan q: ${opts.plan.q}`,
+          `Plan mode: ${opts.plan.mode}`,
+          opts.plan.filter ? `Filter: ${opts.plan.filter}` : null,
+        ].filter(Boolean) as string[];
+        return [
+          { label: "Planned Meili query", done: true },
+          ...planBits.map((label) => ({ label, done: true })),
+          { label: `Ran search · ${opts.engineName}`, done: true },
+          { label: provenance, done: true },
+        ];
+      }
+      return [...base, { label: provenance, done: true }];
+    });
+  }
+
   function applyResult(data: Record<string, unknown>, engineFallback = "") {
     setHits((data.hits as Hit[]) ?? []);
     setFacets(
@@ -105,12 +219,17 @@ export function SiteSearch({ initialQ = "", initialMode = "hybrid" }: Props) {
     setEngine(String(data.engine ?? engineFallback));
   }
 
-  function runSearch(nextQ = q, nextMode = mode) {
+  function runSearch(nextQ = q, nextMode: SearchUiMode = mode) {
+    if (!allowed.has(nextMode)) {
+      setError(`“${nextMode}” search needs a higher account tier`);
+      return;
+    }
     setError(null);
     const url = new URLSearchParams();
     if (nextQ) url.set("q", nextQ);
     url.set("mode", nextMode);
     router.replace(`/search?${url.toString()}`);
+    beginThought(nextMode);
     startTransition(async () => {
       try {
         if (nextMode === "agent") {
@@ -122,6 +241,13 @@ export function SiteSearch({ initialQ = "", initialMode = "hybrid" }: Props) {
           const data = await parseJsonResponse(res);
           if (!res.ok) throw new Error(String(data.error || "Agent search failed"));
           applyResult(data, "meili");
+          const plan = data.plan as AgentPlan | undefined;
+          finishThought({
+            nextMode,
+            engineName: String(data.engine ?? "meili"),
+            plan: plan ?? null,
+            hitCount: ((data.hits as Hit[]) ?? []).length,
+          });
           return;
         }
         const res = await fetch(
@@ -130,17 +256,35 @@ export function SiteSearch({ initialQ = "", initialMode = "hybrid" }: Props) {
         const data = await parseJsonResponse(res);
         if (!res.ok) throw new Error(String(data.error || "Search failed"));
         applyResult(data);
+        finishThought({
+          nextMode,
+          engineName: String(data.engine ?? ""),
+          hitCount: ((data.hits as Hit[]) ?? []).length,
+        });
       } catch (e) {
         setError(e instanceof Error ? e.message : "Search failed");
         setHits([]);
+        setDoneLabel("Search failed");
+        setSteps((prev) => [
+          ...prev.map((s) => ({ ...s, done: true })),
+          {
+            label: e instanceof Error ? e.message : "Search failed",
+            done: true,
+          },
+        ]);
       }
     });
   }
 
   function runImageSearch(media: ImageHandoff) {
+    if (!canImage) {
+      setError("Image search requires a member account");
+      return;
+    }
     setError(null);
     setMode("image");
     setImagePreview(`data:${media.mime};base64,${media.data}`);
+    beginThought("image");
     startTransition(async () => {
       try {
         const res = await fetch("/api/search", {
@@ -154,9 +298,15 @@ export function SiteSearch({ initialQ = "", initialMode = "hybrid" }: Props) {
         const json = await parseJsonResponse(res);
         if (!res.ok) throw new Error(String(json.error || "Image search failed"));
         applyResult(json);
+        finishThought({
+          nextMode: "image",
+          engineName: String(json.engine ?? "meili"),
+          hitCount: ((json.hits as Hit[]) ?? []).length,
+        });
         router.replace("/search?mode=image");
       } catch (e) {
         setError(e instanceof Error ? e.message : "Image search failed");
+        setDoneLabel("Search failed");
       }
     });
   }
@@ -164,15 +314,23 @@ export function SiteSearch({ initialQ = "", initialMode = "hybrid" }: Props) {
   useEffect(() => {
     const handoff = takeImageHandoff();
     if (handoff) {
+      if (!canImage) {
+        setError("Image search requires a member account — sign in as a member");
+        return;
+      }
       setImagePreview(`data:${handoff.mime};base64,${handoff.data}`);
       runImageSearch(handoff);
       return;
     }
-    if (initialQ || params.get("q")) {
-      runSearch(
-        initialQ || params.get("q") || "",
-        initialMode || params.get("mode") || "hybrid",
+    const seedQ = initialQ || params.get("q");
+    if (seedQ) {
+      const seedMode = clampMode(
+        initialMode || params.get("mode") || undefined,
+        allowed,
+        fallback,
       );
+      setMode(seedMode);
+      runSearch(seedQ, seedMode);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount / URL seed only
   }, []);
@@ -183,6 +341,12 @@ export function SiteSearch({ initialQ = "", initialMode = "hybrid" }: Props) {
     prints: hits.filter((h) => h.index === "prints"),
     blobbers: hits.filter((h) => h.index === "blobbers"),
   };
+
+  const upsellText = !capUser
+    ? "Sign in for semantic search. Members unlock hybrid, image, and agent."
+    : lockedModes.length > 0
+      ? "Ask an admin to promote you to member for hybrid, image, and agent search."
+      : null;
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">
@@ -199,12 +363,14 @@ export function SiteSearch({ initialQ = "", initialMode = "hybrid" }: Props) {
         value={q}
         onChange={setQ}
         busy={pending}
-        showCamera
-        showAgent
+        showCamera={canImage}
+        showAgent={canAgent}
         placeholder="Stickers, collections, prints, blobbers…"
         imagePreviewUrl={imagePreview}
         onClearImagePreview={() => setImagePreview(null)}
-        onSubmit={(next) => runSearch(next, mode === "image" ? "hybrid" : mode)}
+        onSubmit={(next) =>
+          runSearch(next, mode === "image" ? (allowed.has("hybrid") ? "hybrid" : fallback) : mode)
+        }
         onImageSearch={(file) => {
           void fileToHandoff(file).then(runImageSearch);
         }}
@@ -214,11 +380,22 @@ export function SiteSearch({ initialQ = "", initialMode = "hybrid" }: Props) {
         }}
       />
 
+      {(showThought || pending) && steps.length > 0 ? (
+        <div className="mt-4 rounded-[24px] border border-divider bg-surface/80 px-4 py-3">
+          <ThoughtLine
+            working={pending}
+            label={thoughtLabel}
+            doneLabel={doneLabel}
+            steps={steps}
+          />
+        </div>
+      ) : null}
+
       <MeiliTypeahead
         query={q}
         onPick={(title) => {
           setQ(title);
-          runSearch(title, mode);
+          runSearch(title, mode === "image" ? fallback : mode);
         }}
       />
       {!process.env.NEXT_PUBLIC_MEILI_HOST && suggestions.length > 0 ? (
@@ -230,7 +407,7 @@ export function SiteSearch({ initialQ = "", initialMode = "hybrid" }: Props) {
                 className="rounded-full border border-divider bg-surface px-3 py-1.5 text-xs text-secondary hover:border-accent-pink/40 hover:text-accent-pink"
                 onClick={() => {
                   setQ(s.title || "");
-                  runSearch(s.title || "", mode);
+                  runSearch(s.title || "", mode === "image" ? fallback : mode);
                 }}
               >
                 {s.title}
@@ -241,31 +418,48 @@ export function SiteSearch({ initialQ = "", initialMode = "hybrid" }: Props) {
       ) : null}
 
       <div className="mt-6 flex flex-wrap items-center gap-2">
-        {MODES.map((m) => (
-          <button
-            key={m.id}
-            type="button"
-            onClick={() => {
-              setMode(m.id);
-              if (m.id !== "image") runSearch(q, m.id);
-            }}
-            className={`rounded-full px-3 py-1.5 text-xs font-semibold uppercase tracking-wide ${
-              mode === m.id
-                ? "bg-accent-gradient text-white"
-                : "border border-divider text-inactive"
-            }`}
-          >
-            {m.label}
-          </button>
-        ))}
+        {MODES.map((m) => {
+          const ok = allowed.has(m.id);
+          return (
+            <button
+              key={m.id}
+              type="button"
+              disabled={!ok}
+              title={ok ? undefined : "Requires a higher account tier"}
+              onClick={() => {
+                if (!ok) return;
+                setMode(m.id);
+                if (m.id !== "image") runSearch(q, m.id);
+              }}
+              className={`rounded-full px-3 py-1.5 text-xs font-semibold uppercase tracking-wide ${
+                mode === m.id && ok
+                  ? "bg-accent-gradient text-white"
+                  : ok
+                    ? "border border-divider text-inactive"
+                    : "cursor-not-allowed border border-divider text-inactive/40 line-through"
+              }`}
+            >
+              {m.label}
+            </button>
+          );
+        })}
       </div>
 
-      {engine ? (
-        <p className="mt-3 text-xs text-inactive">
-          Engine: {engine}
-          {pending ? " · searching…" : ""}
+      {upsellText ? (
+        <p className="mt-3 text-xs text-secondary">
+          {upsellText}{" "}
+          {!capUser ? (
+            <button
+              type="button"
+              className="font-semibold text-accent-pink hover:underline"
+              onClick={() => void signIn("zitadel")}
+            >
+              Sign in
+            </button>
+          ) : null}
         </p>
       ) : null}
+
       {error ? <p className="mt-3 text-sm text-red-500">{error}</p> : null}
 
       {Object.keys(facets).length > 0 ? (

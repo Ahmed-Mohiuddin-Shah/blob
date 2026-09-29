@@ -5,7 +5,7 @@ import { canModerate, canUpload } from "@/lib/capabilities";
 import { primaryAssetIdFromDocument } from "@/lib/composition";
 import { prisma } from "@/lib/prisma";
 import { requireSessionUser } from "@/lib/require-user";
-import { canOwnerEditSticker } from "@/lib/stickers";
+import { canOwnerEditSticker, isStickerEditor } from "@/lib/stickers";
 
 export default async function ComposePage({
   params,
@@ -20,17 +20,23 @@ export default async function ComposePage({
 
   const sticker = await prisma.sticker.findUnique({
     where: { slug },
-    include: { composition: true },
+    include: {
+      composition: true,
+      blobber: { select: { userId: true } },
+    },
   });
   if (!sticker?.composition?.currentRevisionId) notFound();
 
-  const isOwner =
-    sticker.uploadedById === user.id || sticker.createdById === user.id;
+  const isEditor = isStickerEditor(
+    sticker,
+    user.id,
+    sticker.blobber?.userId ?? null,
+  );
   const isAdmin = canModerate({
     role: user.role,
     accountStatus: user.accountStatus,
   });
-  if (!isOwner && !isAdmin) notFound();
+  if (!isEditor && !isAdmin) notFound();
 
   if (!canOwnerEditSticker(sticker.moderationStatus)) {
     redirect(`/stickers/${sticker.slug}`);

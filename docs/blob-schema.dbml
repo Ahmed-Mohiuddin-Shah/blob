@@ -58,6 +58,17 @@ Table public_prism {
   Note: 'LOCKED: App-owned public PRISM. Not configured via env. On first need, BLOB calls Glass prisms.create(is_public=true), inserts here, caches glass_prism_id in-process. Restarts load from this table. Disjoint from users/stickers/media_assets.'
 }
 
+Table landing_config {
+  id bigserial [pk]
+  key varchar(32) [unique, not null, default: 'default', note: 'Singleton sentinel — only one row (key=default)']
+  featured_sticker_ids bigint[] [not null, default: '[]', note: 'Ordered public sticker ids for home Featured; empty = auto latest']
+  category_ids bigint[] [not null, default: '[]', note: 'Ordered category ids for home Categories; empty = first 6 roots']
+  updated_at timestamptz [not null]
+  updated_by_id bigint [null, note: 'Superadmin who last saved']
+
+  Note: 'Superadmin CMS for home page featured stickers + categories. Empty arrays keep auto behavior.'
+}
+
 Table glass_uploads {
   id bigserial [pk]
   user_id bigint [not null, ref: > users.id]

@@ -13,6 +13,7 @@ import { SEARCH_META_STATUS } from "@/lib/search/constants";
 import {
   canAccessSticker,
   canOwnerEditSticker,
+  isStickerEditor,
   normalizeTagName,
   tagSlug,
   VISIBILITIES,
@@ -47,18 +48,25 @@ export async function PATCH(
 
   const sticker = await prisma.sticker.findUnique({
     where: { id: BigInt(id) },
+    include: { blobber: { select: { userId: true } } },
   });
   if (!sticker) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const isOwner =
-    sticker.uploadedById === user.id || sticker.createdById === user.id;
+  const isEditor = isStickerEditor(
+    sticker,
+    user.id,
+    sticker.blobber?.userId ?? null,
+  );
   if (
-    !isOwner &&
+    !isEditor &&
     !(
       isAdmin &&
-      canAccessSticker(sticker, { viewerId: user.id, isAdmin: true })
+      canAccessSticker(
+        { ...sticker, blobberUserId: sticker.blobber?.userId ?? null },
+        { viewerId: user.id, isAdmin: true },
+      )
     )
   ) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });

@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   assignableRoles,
+  allowedSearchModes,
+  bestLibrarySearchMode,
   canEditAccountStatus,
   canManageAdmins,
   canManageUsers,
   canUpload,
+  canUseSearchMode,
+  defaultSearchMode,
   roleChangeError,
 } from "@/lib/capabilities";
 import {
@@ -89,6 +93,52 @@ describe("capabilities", () => {
     };
     expect(canManageUsers(admin)).toBe(true);
     expect(canManageAdmins(admin)).toBe(false);
+  });
+});
+
+describe("search modes", () => {
+  const active = (role: string) => ({
+    role,
+    accountStatus: ACCOUNT_STATUS.active,
+  });
+
+  it("guests get keywords only", () => {
+    expect([...allowedSearchModes(null)].sort()).toEqual(["keywords"]);
+    expect(canUseSearchMode(null, "semantic")).toBe(false);
+    expect(canUseSearchMode(null, "hybrid")).toBe(false);
+    expect(defaultSearchMode(null)).toBe("keywords");
+    expect(bestLibrarySearchMode(null)).toBe("keywords");
+  });
+
+  it("role=user gets keywords + semantic", () => {
+    const u = active(BLOB_ROLE.user);
+    expect([...allowedSearchModes(u)].sort()).toEqual([
+      "keywords",
+      "semantic",
+    ]);
+    expect(canUseSearchMode(u, "hybrid")).toBe(false);
+    expect(canUseSearchMode(u, "agent")).toBe(false);
+    expect(defaultSearchMode(u)).toBe("semantic");
+    expect(bestLibrarySearchMode(u)).toBe("semantic");
+  });
+
+  it("member+ gets full set", () => {
+    for (const role of [BLOB_ROLE.member, BLOB_ROLE.admin, BLOB_ROLE.superadmin]) {
+      const u = active(role);
+      expect(canUseSearchMode(u, "hybrid")).toBe(true);
+      expect(canUseSearchMode(u, "image")).toBe(true);
+      expect(canUseSearchMode(u, "agent")).toBe(true);
+      expect(defaultSearchMode(u)).toBe("hybrid");
+      expect(bestLibrarySearchMode(u)).toBe("hybrid");
+    }
+  });
+
+  it("inactive accounts fall back to keywords", () => {
+    const u = {
+      role: BLOB_ROLE.member,
+      accountStatus: ACCOUNT_STATUS.suspended,
+    };
+    expect([...allowedSearchModes(u)]).toEqual(["keywords"]);
   });
 });
 

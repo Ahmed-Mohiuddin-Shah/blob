@@ -17,7 +17,11 @@ export default async function ProfileEditsPage() {
   const stickers = await prisma.sticker.findMany({
     where: {
       moderationStatus: MODERATION_STATUS.needsEdit,
-      uploadedById: user.id,
+      OR: [
+        { uploadedById: user.id },
+        { createdById: user.id },
+        { blobber: { userId: user.id } },
+      ],
     },
     orderBy: { updatedAt: "desc" },
     take: 100,
@@ -31,7 +35,7 @@ export default async function ProfileEditsPage() {
       <h1 className="text-2xl font-semibold tracking-tight">Edit requests</h1>
       <p className="mt-1 text-sm text-secondary">
         Admins asked for changes. Update composition and/or metadata, then
-        resubmit.
+        resubmit. Includes stickers credited to your Blobber.
       </p>
 
       {stickers.length === 0 ? (

@@ -206,6 +206,18 @@ model LlmPrompt {
   @@map("llm_prompts")
 }
 
+/// Singleton home-page curation (featured stickers + category chips). Empty arrays = auto.
+model LandingConfig {
+  id                 BigInt   @id @default(autoincrement())
+  key                String   @unique @default("default") @db.VarChar(32)
+  featuredStickerIds BigInt[] @default([]) @map("featured_sticker_ids")
+  categoryIds        BigInt[] @default([]) @map("category_ids")
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedById        BigInt?  @map("updated_by_id")
+
+  @@map("landing_config")
+}
+
 model Category {
   id          BigInt    @id @default(autoincrement())
   parentId    BigInt?   @map("parent_id")

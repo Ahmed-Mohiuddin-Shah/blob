@@ -17,7 +17,7 @@ import {
 import { prisma } from "@/lib/prisma";
 import { ensurePrivatePrism } from "@/lib/private-prism";
 import { SEARCH_META_STATUS } from "@/lib/search/constants";
-import { canOwnerEditSticker, PROCESSING_STATUS } from "@/lib/stickers";
+import { canOwnerEditSticker, isStickerEditor, PROCESSING_STATUS } from "@/lib/stickers";
 
 async function sessionUser() {
   const reqHeaders = await headers();
@@ -44,19 +44,27 @@ export async function POST(
 
   const sticker = await prisma.sticker.findUnique({
     where: { id: BigInt(id) },
-    include: { composition: { include: { revisions: { orderBy: { revision: "desc" }, take: 1 } } } },
+    include: {
+      blobber: { select: { userId: true } },
+      composition: {
+        include: { revisions: { orderBy: { revision: "desc" }, take: 1 } },
+      },
+    },
   });
   if (!sticker?.composition) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const isOwner =
-    sticker.uploadedById === user.id || sticker.createdById === user.id;
+  const isEditor = isStickerEditor(
+    sticker,
+    user.id,
+    sticker.blobber?.userId ?? null,
+  );
   const isAdmin = canModerate({
     role: user.role,
     accountStatus: user.accountStatus,
   });
-  if (!isOwner && !isAdmin) {
+  if (!isEditor && !isAdmin) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -197,19 +205,23 @@ export async function GET(
     where: { id: BigInt(id) },
     include: {
       composition: true,
+      blobber: { select: { userId: true } },
     },
   });
   if (!sticker?.composition?.currentRevisionId) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const isOwner =
-    sticker.uploadedById === user.id || sticker.createdById === user.id;
+  const isEditor = isStickerEditor(
+    sticker,
+    user.id,
+    sticker.blobber?.userId ?? null,
+  );
   const isAdmin = canModerate({
     role: user.role,
     accountStatus: user.accountStatus,
   });
-  if (!isOwner && !isAdmin) {
+  if (!isEditor && !isAdmin) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   if (!canOwnerEditSticker(sticker.moderationStatus)) {

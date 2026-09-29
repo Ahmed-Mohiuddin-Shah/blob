@@ -27,6 +27,7 @@ import {
   canAccessSticker,
   canOwnerEditSticker,
   isPublicBrowseable,
+  isStickerEditor,
   previewMediaKind,
   stickerTypeFromKinds,
   videoHasAudio,
@@ -113,7 +114,7 @@ export default async function StickerDetailPage({
     where: { slug },
     include: {
       createdBy: { select: { username: true, displayName: true } },
-      blobber: { select: { id: true, displayName: true } },
+      blobber: { select: { id: true, displayName: true, userId: true } },
       category: { select: { name: true, slug: true } },
       tags: { include: { tag: true } },
       media: true,
@@ -163,9 +164,15 @@ export default async function StickerDetailPage({
   }
 
   const isOwner =
-    viewerId === sticker.uploadedById || viewerId === sticker.createdById;
+    viewerId != null &&
+    isStickerEditor(sticker, viewerId, sticker.blobber?.userId ?? null);
 
-  if (!canAccessSticker(sticker, { viewerId, isAdmin })) {
+  if (
+    !canAccessSticker(
+      { ...sticker, blobberUserId: sticker.blobber?.userId ?? null },
+      { viewerId, isAdmin },
+    )
+  ) {
     notFound();
   }
 

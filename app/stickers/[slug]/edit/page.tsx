@@ -4,7 +4,7 @@ import { StickerEditForm } from "@/components/sticker-edit-form";
 import { getSession, signInUrl } from "@/lib/auth";
 import { canModerate } from "@/lib/capabilities";
 import { prisma } from "@/lib/prisma";
-import { canAccessSticker, canOwnerEditSticker } from "@/lib/stickers";
+import { canAccessSticker, canOwnerEditSticker, isStickerEditor } from "@/lib/stickers";
 
 export default async function StickerEditPage({
   params,
@@ -49,13 +49,19 @@ export default async function StickerEditPage({
     role: user.role,
     accountStatus: user.accountStatus,
   });
-  const isOwner =
-    sticker.uploadedById === user.id || sticker.createdById === user.id;
+  const isEditor = isStickerEditor(
+    sticker,
+    user.id,
+    sticker.blobber?.userId ?? null,
+  );
   if (
-    !isOwner &&
+    !isEditor &&
     !(
       isAdmin &&
-      canAccessSticker(sticker, { viewerId: user.id, isAdmin: true })
+      canAccessSticker(
+        { ...sticker, blobberUserId: sticker.blobber?.userId ?? null },
+        { viewerId: user.id, isAdmin: true },
+      )
     )
   ) {
     notFound();

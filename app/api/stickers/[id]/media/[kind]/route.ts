@@ -43,6 +43,7 @@ export async function GET(
     where: { id: BigInt(id) },
     include: {
       media: true,
+      blobber: { select: { userId: true } },
     },
   });
   if (!sticker) {
@@ -56,10 +57,13 @@ export async function GET(
   );
 
   if (
-    !canAccessSticker(sticker, {
-      viewerId: user?.id ?? null,
-      isAdmin,
-    })
+    !canAccessSticker(
+      { ...sticker, blobberUserId: sticker.blobber?.userId ?? null },
+      {
+        viewerId: user?.id ?? null,
+        isAdmin,
+      },
+    )
   ) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

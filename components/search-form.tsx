@@ -8,6 +8,9 @@ type Props = {
   placeholder?: string;
   popular?: string[];
   className?: string;
+  /** Guest → keywords; signed-in defaults set by parent */
+  searchMode?: string;
+  showCamera?: boolean;
 };
 
 export function SearchForm({
@@ -15,6 +18,8 @@ export function SearchForm({
   placeholder = "Search cats, reactions, memes...",
   popular = [],
   className = "",
+  searchMode = "keywords",
+  showCamera = false,
 }: Props) {
   return (
     <div className={className}>
@@ -22,7 +27,8 @@ export function SearchForm({
         variant="hero"
         placeholder={placeholder}
         navigateTo={action}
-        showCamera
+        defaultMode={searchMode}
+        showCamera={showCamera}
         className="mx-auto max-w-2xl"
       />
 
@@ -32,7 +38,7 @@ export function SearchForm({
           {popular.map((term) => (
             <Link
               key={term}
-              href={`/search?q=${encodeURIComponent(term)}`}
+              href={`/search?q=${encodeURIComponent(term)}&mode=${encodeURIComponent(searchMode)}`}
               className="rounded-full border border-divider bg-surface px-3 py-1.5 text-secondary transition-colors hover:border-accent-pink/40 hover:text-accent-pink"
             >
               {term}

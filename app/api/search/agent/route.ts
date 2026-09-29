@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { getSession } from "@/lib/auth";
+import { canUseSearchMode, type CapabilityUser } from "@/lib/capabilities";
 import { isOllamaConfigured, ollamaChat } from "@/lib/ollama/client";
 import {
   getResolvedSearchPrompts,
@@ -8,9 +10,28 @@ import { meiliFederatedSearch } from "@/lib/search/query";
 
 /**
  * Agentic search: small Ollama model plans a Meili query, then we run it.
- * ponytail: single tool round-trip, not a full agent loop.
+ * ponytail: single tool round-trip, not a full agent loop. member+ only.
  */
 export async function POST(request: Request) {
+  const session = await getSession(request);
+  const user: CapabilityUser | null = session?.user?.id
+    ? {
+        role: session.user.role ?? "user",
+        accountStatus: session.user.accountStatus ?? "active",
+      }
+    : null;
+  if (!canUseSearchMode(user, "agent")) {
+    return NextResponse.json(
+      {
+        error: "Agent search requires a member account",
+        allowedModes: ["keywords", "semantic"].filter((m) =>
+          canUseSearchMode(user, m),
+        ),
+      },
+      { status: 403 },
+    );
+  }
+
   if (!isOllamaConfigured()) {
     return NextResponse.json(
       { error: "OLLAMA_BASE_URL is not configured" },

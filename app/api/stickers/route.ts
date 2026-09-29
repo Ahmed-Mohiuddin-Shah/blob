@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { canUpload } from "@/lib/capabilities";
+import { bestLibrarySearchMode, canUpload } from "@/lib/capabilities";
 import { parseBlobberAttributionInput } from "@/lib/blobbers";
 import {
   parseDocumentJson,
@@ -78,11 +78,16 @@ export async function GET(request: Request) {
       const { meiliScopedSearch } = await import("@/lib/search/query");
       const { isMeiliConfigured } = await import("@/lib/meili/client");
       if (isMeiliConfigured()) {
+        const searchUser =
+          userEarly ??
+          (await sessionUser().then((u) =>
+            u ? { role: u.role, accountStatus: u.accountStatus } : null,
+          ));
         const filter = category ? `categorySlug = "${category}"` : undefined;
         const found = await meiliScopedSearch({
           index: "stickers",
           q,
-          mode: "hybrid",
+          mode: bestLibrarySearchMode(searchUser),
           limit: PAGE + 1,
           filter,
         });

@@ -9,6 +9,7 @@ import {
   userCollectionIdsContaining,
 } from "@/lib/collections";
 import { parseTagNames } from "@/lib/composition";
+import { bestLibrarySearchMode } from "@/lib/capabilities";
 import { FAVORITE_SUBJECT } from "@/lib/favorites";
 import { sessionUser } from "@/lib/session-user";
 import { prisma } from "@/lib/prisma";
@@ -70,10 +71,13 @@ export async function GET(request: Request) {
       const { meiliScopedSearch } = await import("@/lib/search/query");
       const { isMeiliConfigured } = await import("@/lib/meili/client");
       if (isMeiliConfigured()) {
+        const u = await sessionUser();
         const found = await meiliScopedSearch({
           index: "collections",
           q,
-          mode: "hybrid",
+          mode: bestLibrarySearchMode(
+            u ? { role: u.role, accountStatus: u.accountStatus } : null,
+          ),
           limit: PAGE + 1,
         });
         if (found.engine === "meili") {
