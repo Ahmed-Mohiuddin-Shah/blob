@@ -10,7 +10,7 @@ export default async function ProfileBlobberAssociationsPage() {
     orderBy: { createdAt: "desc" },
     take: 50,
     include: {
-      targetBlobber: { select: { id: true, displayName: true } },
+      targetBlobber: { select: { id: true, displayName: true, slug: true } },
       requester: { select: { username: true, displayName: true } },
     },
   });
@@ -33,6 +33,7 @@ export default async function ProfileBlobberAssociationsPage() {
             targetBlobber: {
               id: r.targetBlobber.id.toString(),
               displayName: r.targetBlobber.displayName,
+              slug: r.targetBlobber.slug,
             },
             requester: r.requester,
           }))}

@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { isHttpUrl } from "@/lib/attribution";
+import { slugify } from "@/lib/stickers";
 
 export const SOCIAL_LINK_TYPES = [
   "youtube",
@@ -37,6 +38,73 @@ export function normalizeBlobberName(name: string): string {
   return name.trim().slice(0, 200);
 }
 
+/** Pretty public profile path. */
+export function blobberPublicHref(blobber: { slug: string }): string {
+  return `/blobbers/${blobber.slug}`;
+}
+
+/** Permanent profile path (survives display-name / slug changes). */
+export function blobberPermalinkHref(blobber: {
+  id: bigint | string | number;
+}): string {
+  return `/blobbers/id/${blobber.id}`;
+}
+
+/** Reserved path segment under /blobbers/ — never allocate as a slug. */
+const RESERVED_SLUGS = new Set(["id", "preview"]);
+
+export function blobberSlugFromName(displayName: string): string {
+  const base = slugify(displayName, 200);
+  if (!base || RESERVED_SLUGS.has(base)) return "blobber";
+  return base;
+}
+
+/** Unique slug from display name; keep current slug if still a valid candidate. */
+export async function allocateBlobberSlug(
+  displayName: string,
+  opts?: {
+    excludeId?: bigint;
+    preferSlug?: string | null;
+    tx?: Prisma.TransactionClient | typeof prisma;
+  },
+): Promise<string> {
+  const tx = opts?.tx ?? prisma;
+  const base = blobberSlugFromName(displayName);
+  const prefer = opts?.preferSlug?.trim() || null;
+  if (
+    prefer &&
+    !RESERVED_SLUGS.has(prefer) &&
+    (prefer === base || prefer.startsWith(`${base}-`))
+  ) {
+    const existing = await tx.blobber.findUnique({
+      where: { slug: prefer },
+      select: { id: true },
+    });
+    if (
+      !existing ||
+      (opts?.excludeId != null && existing.id === opts.excludeId)
+    ) {
+      return prefer;
+    }
+  }
+
+  for (let i = 0; i < 100; i++) {
+    const candidate = i === 0 ? base : `${base}-${i + 1}`;
+    if (RESERVED_SLUGS.has(candidate)) continue;
+    const existing = await tx.blobber.findUnique({
+      where: { slug: candidate },
+      select: { id: true },
+    });
+    if (
+      !existing ||
+      (opts?.excludeId != null && existing.id === opts.excludeId)
+    ) {
+      return candidate;
+    }
+  }
+  return `${base}-${Date.now()}`;
+}
+
 /** Case-insensitive find by display name. */
 export async function findBlobberByName(
   displayName: string,
@@ -67,7 +135,11 @@ export async function resolveUnlinkedBlobber(
 
   try {
     return await tx.blobber.create({
-      data: { displayName: name, userId: null },
+      data: {
+        displayName: name,
+        userId: null,
+        slug: await allocateBlobberSlug(name, { tx }),
+      },
     });
   } catch (err) {
     if (
@@ -121,7 +193,11 @@ export async function ensureLinkedBlobber(
 
   try {
     return await prisma.blobber.create({
-      data: { userId, displayName },
+      data: {
+        userId,
+        displayName,
+        slug: await allocateBlobberSlug(displayName),
+      },
     });
   } catch (err) {
     if (
@@ -256,10 +332,21 @@ export async function applyCmsPayload(
     throw new Error("Display name already taken");
   }
 
+  const current = await tx.blobber.findUnique({
+    where: { id: blobberId },
+    select: { slug: true },
+  });
+  const slug = await allocateBlobberSlug(payload.displayName, {
+    excludeId: blobberId,
+    preferSlug: current?.slug,
+    tx,
+  });
+
   await tx.blobber.update({
     where: { id: blobberId },
     data: {
       displayName: payload.displayName,
+      slug,
       description: payload.description,
       bannerGlassObjectId: payload.bannerGlassObjectId,
       avatarGlassObjectId: payload.avatarGlassObjectId,

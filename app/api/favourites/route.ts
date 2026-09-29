@@ -9,6 +9,7 @@ import {
 import { PRINT_STATUS } from "@/lib/prints";
 import { sessionUser } from "@/lib/session-user";
 import { prisma } from "@/lib/prisma";
+import { blobberPublicHref } from "@/lib/blobbers";
 import {
   CARD_MEDIA_KINDS,
   MEDIA_ASSET_STATUS,
@@ -112,7 +113,7 @@ export async function GET(request: Request) {
           where: { id: { in: stickerIds } },
           include: {
             createdBy: { select: { username: true, displayName: true } },
-            blobber: { select: { id: true, displayName: true } },
+            blobber: { select: { id: true, displayName: true, slug: true } },
             media: {
               where: {
                 kind: { in: [...CARD_MEDIA_KINDS] },
@@ -172,7 +173,7 @@ export async function GET(request: Request) {
           type: stickerTypeFromKinds(s.media.map((m) => m.kind)),
           hasAudio: videoHasAudio(s.media),
           author: s.blobber?.displayName ?? "",
-          blobberHref: s.blobber ? `/blobbers/${s.blobber.id}` : null,
+          blobberHref: s.blobber ? blobberPublicHref(s.blobber) : null,
           createdAt: f.createdAt.toISOString(),
         };
       }

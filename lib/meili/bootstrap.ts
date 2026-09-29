@@ -194,7 +194,7 @@ export async function ensureMeiliIndexes(): Promise<boolean> {
     });
 
     await meili.index(MEILI_INDEX.blobbers).updateSettings({
-      searchableAttributes: ["displayName", "bio"],
+      searchableAttributes: ["displayName", "slug", "bio"],
       filterableAttributes: [],
       sortableAttributes: ["stickerCount"],
       rankingRules: [

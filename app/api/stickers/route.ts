@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { bestLibrarySearchMode, canUpload } from "@/lib/capabilities";
-import { parseBlobberAttributionInput } from "@/lib/blobbers";
+import { parseBlobberAttributionInput, blobberPublicHref } from "@/lib/blobbers";
 import {
   parseDocumentJson,
   parseTagNames,
@@ -129,7 +129,7 @@ export async function GET(request: Request) {
             where: { ...where, id: { in: meiliIds } },
             include: {
               createdBy: { select: { username: true, displayName: true } },
-              blobber: { select: { id: true, displayName: true } },
+              blobber: { select: { id: true, displayName: true, slug: true } },
               category: { select: { slug: true, name: true } },
               media: {
                 where: {
@@ -155,7 +155,7 @@ export async function GET(request: Request) {
           orderBy: [{ popularityScore: "desc" }, { createdAt: "desc" }, { id: "desc" }],
           include: {
             createdBy: { select: { username: true, displayName: true } },
-            blobber: { select: { id: true, displayName: true } },
+            blobber: { select: { id: true, displayName: true, slug: true } },
             category: { select: { slug: true, name: true } },
             media: {
               where: {
@@ -203,7 +203,7 @@ export async function GET(request: Request) {
       visibility: s.visibility,
       author: s.blobber?.displayName ?? "",
       blobberId: s.blobber?.id.toString() ?? null,
-      blobberHref: s.blobber ? `/blobbers/${s.blobber.id}` : null,
+      blobberHref: s.blobber ? blobberPublicHref(s.blobber) : null,
       sourceUrl: s.sourceUrl,
       username: s.createdBy.username,
       category: s.category?.name ?? null,

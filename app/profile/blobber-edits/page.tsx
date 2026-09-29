@@ -10,7 +10,7 @@ export default async function ProfileBlobberEditsPage() {
     orderBy: { createdAt: "desc" },
     take: 50,
     include: {
-      blobber: { select: { id: true, displayName: true } },
+      blobber: { select: { id: true, displayName: true, slug: true } },
       requester: { select: { username: true, displayName: true } },
     },
   });

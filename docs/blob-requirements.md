@@ -782,7 +782,7 @@ GET    /api/packs/{id}/stickers
 10. Never trust uploads: MIME + magic bytes + limits + worker isolation.
 11. Strip EXIF from generated public assets.
 12. Cap GIF/video CPU/RAM/time; set queue concurrency deliberately.
-13. Ownership is explicit (`created_by` / `uploaded_by` + attribution fields).
+13. Ownership is explicit (`created_by` / `uploaded_by` + attribution fields). Credited Blobber public profiles use `/blobbers/{slug}` (from unique CI `display_name`); permanent share links use `/blobbers/id/{id}`.
 14. Couple to GLASS only through `MediaStorage`.
 15. Print sheets: on-demand + cache; no combinatorial pre-generation.
 16. **Enums are mandatory for maintainability:** every closed domain set must have a single `lib/` `as const` enum source; forms and APIs consume it (`.map()` options, comparisons, writes). Do not scatter hardcoded string literals for domain fields.

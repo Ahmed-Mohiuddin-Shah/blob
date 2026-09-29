@@ -1,7 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BlobberEditReviewActions } from "@/components/blobber-edit-review-actions";
-import { parseCmsPayload } from "@/lib/blobbers";
+import {
+  parseCmsPayload,
+  blobberPermalinkHref,
+  blobberPublicHref,
+} from "@/lib/blobbers";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/require-user";
 
@@ -22,7 +26,7 @@ export default async function BlobberEditReviewPage({
   const editReq = await prisma.blobberEditRequest.findUnique({
     where: { id: editId },
     include: {
-      blobber: { select: { id: true, displayName: true } },
+      blobber: { select: { id: true, displayName: true, slug: true } },
       requester: { select: { username: true, displayName: true } },
     },
   });
@@ -31,9 +35,8 @@ export default async function BlobberEditReviewPage({
   const proposed = parseCmsPayload(editReq.proposedPayload);
   if ("error" in proposed) notFound();
 
-  const blobberId = editReq.blobber.id.toString();
-  const liveSrc = `/blobbers/${blobberId}`;
-  const proposedSrc = `/blobbers/${blobberId}/preview/${editReq.id}`;
+  const liveSrc = blobberPublicHref(editReq.blobber);
+  const proposedSrc = `${blobberPermalinkHref(editReq.blobber)}/preview/${editReq.id}`;
 
   return (
     <div>

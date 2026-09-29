@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import {
   SOCIAL_LINK_TYPES,
+  blobberPublicHref,
   type BlobberCmsPayload,
   type SocialLinkType,
 } from "@/lib/blobbers";
@@ -14,10 +15,11 @@ import { BusyButton } from "./busy-button";
 
 type Props = {
   blobberId: string;
+  slug: string;
   initial: BlobberCmsPayload;
 };
 
-export function UnlinkedBlobberEditForm({ blobberId, initial }: Props) {
+export function UnlinkedBlobberEditForm({ blobberId, slug, initial }: Props) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -93,7 +95,7 @@ export function UnlinkedBlobberEditForm({ blobberId, initial }: Props) {
         uploads apply immediately; Save writes everything else. Logged in
         moderation history.{" "}
         <Link
-          href={`/blobbers/${blobberId}`}
+          href={blobberPublicHref({ slug })}
           className="font-semibold text-accent-pink hover:underline"
         >
           View public profile

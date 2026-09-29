@@ -11,6 +11,7 @@ import { COLLECTION_ITEM, subjectsInUserCollections } from "@/lib/collections";
 import { FAVORITE_SUBJECT } from "@/lib/favorites";
 import { PRINT_STATUS } from "@/lib/prints";
 import { prisma } from "@/lib/prisma";
+import { blobberPublicHref } from "@/lib/blobbers";
 import {
   CARD_MEDIA_KINDS,
   MEDIA_ASSET_STATUS,
@@ -65,7 +66,7 @@ export default async function CollectionDetailPage({
           where: { id: { in: stickerIds } },
           include: {
             createdBy: { select: { username: true, displayName: true } },
-            blobber: { select: { id: true, displayName: true } },
+            blobber: { select: { id: true, displayName: true, slug: true } },
             media: {
               where: {
                 kind: { in: [...CARD_MEDIA_KINDS] },
@@ -152,7 +153,7 @@ export default async function CollectionDetailPage({
       title: s!.title,
       author: s!.blobber?.displayName ?? "",
       sourceUrl: s!.sourceUrl,
-      blobberHref: s!.blobber ? `/blobbers/${s!.blobber.id}` : null,
+      blobberHref: s!.blobber ? blobberPublicHref(s!.blobber) : null,
       type: stickerTypeFromKinds(s!.media.map((m) => m.kind)),
       href: `/stickers/${s!.slug}`,
       thumbUrl: stickerPreviewUrl(s!.id, s!.media),

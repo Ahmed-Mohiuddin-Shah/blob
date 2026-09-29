@@ -1,9 +1,9 @@
 import { notFound } from "next/navigation";
-import { BlobberProfile } from "@/components/blobber-profile";
-import { liveCmsSnapshot } from "@/lib/blobbers";
+import { BlobberProfileView } from "@/components/blobber-profile-view";
 import { prisma } from "@/lib/prisma";
 
-export default async function BlobberDetailPage({
+/** Permanent Blobber profile — survives display-name / slug changes. */
+export default async function BlobberIdPage({
   params,
 }: {
   params: Promise<{ id: string }>;
@@ -25,17 +25,5 @@ export default async function BlobberDetailPage({
   });
   if (!blobber) notFound();
 
-  const live = liveCmsSnapshot(blobber);
-
-  return (
-    <section className="mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-16">
-      <BlobberProfile
-        profile={{
-          id: blobber.id.toString(),
-          ...live,
-          username: blobber.user?.username ?? null,
-        }}
-      />
-    </section>
-  );
+  return <BlobberProfileView blobber={blobber} />;
 }

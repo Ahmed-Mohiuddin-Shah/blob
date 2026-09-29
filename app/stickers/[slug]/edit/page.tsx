@@ -31,7 +31,7 @@ export default async function StickerEditPage({
     where: { slug },
     include: {
       tags: { include: { tag: true } },
-      blobber: { select: { id: true, displayName: true, userId: true } },
+      blobber: { select: { id: true, displayName: true, slug: true, userId: true } },
     },
   });
   if (!sticker) notFound();

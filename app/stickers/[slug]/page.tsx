@@ -20,6 +20,7 @@ import { FAVORITE_SUBJECT, isFavourited } from "@/lib/favorites";
 import { MODERATION_STATUS } from "@/lib/moderation";
 import { prisma } from "@/lib/prisma";
 import { relatedStickers } from "@/lib/search/query";
+import { blobberPublicHref } from "@/lib/blobbers";
 import {
   MEDIA_ASSET_STATUS,
   PROCESSING_STATUS,
@@ -114,7 +115,7 @@ export default async function StickerDetailPage({
     where: { slug },
     include: {
       createdBy: { select: { username: true, displayName: true } },
-      blobber: { select: { id: true, displayName: true, userId: true } },
+      blobber: { select: { id: true, displayName: true, slug: true, userId: true } },
       category: { select: { name: true, slug: true } },
       tags: { include: { tag: true } },
       media: true,
@@ -209,7 +210,9 @@ export default async function StickerDetailPage({
   const SoundIcon = hasAudio ? Volume2 : VolumeX;
 
   const creditLabel = sticker.blobber?.displayName ?? "";
-  const blobberHref = sticker.blobber ? `/blobbers/${sticker.blobber.id}` : null;
+  const blobberHref = sticker.blobber
+    ? blobberPublicHref(sticker.blobber)
+    : null;
 
   let relatedCards: StickerCardProps[] = [];
   if (isPublicBrowseable(sticker)) {
@@ -227,7 +230,7 @@ export default async function StickerDetailPage({
       const rows = await prisma.sticker.findMany({
         where: { id: { in: ids } },
         include: {
-          blobber: { select: { id: true, displayName: true } },
+          blobber: { select: { id: true, displayName: true, slug: true } },
           createdBy: { select: { displayName: true, username: true } },
           media: {
             where: { status: MEDIA_ASSET_STATUS.ready },
@@ -247,7 +250,7 @@ export default async function StickerDetailPage({
               r.blobber?.displayName ||
               r.createdBy.displayName ||
               r.createdBy.username,
-            blobberHref: r.blobber ? `/blobbers/${r.blobber.id}` : null,
+            blobberHref: r.blobber ? blobberPublicHref(r.blobber) : null,
             type,
             href: `/stickers/${r.slug}`,
             thumbUrl: `/api/stickers/${r.id}/media/thumbnail`,

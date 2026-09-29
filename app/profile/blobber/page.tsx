@@ -54,6 +54,7 @@ export default async function ProfileBlobberPage() {
       <div className="mt-8">
         <BlobberCmsForm
           blobberId={full.id.toString()}
+          slug={full.slug}
           live={liveCmsSnapshot(full)}
           pendingStatus={pending?.status ?? null}
           adminNote={pending?.adminNote ?? null}

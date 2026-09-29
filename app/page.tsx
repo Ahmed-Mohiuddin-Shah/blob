@@ -25,6 +25,7 @@ import {
 } from "@/lib/capabilities";
 import { MODERATION_STATUS } from "@/lib/moderation";
 import { prisma } from "@/lib/prisma";
+import { blobberPublicHref } from "@/lib/blobbers";
 import {
   PROCESSING_STATUS,
   VISIBILITY,
@@ -47,7 +48,7 @@ const CATEGORY_ICONS: Record<string, { icon: LucideIcon; className: string }> = 
 
 const stickerCardSelect = {
   createdBy: { select: { displayName: true, username: true } },
-  blobber: { select: { id: true, displayName: true } },
+  blobber: { select: { id: true, displayName: true, slug: true } },
   media: { select: { kind: true, status: true, hasAudio: true } },
 } as const;
 
@@ -146,7 +147,7 @@ export default async function HomePage() {
           title: s.title,
           author: s.blobber?.displayName ?? "",
           sourceUrl: s.sourceUrl,
-          blobberHref: s.blobber ? `/blobbers/${s.blobber.id}` : null,
+          blobberHref: s.blobber ? blobberPublicHref(s.blobber) : null,
           type: stickerTypeFromKinds(s.media.map((m) => m.kind)),
           href: `/stickers/${s.slug}`,
           thumbUrl: stickerPreviewUrl(s.id, s.media),

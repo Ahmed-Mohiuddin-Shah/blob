@@ -41,6 +41,7 @@ export default async function UnlinkedBlobberEditPage({
       <div className="mt-8">
         <UnlinkedBlobberEditForm
           blobberId={blobber.id.toString()}
+          slug={blobber.slug}
           initial={liveCmsSnapshot(blobber)}
         />
       </div>

@@ -48,6 +48,8 @@ model Blobber {
   id                   BigInt    @id @default(autoincrement())
   userId               BigInt?   @unique @map("user_id")
   displayName          String    @map("display_name") @db.VarChar(200)
+  /// URL slug from displayName; unique. Permanent link stays /blobbers/id/{id}.
+  slug                 String    @unique @db.VarChar(220)
   description          String?
   bannerGlassObjectId  String?   @map("banner_glass_object_id") @db.Uuid
   avatarGlassObjectId  String?   @map("avatar_glass_object_id") @db.Uuid

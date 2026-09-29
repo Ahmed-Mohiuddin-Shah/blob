@@ -1,6 +1,7 @@
 import { StickerGrid } from "@/components/sticker-grid";
 import { prisma } from "@/lib/prisma";
 import { requireSessionUser } from "@/lib/require-user";
+import { blobberPublicHref } from "@/lib/blobbers";
 import {
   PROCESSING_STATUS,
   stickerPreviewUrl,
@@ -17,7 +18,7 @@ export default async function ProfileUploadsPage() {
     take: 200,
     include: {
       createdBy: { select: { displayName: true, username: true } },
-      blobber: { select: { id: true, displayName: true } },
+      blobber: { select: { id: true, displayName: true, slug: true } },
       media: { select: { kind: true, status: true, hasAudio: true } },
     },
   });
@@ -34,7 +35,7 @@ export default async function ProfileUploadsPage() {
             title: s.title,
             author: s.blobber?.displayName ?? "",
             sourceUrl: s.sourceUrl,
-            blobberHref: s.blobber ? `/blobbers/${s.blobber.id}` : null,
+            blobberHref: s.blobber ? blobberPublicHref(s.blobber) : null,
             type: stickerTypeFromKinds(s.media.map((m) => m.kind)),
             href: `/stickers/${s.slug}`,
             thumbUrl: stickerPreviewUrl(s.id, s.media),

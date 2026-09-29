@@ -58,6 +58,47 @@ function SocialLinkIcon({
   return <Link2 className="h-3.5 w-3.5" strokeWidth={1.75} />;
 }
 
+function PermalinkCopyButton({ blobberId }: { blobberId: string }) {
+  const [copied, setCopied] = useState(false);
+  const path = `/blobbers/id/${blobberId}`;
+
+  async function copy() {
+    const url =
+      typeof window !== "undefined"
+        ? `${window.location.origin}${path}`
+        : path;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1800);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => void copy()}
+      title="Permanent profile link — still works if the display name changes. Click to copy."
+      aria-label="Copy permanent profile link"
+      className="relative inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-divider bg-background text-secondary transition hover:border-accent-pink/40 hover:text-accent-pink"
+    >
+      <Link2 className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+      <span className="sr-only">
+        {copied
+          ? "Copied permanent link"
+          : "Copy permanent profile link"}
+      </span>
+      {copied ? (
+        <span className="pointer-events-none absolute mt-14 rounded-full bg-foreground px-2 py-1 text-[10px] font-semibold text-background">
+          Copied
+        </span>
+      ) : null}
+    </button>
+  );
+}
+
 type Profile = {
   id: string;
   displayName: string;
@@ -184,10 +225,13 @@ export function BlobberProfile({ profile }: { profile: Profile }) {
               <p className="text-xs font-bold uppercase tracking-wider text-inactive">
                 Blobber
               </p>
-              {/* Zune: oversized title sits on margin; overflow visible so descenders aren't clipped */}
-              <h1 className="overflow-visible break-words py-0.5 text-3xl font-light lowercase leading-tight tracking-tight sm:text-4xl">
-                {profile.displayName}
-              </h1>
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Zune: oversized title sits on margin; overflow visible so descenders aren't clipped */}
+                <h1 className="overflow-visible break-words py-0.5 text-3xl font-light lowercase leading-tight tracking-tight sm:text-4xl">
+                  {profile.displayName}
+                </h1>
+                <PermalinkCopyButton blobberId={profile.id} />
+              </div>
             </div>
           </div>
           {profile.description ? (

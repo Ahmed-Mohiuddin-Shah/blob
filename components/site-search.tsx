@@ -56,7 +56,9 @@ function hrefFor(hit: Hit): string {
   if (hit.index === "prints" && hit.slug) {
     return hit.kind === "pack" ? `/packs/${hit.slug}` : `/sheets/${hit.slug}`;
   }
-  if (hit.index === "blobbers") return `/blobbers/${hit.id}`;
+  if (hit.index === "blobbers") {
+    return hit.slug ? `/blobbers/${hit.slug}` : `/blobbers/id/${hit.id}`;
+  }
   return "/search";
 }
 

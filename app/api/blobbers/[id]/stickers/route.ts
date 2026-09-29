@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { blobberPublicHref } from "@/lib/blobbers";
 import { MODERATION_STATUS } from "@/lib/moderation";
 import { prisma } from "@/lib/prisma";
 import {
@@ -25,6 +26,14 @@ export async function GET(
     return NextResponse.json({ error: "Invalid id" }, { status: 400 });
   }
 
+  const blobber = await prisma.blobber.findUnique({
+    where: { id: blobberId },
+    select: { id: true, slug: true },
+  });
+  if (!blobber) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
   const url = new URL(request.url);
   const cursor = url.searchParams.get("cursor");
 
@@ -44,7 +53,7 @@ export async function GET(
           kind: { in: [...CARD_MEDIA_KINDS] },
           status: MEDIA_ASSET_STATUS.ready,
         },
-        select: { kind: true, hasAudio: true },
+        select: { kind: true, hasAudio: true, status: true },
       },
     },
   });
@@ -62,7 +71,7 @@ export async function GET(
       hasAudio: videoHasAudio(s.media),
       author: "",
       sourceUrl: s.sourceUrl,
-      blobberHref: `/blobbers/${blobberId}`,
+      blobberHref: blobberPublicHref(blobber),
     })),
     nextCursor: hasMore ? page[page.length - 1]!.id.toString() : null,
   });

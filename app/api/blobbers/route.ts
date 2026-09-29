@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { blobberPublicHref } from "@/lib/blobbers";
 import { MODERATION_STATUS } from "@/lib/moderation";
 import { prisma } from "@/lib/prisma";
 import {
@@ -58,6 +59,7 @@ export async function GET(request: Request) {
     orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
     select: {
       id: true,
+      slug: true,
       displayName: true,
       description: true,
       avatarGlassObjectId: true,
@@ -97,7 +99,7 @@ export async function GET(request: Request) {
       id: b.id.toString(),
       displayName: b.displayName,
       description: b.description,
-      href: `/blobbers/${b.id}`,
+      href: blobberPublicHref(b),
       linked: b.userId != null,
       stickers: stickersByBlobber[i]!.map((s) => ({
         id: s.id.toString(),

@@ -240,6 +240,7 @@ export async function buildBlobberSearchDoc(blobberId: bigint) {
   return {
     id: b.id.toString(),
     displayName: b.displayName,
+    slug: b.slug,
     bio: b.description ?? "",
     stickerCount: b._count.stickers,
   };

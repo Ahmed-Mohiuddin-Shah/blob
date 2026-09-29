@@ -119,6 +119,7 @@ Table blobbers {
   id bigserial [pk]
   user_id bigint [null, unique, ref: > users.id, note: 'Linked account; null = unlinked external Blobber']
   display_name varchar(200) [not null, note: 'Unique case-insensitive (lower(display_name) unique index)']
+  slug varchar(220) [unique, not null, note: 'From display_name via slugify; pretty URL /blobbers/{slug}']
   description text [null]
   banner_glass_object_id uuid [null]
   avatar_glass_object_id uuid [null]
@@ -128,7 +129,7 @@ Table blobbers {
   created_at timestamptz [not null]
   updated_at timestamptz [not null]
 
-  Note: 'Public profile at /blobbers/{id}. Live row = approved CMS state. Edits go through blobber_edit_requests.'
+  Note: 'Public profile at /blobbers/{slug}. Permanent link /blobbers/id/{id}. Live row = approved CMS state. Edits go through blobber_edit_requests. display_name CI-unique; slug unique (disambiguated if slugify collides).'
 }
 
 Table social_links {

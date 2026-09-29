@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import {
   SOCIAL_LINK_TYPES,
+  blobberPublicHref,
   type BlobberCmsPayload,
   type SocialLinkType,
 } from "@/lib/blobbers";
@@ -14,6 +15,7 @@ import { BusyButton } from "./busy-button";
 
 type Props = {
   blobberId: string;
+  slug: string;
   live: BlobberCmsPayload;
   pendingStatus: string | null;
   adminNote: string | null;
@@ -22,6 +24,7 @@ type Props = {
 
 export function BlobberCmsForm({
   blobberId,
+  slug,
   live,
   pendingStatus,
   adminNote,
@@ -91,10 +94,10 @@ export function BlobberCmsForm({
       <p className="text-xs text-secondary">
         Public profile:{" "}
         <Link
-          href={`/blobbers/${blobberId}`}
+          href={blobberPublicHref({ slug })}
           className="font-semibold text-accent-pink hover:underline"
         >
-          /blobbers/{blobberId}
+          /blobbers/{slug}
         </Link>
         . Changes need admin approval — the live page stays as-is until then.
       </p>

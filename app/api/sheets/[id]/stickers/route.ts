@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { PRINT_STATUS } from "@/lib/prints";
 import { prisma } from "@/lib/prisma";
 import { sessionUser } from "@/lib/session-user";
+import { blobberPublicHref } from "@/lib/blobbers";
 import {
   CARD_MEDIA_KINDS,
   MEDIA_ASSET_STATUS,
@@ -60,7 +61,7 @@ export async function GET(request: Request, ctx: Ctx) {
       sticker: {
         include: {
           createdBy: { select: { username: true, displayName: true } },
-          blobber: { select: { id: true, displayName: true } },
+          blobber: { select: { id: true, displayName: true, slug: true } },
           media: {
             where: {
               kind: { in: [...CARD_MEDIA_KINDS] },
@@ -82,7 +83,7 @@ export async function GET(request: Request, ctx: Ctx) {
       title: s.title,
       slug: s.slug,
       author: s.blobber?.displayName ?? "",
-      blobberHref: s.blobber ? `/blobbers/${s.blobber.id}` : null,
+      blobberHref: s.blobber ? blobberPublicHref(s.blobber) : null,
       type: stickerTypeFromKinds(s.media.map((m) => m.kind)),
       href: `/stickers/${s.slug}`,
       thumbUrl: stickerPreviewUrl(s.id, s.media),

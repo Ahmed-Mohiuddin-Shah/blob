@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { blobberPublicHref } from "@/lib/blobbers";
 import { BusyButton } from "./busy-button";
 
 export type AssocItem = {
@@ -10,7 +11,7 @@ export type AssocItem = {
   status: string;
   message: string | null;
   createdAt: string;
-  targetBlobber: { id: string; displayName: string };
+  targetBlobber: { id: string; displayName: string; slug: string };
   requester: { username: string; displayName: string };
 };
 
@@ -80,7 +81,7 @@ export function BlobberAssociationRequestsList({
             <p className="text-sm font-semibold">
               {item.requester.displayName || item.requester.username} →{" "}
               <Link
-                href={`/blobbers/${item.targetBlobber.id}`}
+                href={blobberPublicHref(item.targetBlobber)}
                 className="text-accent-pink hover:underline"
               >
                 {item.targetBlobber.displayName}
