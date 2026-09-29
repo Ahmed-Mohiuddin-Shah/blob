@@ -5,6 +5,9 @@ import { prisma } from "@/lib/prisma";
 import { publicSiteUrl } from "@/lib/site-url";
 import { VISIBILITY } from "@/lib/stickers";
 
+// ponytail: Docker build has no DATABASE_URL; sitemap must not prerender.
+export const dynamic = "force-dynamic";
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base = publicSiteUrl();
   const now = new Date();
