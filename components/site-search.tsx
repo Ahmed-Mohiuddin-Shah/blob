@@ -88,6 +88,7 @@ function seedSteps(mode: string): ThoughtStep[] {
     return [
       { label: "Encoding image…", done: false },
       { label: "Image similarity search", done: false },
+      { label: "Merging with text (if any)…", done: false },
     ];
   }
   if (mode === "semantic") {
@@ -139,6 +140,7 @@ export function SiteSearch({
     { id: string; slug?: string; title?: string }[]
   >([]);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageMedia, setImageMedia] = useState<ImageHandoff | null>(null);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [steps, setSteps] = useState<ThoughtStep[]>([]);
@@ -278,14 +280,16 @@ export function SiteSearch({
     });
   }
 
-  function runImageSearch(media: ImageHandoff) {
+  function runImageSearch(media: ImageHandoff, textQ = q) {
     if (!canImage) {
       setError("Image search requires a member account");
       return;
     }
     setError(null);
     setMode("image");
+    setImageMedia(media);
     setImagePreview(`data:${media.mime};base64,${media.data}`);
+    const trimmed = textQ.trim();
     beginThought("image");
     startTransition(async () => {
       try {
@@ -294,6 +298,7 @@ export function SiteSearch({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             mode: "image",
+            q: trimmed || undefined,
             media: { mime: media.mime, data: media.data },
           }),
         });
@@ -301,16 +306,23 @@ export function SiteSearch({
         if (!res.ok) throw new Error(String(json.error || "Image search failed"));
         applyResult(json);
         finishThought({
-          nextMode: "image",
+          nextMode: trimmed ? "image+text" : "image",
           engineName: String(json.engine ?? "meili"),
           hitCount: ((json.hits as Hit[]) ?? []).length,
         });
-        router.replace("/search?mode=image");
+        const url = new URLSearchParams({ mode: "image" });
+        if (trimmed) url.set("q", trimmed);
+        router.replace(`/search?${url.toString()}`);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Image search failed");
         setDoneLabel("Search failed");
       }
     });
+  }
+
+  function clearImage() {
+    setImagePreview(null);
+    setImageMedia(null);
   }
 
   useEffect(() => {
@@ -320,8 +332,8 @@ export function SiteSearch({
         setError("Image search requires a member account — sign in as a member");
         return;
       }
-      setImagePreview(`data:${handoff.mime};base64,${handoff.data}`);
-      runImageSearch(handoff);
+      const seedQ = initialQ || params.get("q") || q;
+      runImageSearch(handoff, seedQ);
       return;
     }
     const seedQ = initialQ || params.get("q");
@@ -369,12 +381,23 @@ export function SiteSearch({
         showAgent={canAgent}
         placeholder="Stickers, collections, prints, blobbers…"
         imagePreviewUrl={imagePreview}
-        onClearImagePreview={() => setImagePreview(null)}
-        onSubmit={(next) =>
-          runSearch(next, mode === "image" ? (allowed.has("hybrid") ? "hybrid" : fallback) : mode)
-        }
+        onClearImagePreview={clearImage}
+        onSubmit={(next) => {
+          if (imageMedia && canImage) {
+            runImageSearch(imageMedia, next);
+            return;
+          }
+          runSearch(
+            next,
+            mode === "image"
+              ? allowed.has("hybrid")
+                ? "hybrid"
+                : fallback
+              : mode,
+          );
+        }}
         onImageSearch={(file) => {
-          void fileToHandoff(file).then(runImageSearch);
+          void fileToHandoff(file).then((media) => runImageSearch(media, q));
         }}
         onAgentSearch={(next) => {
           setMode("agent");
@@ -397,6 +420,10 @@ export function SiteSearch({
         query={q}
         onPick={(title) => {
           setQ(title);
+          if (imageMedia && canImage) {
+            runImageSearch(imageMedia, title);
+            return;
+          }
           runSearch(title, mode === "image" ? fallback : mode);
         }}
       />
@@ -409,6 +436,10 @@ export function SiteSearch({
                 className="rounded-full border border-divider bg-surface px-3 py-1.5 text-xs text-secondary hover:border-accent-pink/40 hover:text-accent-pink"
                 onClick={() => {
                   setQ(s.title || "");
+                  if (imageMedia && canImage) {
+                    runImageSearch(imageMedia, s.title || "");
+                    return;
+                  }
                   runSearch(s.title || "", mode === "image" ? fallback : mode);
                 }}
               >
@@ -431,7 +462,21 @@ export function SiteSearch({
               onClick={() => {
                 if (!ok) return;
                 setMode(m.id);
-                if (m.id !== "image") runSearch(q, m.id);
+                if (m.id === "agent") {
+                  runSearch(q, "agent");
+                  return;
+                }
+                // Image attached → always image(+text); no manual mode pick needed.
+                if (imageMedia && canImage && m.id !== "image") {
+                  setMode("image");
+                  runImageSearch(imageMedia, q);
+                  return;
+                }
+                if (m.id === "image") {
+                  if (imageMedia) runImageSearch(imageMedia, q);
+                  return;
+                }
+                runSearch(q, m.id);
               }}
               className={`rounded-full px-3 py-1.5 text-xs font-semibold uppercase tracking-wide ${
                 mode === m.id && ok

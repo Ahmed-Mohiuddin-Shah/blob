@@ -23,6 +23,28 @@ export type FederatedHit = {
   [key: string]: unknown;
 };
 
+/** Reciprocal rank fusion — Meili can't take image + q in one query. */
+export function mergeRrfHits(
+  lists: FederatedHit[][],
+  limit: number,
+  k = 60,
+): FederatedHit[] {
+  const scores = new Map<string, { hit: FederatedHit; score: number }>();
+  for (const list of lists) {
+    list.forEach((h, i) => {
+      const key = `${h.index}:${h.id}`;
+      const add = 1 / (k + i + 1);
+      const prev = scores.get(key);
+      if (prev) prev.score += add;
+      else scores.set(key, { hit: h, score: add });
+    });
+  }
+  return [...scores.values()]
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map((x) => x.hit);
+}
+
 export async function meiliFederatedSearch(opts: {
   q: string;
   mode?: SearchMode;
@@ -37,6 +59,32 @@ export async function meiliFederatedSearch(opts: {
   const limit = opts.limit ?? 24;
   const mode = opts.mode ?? "hybrid";
   const q = opts.q.trim();
+
+  // Meili multimodal: q + media hit different searchFragments → error. Run both, RRF.
+  if (mode === "image" && opts.media && q) {
+    const fetchLimit = Math.min(96, Math.max(limit * 2, limit + 12));
+    const [byImage, byText] = await Promise.all([
+      meiliFederatedSearch({
+        q: "",
+        mode: "image",
+        limit: fetchLimit,
+        filter: opts.filter,
+        media: opts.media,
+      }),
+      meiliFederatedSearch({
+        q,
+        mode: "hybrid",
+        limit: fetchLimit,
+        filter: opts.filter,
+      }),
+    ]);
+    return {
+      engine: byImage.engine === "meili" || byText.engine === "meili" ? "meili" : "prisma",
+      hits: mergeRrfHits([byImage.hits, byText.hits], limit),
+      facetDistribution:
+        byImage.facetDistribution ?? byText.facetDistribution,
+    };
+  }
 
   if (!isMeiliConfigured() || !(await ensureMeiliIndexes())) {
     return { engine: "prisma", hits: await prismaFallback(q, limit) };

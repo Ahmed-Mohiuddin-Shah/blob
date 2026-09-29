@@ -36,6 +36,22 @@ describe("search constants", () => {
     expect(MEILI_EMBEDDER.image).toBe("image");
   });
 
+  it("rrf-merges image + text hit lists", async () => {
+    const { mergeRrfHits } = await import("../lib/search/query");
+    const image = [
+      { index: "stickers", id: "1" },
+      { index: "stickers", id: "2" },
+      { index: "stickers", id: "3" },
+    ];
+    const text = [
+      { index: "stickers", id: "3" },
+      { index: "stickers", id: "1" },
+      { index: "collections", id: "9" },
+    ];
+    const merged = mergeRrfHits([image, text], 4);
+    expect(merged.map((h) => h.id)).toEqual(["1", "3", "2", "9"]);
+  });
+
   it("treats empty MEILI_HOST as unconfigured", () => {
     const prev = process.env.MEILI_HOST;
     delete process.env.MEILI_HOST;

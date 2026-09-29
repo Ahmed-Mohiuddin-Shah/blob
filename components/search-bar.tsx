@@ -145,7 +145,10 @@ export function SearchBar({
     }
     const payload = await fileToHandoff(file);
     stashImageHandoff(payload);
-    router.push("/search?mode=image");
+    const params = new URLSearchParams({ mode: "image" });
+    const trimmed = q.trim();
+    if (trimmed) params.set("q", trimmed);
+    router.push(`/search?${params}`);
   }
 
   function handlePaste(e: React.ClipboardEvent) {
@@ -231,7 +234,7 @@ export function SearchBar({
           onPaste={handlePaste}
           placeholder={
             preview
-              ? "Image search — add text or clear the thumb"
+              ? "Add words to refine the image search…"
               : placeholder
           }
           className={`min-w-0 flex-1 bg-transparent outline-none placeholder:text-inactive ${
