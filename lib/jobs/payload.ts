@@ -1,6 +1,7 @@
 import { encodePrismIdForSticker, getPublicPrismId } from "@/lib/glass";
 import { getResolvedMetaPrompts } from "@/lib/search/prompts";
 import {
+  type CatalogReindexJobPayload,
   type CompositionJobPayload,
   type JobPayload,
   type PackJobPayload,
@@ -18,6 +19,7 @@ import {
 } from "@/lib/stickers";
 
 export type {
+  CatalogReindexJobPayload,
   CompositionJobPayload,
   JobPayload,
   PackJobPayload,
@@ -37,6 +39,14 @@ export async function buildJobPayload(
   }
   if (type === JOB_TYPE.searchEnrich) {
     return buildSearchEnrichPayload(subjectId);
+  }
+  if (type === JOB_TYPE.catalogReindex) {
+    // App-local only; claim path should never reach here for remote workers.
+    void subjectId;
+    const payload: CatalogReindexJobPayload = {
+      kind: JOB_TYPE.catalogReindex,
+    };
+    return payload;
   }
   return buildPackPayload(subjectId);
 }

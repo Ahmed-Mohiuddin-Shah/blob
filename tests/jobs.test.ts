@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { hashWorkerKey } from "@/lib/jobs/auth";
 import {
+  CATALOG_REINDEX_SUBJECT_ID,
   idempotencyKey,
+  JOB_SUBJECT,
   JOB_TYPE,
   leaseSeconds,
 } from "@/lib/jobs/types";
@@ -14,6 +16,13 @@ describe("jobs helpers", () => {
     expect(idempotencyKey(JOB_TYPE.sheetEncode, BigInt(7))).toBe(
       "sheet_encode:7",
     );
+    expect(
+      idempotencyKey(JOB_TYPE.catalogReindex, CATALOG_REINDEX_SUBJECT_ID),
+    ).toBe("catalog_reindex:0");
+  });
+
+  it("catalog subject constant exists", () => {
+    expect(JOB_SUBJECT.catalog).toBe("catalog");
   });
 
   it("hashWorkerKey is sha256 hex", () => {

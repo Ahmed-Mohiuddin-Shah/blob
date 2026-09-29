@@ -26,6 +26,11 @@ describe("search constants", () => {
     expect(JOB_TYPES).toContain("search_enrich");
   });
 
+  it("registers catalog_reindex as app-local job type", () => {
+    expect(JOB_TYPE.catalogReindex).toBe("catalog_reindex");
+    expect(JOB_TYPES).toContain("catalog_reindex");
+  });
+
   it("names meili indexes and embedders", () => {
     expect(MEILI_INDEX.stickers).toBe("stickers");
     expect(MEILI_EMBEDDER.image).toBe("image");

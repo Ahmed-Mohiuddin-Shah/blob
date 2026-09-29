@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import {
   BadgeCheck,
@@ -11,6 +12,12 @@ import {
   Square,
   type LucideIcon,
 } from "lucide-react";
+
+export const metadata: Metadata = {
+  title: "About",
+  description:
+    "What BLOB is — a public sticker library with search, collections, and print sheets.",
+};
 
 function Feature({
   icon: Icon,

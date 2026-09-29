@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import { BlobBackground } from "@/components/blob-background";
 import { Footer } from "@/components/footer";
@@ -9,11 +9,49 @@ import { getSession } from "@/lib/auth";
 import { canManageUsers, canUpload } from "@/lib/capabilities";
 import { MODERATION_STATUS } from "@/lib/moderation";
 import { prisma } from "@/lib/prisma";
+import { publicSiteUrl } from "@/lib/site-url";
 import "./globals.css";
 
+const siteDescription =
+  "A public sticker library — find something sticky.";
+
 export const metadata: Metadata = {
-  title: "BLOB Sticker Library",
-  description: "A public sticker library — find something sticky.",
+  metadataBase: new URL(publicSiteUrl()),
+  title: {
+    default: "BLOB Sticker Library",
+    template: "%s · BLOB",
+  },
+  description: siteDescription,
+  applicationName: "BLOB",
+  appleWebApp: {
+    capable: true,
+    title: "BLOB",
+    statusBarStyle: "black-translucent",
+  },
+  openGraph: {
+    type: "website",
+    siteName: "BLOB",
+    title: "BLOB Sticker Library",
+    description: siteDescription,
+    url: "/",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "BLOB Sticker Library",
+    description: siteDescription,
+  },
+  icons: {
+    icon: [{ url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }],
+    apple: [{ url: "/apple-icon.png", sizes: "180x180", type: "image/png" }],
+  },
+  manifest: "/manifest.webmanifest",
+};
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: dark)", color: "#000000" },
+    { media: "(prefers-color-scheme: light)", color: "#f10ea0" },
+  ],
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {

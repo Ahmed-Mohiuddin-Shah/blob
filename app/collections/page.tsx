@@ -1,6 +1,12 @@
 import { CollectionsLibrary } from "@/components/collections-library";
+import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { getSession, signInUrl } from "@/lib/auth";
+
+export const metadata: Metadata = {
+  title: "Collections",
+  description: "Browse sticker collections on BLOB.",
+};
 
 export default async function CollectionsPage({
   searchParams,

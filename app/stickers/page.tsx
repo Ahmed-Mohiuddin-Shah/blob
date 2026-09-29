@@ -1,7 +1,13 @@
 import { StickersLibrary } from "@/components/stickers-library";
+import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { getSession, signInUrl } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+
+export const metadata: Metadata = {
+  title: "Stickers",
+  description: "Browse the public BLOB sticker library.",
+};
 
 export default async function StickersPage({
   searchParams,

@@ -1,4 +1,10 @@
 import Link from "next/link";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Terms of use",
+  description: "Terms of use for the BLOB sticker library.",
+};
 
 export default function TermsPage() {
   return (

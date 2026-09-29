@@ -1,4 +1,10 @@
 import { BlobbersDirectory } from "@/components/blobbers-directory";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Blobbers",
+  description: "Creators and attribution credits on BLOB.",
+};
 
 export default async function BlobbersPage({
   searchParams,

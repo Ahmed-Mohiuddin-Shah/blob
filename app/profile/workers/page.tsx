@@ -48,6 +48,11 @@ async function titlesForJobs(
   for (const p of packRows) {
     out.set(`${JOB_SUBJECT.stickerPack}:${p.id}`, p.name);
   }
+  for (const j of jobs) {
+    if (j.subjectType === JOB_SUBJECT.catalog) {
+      out.set(`${JOB_SUBJECT.catalog}:${j.subjectId}`, "Catalog reindex");
+    }
+  }
   return out;
 }
 

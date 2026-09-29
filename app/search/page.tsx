@@ -1,8 +1,14 @@
 import { Suspense } from "react";
+import type { Metadata } from "next";
 import { SiteSearch } from "@/components/site-search";
 import { getSession } from "@/lib/auth";
 import { defaultSearchMode, type CapabilityUser } from "@/lib/capabilities";
 import { headers } from "next/headers";
+
+export const metadata: Metadata = {
+  title: "Search",
+  description: "Search stickers, collections, prints, and blobbers on BLOB.",
+};
 
 export default async function SearchPage({
   searchParams,

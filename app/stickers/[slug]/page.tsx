@@ -35,8 +35,10 @@ import {
   whatsappOgImageKind,
 } from "@/lib/stickers";
 
+import { publicSiteUrl } from "@/lib/site-url";
+
 function publicBase(): string {
-  return (process.env.AUTH_URL || "http://localhost:3000").replace(/\/$/, "");
+  return publicSiteUrl();
 }
 
 /** WhatsApp: ~80 chars suffice for og:description. */

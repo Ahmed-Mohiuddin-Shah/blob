@@ -9,7 +9,7 @@ import { BusyButton } from "./busy-button";
 
 const initial: ReindexActionState = {};
 
-/** Superadmin: catalog → Meili without running AI enrich. */
+/** Superadmin: queue catalog → Meili reindex without running AI enrich. */
 export function SearchReindexAdmin() {
   const [state, action, pending] = useActionState(reindexCatalogAction, initial);
 
@@ -19,9 +19,9 @@ export function SearchReindexAdmin() {
         Search reindex
       </h2>
       <p className="mt-2 text-sm text-secondary">
-        Push existing approved stickers, collections, prints, and blobbers into
-        Meilisearch using titles, tags, and descriptions. Does not run AI
-        caption enrich.
+        Queue an app-local job to push approved stickers, collections, prints,
+        and blobbers into Meilisearch. Does not run AI caption enrich or remote
+        workers.
       </p>
       <form action={action} className="mt-4">
         <BusyButton
@@ -29,7 +29,7 @@ export function SearchReindexAdmin() {
           busy={pending}
           className="rounded-full bg-accent-gradient px-5 py-2 text-sm font-semibold text-white"
         >
-          Reindex catalog
+          Queue catalog reindex
         </BusyButton>
       </form>
       {state.error ? (
@@ -37,15 +37,9 @@ export function SearchReindexAdmin() {
           {state.error}
         </p>
       ) : null}
-      {state.ok && state.result ? (
+      {state.ok && typeof state.queued === "number" ? (
         <p className="mt-3 text-sm text-secondary">
-          Indexed {state.result.stickers} stickers,{" "}
-          {state.result.collections} collections, {state.result.sheets} sheets,{" "}
-          {state.result.packs} packs, {state.result.blobbers} blobbers
-          {state.result.errors
-            ? ` · ${state.result.errors} errors`
-            : ""}
-          .
+          Queued catalog reindex: {state.queued}
         </p>
       ) : null}
     </div>

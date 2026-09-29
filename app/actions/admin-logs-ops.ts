@@ -5,14 +5,14 @@ import { getSession } from "@/lib/auth";
 import { canManageAdmins } from "@/lib/capabilities";
 import { enqueueCompositionEncode } from "@/lib/composition-encode";
 import { enqueueJob } from "@/lib/jobs/enqueue";
-import { JOB_TYPE } from "@/lib/jobs/types";
+import {
+  CATALOG_REINDEX_SUBJECT_ID,
+  JOB_TYPE,
+} from "@/lib/jobs/types";
 import { isMeiliConfigured } from "@/lib/meili/client";
 import { prisma } from "@/lib/prisma";
 import { SEARCH_META_STATUS } from "@/lib/search/constants";
-import {
-  reindexCatalogSearch,
-  type ReindexResult,
-} from "@/lib/search/reindex";
+import type { ReindexResult } from "@/lib/search/reindex";
 import {
   MEDIA_ASSET_STATUS,
   MEDIA_KIND,
@@ -94,14 +94,8 @@ export async function reindexCatalogAction(
       error: "Meilisearch is not configured (MEILI_HOST / MEILI_MASTER_KEY)",
     };
   }
-  try {
-    const result = await reindexCatalogSearch();
-    return { ok: true, result };
-  } catch (err) {
-    return {
-      error: err instanceof Error ? err.message : "Reindex failed",
-    };
-  }
+  enqueueJob(JOB_TYPE.catalogReindex, CATALOG_REINDEX_SUBJECT_ID);
+  return { ok: true, queued: 1 };
 }
 
 export async function backfillWhatsAppOgAction(

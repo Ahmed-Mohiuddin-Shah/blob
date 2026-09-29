@@ -8,12 +8,15 @@ import {
   hubUnregister,
 } from "@/lib/jobs/hub";
 import { touchLease } from "@/lib/jobs/lease";
-import { JOB_TYPES, WORKER_STATUS } from "@/lib/jobs/types";
+import { JOB_TYPE, JOB_TYPES, WORKER_STATUS } from "@/lib/jobs/types";
 import { prisma } from "@/lib/prisma";
 
 // ponytail: lazy-import claim/complete — they pull ESM-only glass-ts; tsx boots server as CJS.
 
 const WS_PATH = "/api/workers/ws";
+
+/** Jobs that only run in the Next process — never register on remote workers. */
+const APP_LOCAL_JOB_TYPES = new Set<string>([JOB_TYPE.catalogReindex]);
 
 function parseCapabilities(raw: unknown): Set<string> {
   const allowed = new Set<string>(JOB_TYPES);
@@ -22,7 +25,14 @@ function parseCapabilities(raw: unknown): Set<string> {
     : typeof raw === "string"
       ? raw.split(",").map((s) => s.trim())
       : [...JOB_TYPES];
-  return new Set(list.filter((c) => typeof c === "string" && allowed.has(c)));
+  return new Set(
+    list.filter(
+      (c) =>
+        typeof c === "string" &&
+        allowed.has(c) &&
+        !APP_LOCAL_JOB_TYPES.has(c),
+    ),
+  );
 }
 
 async function authFromUpgrade(
@@ -69,7 +79,9 @@ export function attachWorkerWebSocket(server: HttpServer): WebSocketServer {
       auth: { apiKeyId: bigint; name: string },
     ) => {
       let workerId: bigint | null = null;
-      let capabilities = new Set<string>(JOB_TYPES);
+      let capabilities = new Set<string>(
+        [...JOB_TYPES].filter((t) => !APP_LOCAL_JOB_TYPES.has(t)),
+      );
       let concurrency = 1;
 
       const send = (obj: unknown) => {

@@ -19,7 +19,13 @@ function subjectTypeFor(type: JobType) {
     return JOB_SUBJECT.sticker;
   }
   if (type === JOB_TYPE.sheetEncode) return JOB_SUBJECT.stickerSheet;
+  if (type === JOB_TYPE.catalogReindex) return JOB_SUBJECT.catalog;
   return JOB_SUBJECT.stickerPack;
+}
+
+/** catalog_reindex is Prisma+Meili — always app-local, never remote workers. */
+function mustRunLocal(type: JobType): boolean {
+  return type === JOB_TYPE.catalogReindex || !hubHasCapable(type);
 }
 
 /**
@@ -48,8 +54,10 @@ export async function enqueueJobAsync(
       existing.status === JOB_STATUS.leased ||
       existing.status === JOB_STATUS.running)
   ) {
-    hubNotifyJobAvailable(type, existing.id);
-    if (!hubHasCapable(type)) {
+    if (type !== JOB_TYPE.catalogReindex) {
+      hubNotifyJobAvailable(type, existing.id);
+    }
+    if (mustRunLocal(type)) {
       scheduleLocal(existing.id, type, subjectId);
     }
     return existing.id;
@@ -78,9 +86,11 @@ export async function enqueueJobAsync(
         },
       });
 
-  hubNotifyJobAvailable(type, job.id);
+  if (type !== JOB_TYPE.catalogReindex) {
+    hubNotifyJobAvailable(type, job.id);
+  }
 
-  if (!hubHasCapable(type)) {
+  if (mustRunLocal(type)) {
     scheduleLocal(job.id, type, subjectId);
   }
 
@@ -92,7 +102,7 @@ function scheduleLocal(jobId: bigint, type: JobType, subjectId: bigint): void {
     // Re-check: a worker may have claimed while we waited in the local queue.
     const job = await prisma.job.findUnique({ where: { id: jobId } });
     if (!job || job.status !== JOB_STATUS.pending) return;
-    if (hubHasCapable(type)) {
+    if (type !== JOB_TYPE.catalogReindex && hubHasCapable(type)) {
       hubNotifyJobAvailable(type, jobId);
       return;
     }

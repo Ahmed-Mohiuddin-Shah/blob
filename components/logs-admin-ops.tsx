@@ -18,8 +18,8 @@ const OP_COPY: Record<
 > = {
   reindex: {
     title: "Reindex catalog",
-    body: "Push the full catalog into Meilisearch (titles, tags, descriptions — no AI). This is a heavy operation and may hog Meili / app resources. Prefer off-peak.",
-    confirmLabel: "Reindex catalog",
+    body: "Queue an app-local job to push the full catalog into Meilisearch (titles, tags, descriptions — no AI). Heavy on Meili / the app process; prefer off-peak. Not run on remote encode workers.",
+    confirmLabel: "Queue catalog reindex",
   },
   og: {
     title: "Re-encode missing WhatsApp OG",
@@ -123,7 +123,7 @@ export function LogsAdminOps({
         </BusyButton>
       </div>
 
-      <OpResult state={reindexState} />
+      <OpResult state={reindexState} label="Queued catalog reindex" />
       <OpResult state={ogState} label="Queued OG re-encodes" />
       <OpResult state={enrichState} label="Queued search enrich jobs" />
 

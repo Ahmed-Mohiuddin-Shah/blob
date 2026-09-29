@@ -3,17 +3,18 @@
 import { headers } from "next/headers";
 import { getSession } from "@/lib/auth";
 import { canManageAdmins } from "@/lib/capabilities";
+import { enqueueJob } from "@/lib/jobs/enqueue";
+import {
+  CATALOG_REINDEX_SUBJECT_ID,
+  JOB_TYPE,
+} from "@/lib/jobs/types";
 import { isMeiliConfigured } from "@/lib/meili/client";
 import { prisma } from "@/lib/prisma";
-import {
-  reindexCatalogSearch,
-  type ReindexResult,
-} from "@/lib/search/reindex";
 
 export type ReindexActionState = {
   ok?: boolean;
   error?: string;
-  result?: ReindexResult;
+  queued?: number;
 };
 
 async function requireSuperadminUser() {
@@ -34,7 +35,7 @@ async function requireSuperadminUser() {
   return user;
 }
 
-/** Superadmin: push existing catalog into Meili (no AI enrich). */
+/** Superadmin: queue app-local catalog → Meili reindex (no AI enrich). */
 export async function reindexCatalogAction(
   _prev: ReindexActionState,
   _formData: FormData,
@@ -44,12 +45,6 @@ export async function reindexCatalogAction(
   if (!isMeiliConfigured()) {
     return { error: "Meilisearch is not configured (MEILI_HOST / MEILI_MASTER_KEY)" };
   }
-  try {
-    const result = await reindexCatalogSearch();
-    return { ok: true, result };
-  } catch (err) {
-    return {
-      error: err instanceof Error ? err.message : "Reindex failed",
-    };
-  }
+  enqueueJob(JOB_TYPE.catalogReindex, CATALOG_REINDEX_SUBJECT_ID);
+  return { ok: true, queued: 1 };
 }

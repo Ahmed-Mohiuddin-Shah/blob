@@ -87,7 +87,12 @@ export async function runWorkerJob(
   if (payload.kind === JOB_TYPE.sheetEncode) {
     return runSheet(payload, glass);
   }
-  return runPack(payload, glass);
+  if (payload.kind === JOB_TYPE.packEncode) {
+    return runPack(payload, glass);
+  }
+  throw new Error(
+    `Job type ${payload.kind} is app-local only and cannot run on remote workers`,
+  );
 }
 
 async function ollamaChatWorker(opts: {

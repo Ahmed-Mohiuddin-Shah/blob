@@ -26,13 +26,25 @@ export function loadWorkerEnv(): WorkerEnv {
   );
 
   const raw = process.env.WORKER_CAPABILITIES?.trim();
+  // catalog_reindex is app-local (Prisma + Meili) — never claim remotely.
+  const APP_LOCAL_ONLY = new Set<string>(["catalog_reindex"]);
   const capabilities = (
     raw
       ? raw.split(",").map((s) => s.trim())
       : [...JOB_TYPES]
-  ).filter((c): c is JobType =>
-    (JOB_TYPES as readonly string[]).includes(c),
-  );
+  )
+    .filter((c): c is JobType =>
+      (JOB_TYPES as readonly string[]).includes(c),
+    )
+    .filter((c) => {
+      if (APP_LOCAL_ONLY.has(c)) {
+        console.warn(
+          `WORKER_CAPABILITIES: ignoring ${c} (app-local only; not for remote workers)`,
+        );
+        return false;
+      }
+      return true;
+    });
 
   if (capabilities.length === 0) {
     throw new Error("WORKER_CAPABILITIES produced no valid job types");

@@ -65,8 +65,14 @@ export type SearchEnrichJobPayload = {
   };
 };
 
+/** App-local only — never sent to remote workers. */
+export type CatalogReindexJobPayload = {
+  kind: typeof JOB_TYPE.catalogReindex;
+};
+
 export type JobPayload =
   | CompositionJobPayload
   | SheetJobPayload
   | PackJobPayload
-  | SearchEnrichJobPayload;
+  | SearchEnrichJobPayload
+  | CatalogReindexJobPayload;

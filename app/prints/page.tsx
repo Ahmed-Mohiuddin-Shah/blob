@@ -1,10 +1,16 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { getSession, signInUrl } from "@/lib/auth";
 import { canUpload } from "@/lib/capabilities";
 import { PRINT_STATUS } from "@/lib/prints";
 import { prisma } from "@/lib/prisma";
 import { PrintsLibrary } from "@/components/prints-library";
+
+export const metadata: Metadata = {
+  title: "Prints",
+  description: "Printable sticker sheets and packs on BLOB.",
+};
 
 export default async function PrintsPage({
   searchParams,

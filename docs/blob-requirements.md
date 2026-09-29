@@ -11,6 +11,8 @@ This document freezes v1. Implement against this file and the DBML. Do not reope
 
 ---
 
+
+
 ## 1. Product summary
 
 BLOB is a **public sticker library and sticker creation/browsing website** with two major areas:
@@ -39,35 +41,35 @@ Search must find what the user typed (title, aliases, tags, categories, keywords
 ## 2. Locked decisions
 
 
-| Decision                              | Lock                                                                                                                                          |
-| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| Authorization                         | `role` + `account_status`, not `is_admin` / `is_member` booleans                                                                              |
-| Identity                              | **Zitadel only** (OIDC + PKCE via Auth.js). No Credentials provider, no Google/GitHub/etc., no magic link, no local password or register form |
-| Sticker media                         | `stickers` → composition + many `media_assets` (derivatives) + shared `assets` (originals); never `image_path` / `gif_path` / `video_path` columns |
-| Media mutation                        | **Original binaries** are immutable after upload. **Composition document** is the editable source of truth (new revision on save). **Derivatives** (`image` / `chat` / `thumbnail` / …) are regenerable cache from the current revision — not the SoT. Metadata remains editable. |
-| Composition SoT                       | Own versioned **BLOB Composition JSON** (canonical 1024×1024). Never persist Konva / Fabric / Polotno / tldraw canvas JSON as the document. |
-| Editor required                       | Every create and remix goes through the composition editor. No quick `fit_mode`-only upload path. Framing = document crop/transform + canvas background (`transparent` or `#RRGGBB`). |
-| Preview ≡ export                      | One composition engine / draw contract; browser preview, Flutter preview, and server derivatives share the same document semantics. |
-| Preview sizes                         | Live previews and stored derivatives: **chat** 128×128, **thumbnail** 256×256, **full** (`image`) 1024×1024. |
-| Remix                                 | Edit from a deep-copy of the parent composition; on save bake the composed export into a **new** original `assets` row (`createFromSource`). Dual provenance: `stickers.remixed_from_sticker_id` (immediate parent, UI) **and** `composition_parents`. Parent binaries and later edits stay untouched. |
-| Portable packages                     | Consume published **`blob-editor`** (npm) / Flutter package — do not vend or fork. Schema + core ops + React `BlobEditor`; Node worker uses `blob-editor/encode` only (never in client bundles). Host docs: [`docs/diff.md`](diff.md), [`docs/print-layout-host.md`](print-layout-host.md). |
-| Moderation previews                   | Open queues (pending / needs_edit) may show still diffs (previous vs current revision). **No** JSON document-diff UI. On **approve**, discard `media_assets` (and GLASS objects) for non-current revisions. Admin history is action + note only — no retained preview images. |
-| Prints UI                             | Sheets-first: `PrintLayout` create flow, packs of sheets, PDF/PNG downloads, favourites + collections membership. |
-| Mobile-first editor                   | Phone / narrow viewports first-class: touch gestures, ~44px targets, no hover-only controls, bottom sheets / compact bars; three previews usable on small screens. |
-| Primary category                      | One `category_id` per sticker + many tags                                                                                                     |
-| Tags                                  | First-class `tags` table + pivot; not a comma string on the sticker row                                                                       |
-| Storage                               | Postgres = metadata + GLASS UUIDs; binaries only in GLASS                                                                                     |
-| Search v1                             | PostgreSQL FTS + `pg_trgm` (Meilisearch planned post-v1)                                                                                      |
-| Prints                                | Sheets-first: sheets store PrintDocument + GLASS outputs; packs reference sheets (min 2); always public; async encode; presets from package |
-| Video audio                           | Optional: preserve when present; not required; do not strip by default                                                                        |
-| Email verification                    | Deferred (column reserved; no v1 flow required)                                                                                               |
-| Favorites / collections               | Tables + UI **Must** this pass. Collections always public; favourites private (profile). Tag aliases still deferred.                           |
-| Sticker Sheet vs Pack                 | **Sheet** = single printable page (PrintDocument + PNG/PDF). **Pack** = bundle of ≥2 sheets (sheet FKs). Layout presets = package only. |
-| Tag display names                     | Stored **ALL CAPS** on save (`ANGRY CAT`); slug remains lowercase                                                                             |
-| Moderation history                    | Shared polymorphic `moderation_events` (stickers + attribution claims now; collections later). Sheets/packs are always public — no moderation queue. |
-| Attribution on upload                 | Required Yes/No; Yes requires `author_name` (label) + `source_url` (http/https)                                 |
-| Attribution claims                    | Signed-in only; admin approve auto-applies proposed label+URL; approve/reject require admin note               |
-| Domain enums                          | Closed vocabularies (`role`, `account_status`, `visibility`, `moderation_status`, `processing_status`, media kinds/statuses, claim reason/status, favourite/moderation subject types, moderation actions) live as shared `as const` enums in `lib/`. Call sites must import them — raw string literals for those fields are forbidden. |
+| Decision                | Lock                                                                                                                                                                                                                                                                                                                                   |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Authorization           | `role` + `account_status`, not `is_admin` / `is_member` booleans                                                                                                                                                                                                                                                                       |
+| Identity                | **Zitadel only** (OIDC + PKCE via Auth.js). No Credentials provider, no Google/GitHub/etc., no magic link, no local password or register form                                                                                                                                                                                          |
+| Sticker media           | `stickers` → composition + many `media_assets` (derivatives) + shared `assets` (originals); never `image_path` / `gif_path` / `video_path` columns                                                                                                                                                                                     |
+| Media mutation          | **Original binaries** are immutable after upload. **Composition document** is the editable source of truth (new revision on save). **Derivatives** (`image` / `chat` / `thumbnail` / …) are regenerable cache from the current revision — not the SoT. Metadata remains editable.                                                      |
+| Composition SoT         | Own versioned **BLOB Composition JSON** (canonical 1024×1024). Never persist Konva / Fabric / Polotno / tldraw canvas JSON as the document.                                                                                                                                                                                            |
+| Editor required         | Every create and remix goes through the composition editor. No quick `fit_mode`-only upload path. Framing = document crop/transform + canvas background (`transparent` or `#RRGGBB`).                                                                                                                                                  |
+| Preview ≡ export        | One composition engine / draw contract; browser preview, Flutter preview, and server derivatives share the same document semantics.                                                                                                                                                                                                    |
+| Preview sizes           | Live previews and stored derivatives: **chat** 128×128, **thumbnail** 256×256, **full** (`image`) 1024×1024.                                                                                                                                                                                                                           |
+| Remix                   | Edit from a deep-copy of the parent composition; on save bake the composed export into a **new** original `assets` row (`createFromSource`). Dual provenance: `stickers.remixed_from_sticker_id` (immediate parent, UI) **and** `composition_parents`. Parent binaries and later edits stay untouched.                                 |
+| Portable packages       | Consume published `blob-editor` (npm) / Flutter package — do not vend or fork. Schema + core ops + React `BlobEditor`; Node worker uses `blob-editor/encode` only (never in client bundles). Host docs: `[docs/diff.md](diff.md)`, `[docs/print-layout-host.md](print-layout-host.md)`.                                                |
+| Moderation previews     | Open queues (pending / needs_edit) may show still diffs (previous vs current revision). **No** JSON document-diff UI. On **approve**, discard `media_assets` (and GLASS objects) for non-current revisions. Admin history is action + note only — no retained preview images.                                                          |
+| Prints UI               | Sheets-first: `PrintLayout` create flow, packs of sheets, PDF/PNG downloads, favourites + collections membership.                                                                                                                                                                                                                      |
+| Mobile-first editor     | Phone / narrow viewports first-class: touch gestures, ~44px targets, no hover-only controls, bottom sheets / compact bars; three previews usable on small screens.                                                                                                                                                                     |
+| Primary category        | One `category_id` per sticker + many tags                                                                                                                                                                                                                                                                                              |
+| Tags                    | First-class `tags` table + pivot; not a comma string on the sticker row                                                                                                                                                                                                                                                                |
+| Storage                 | Postgres = metadata + GLASS UUIDs; binaries only in GLASS                                                                                                                                                                                                                                                                              |
+| Search v1               | PostgreSQL FTS + `pg_trgm` (Meilisearch planned post-v1)                                                                                                                                                                                                                                                                               |
+| Prints                  | Sheets-first: sheets store PrintDocument + GLASS outputs; packs reference sheets (min 2); always public; async encode; presets from package                                                                                                                                                                                            |
+| Video audio             | Optional: preserve when present; not required; do not strip by default                                                                                                                                                                                                                                                                 |
+| Email verification      | Deferred (column reserved; no v1 flow required)                                                                                                                                                                                                                                                                                        |
+| Favorites / collections | Tables + UI **Must** this pass. Collections always public; favourites private (profile). Tag aliases still deferred.                                                                                                                                                                                                                   |
+| Sticker Sheet vs Pack   | **Sheet** = single printable page (PrintDocument + PNG/PDF). **Pack** = bundle of ≥2 sheets (sheet FKs). Layout presets = package only.                                                                                                                                                                                                |
+| Tag display names       | Stored **ALL CAPS** on save (`ANGRY CAT`); slug remains lowercase                                                                                                                                                                                                                                                                      |
+| Moderation history      | Shared polymorphic `moderation_events` (stickers + attribution claims now; collections later). Sheets/packs are always public — no moderation queue.                                                                                                                                                                                   |
+| Attribution on upload   | Required Yes/No; Yes requires `author_name` (label) + `source_url` (http/https)                                                                                                                                                                                                                                                        |
+| Attribution claims      | Signed-in only; admin approve auto-applies proposed label+URL; approve/reject require admin note                                                                                                                                                                                                                                       |
+| Domain enums            | Closed vocabularies (`role`, `account_status`, `visibility`, `moderation_status`, `processing_status`, media kinds/statuses, claim reason/status, favourite/moderation subject types, moderation actions) live as shared `as const` enums in `lib/`. Call sites must import them — raw string literals for those fields are forbidden. |
 
 
 ---
@@ -100,20 +102,17 @@ Search must find what the user typed (title, aliases, tags, categories, keywords
 ### 4.1 User role
 
 
-| Value         | Meaning                                                                 |
-| ------------- | ----------------------------------------------------------------------- |
-| `user`        | Registered spectator (default after register)                           |
-| `member`      | Approved contributor; may upload                                        |
-| `admin`       | Moderate content and manage member-level users                          |
-| `superadmin`  | Full management; sole role that may promote/demote admins               |
+| Value        | Meaning                                                   |
+| ------------ | --------------------------------------------------------- |
+| `user`       | Registered spectator (default after register)             |
+| `member`     | Approved contributor; may upload                          |
+| `admin`      | Moderate content and manage member-level users            |
+| `superadmin` | Full management; sole role that may promote/demote admins |
 
 
 **Bootstrap (locked):** the first local user created on signup is assigned `superadmin` (Zitadel grant + local mirror). If an existing deployment has admins but no `superadmin`, the lowest-`id` `admin` is promoted once on sign-in.
 
 **Role-change guards (locked):** nobody may change their own role or their own `account_status`. Only `superadmin` may change `account_status` (for others). Only `superadmin` may assign or revoke `admin` in-app. `superadmin` itself is never assignable via BLOB (UI or API) — only via Zitadel (or first-signup / one-shot bootstrap). Demoting the last `superadmin` is forbidden. Admins may only set `user` / `member` on targets that are already `user` / `member`.
-
-
-
 
 ### 4.2 Account status
 
@@ -222,8 +221,6 @@ A **sticker** is the primary library content object. Behind it is a **BLOB Compo
 
 Published face of a sticker = derivatives of the composition’s **current revision**.
 
-
-
 ### Content representations
 
 ```
@@ -240,7 +237,7 @@ Sticker
         └── video      (≤20s square mp4 when applicable)
 ```
 
-Schema kinds via `media_assets.kind`: `image` | `chat` | `thumbnail` | `mask` | `gif` | `video`. Immutable originals live in **`assets`** (not duplicated as SoT in `media_assets`). Which derived kinds are produced depends on the composition (static → image+chat+thumbnail; **gif source → gif**; **video source → video + gif** lightweight silent derivative + still previews).
+Schema kinds via `media_assets.kind`: `image` | `chat` | `thumbnail` | `mask` | `gif` | `video`. Immutable originals live in `assets` (not duplicated as SoT in `media_assets`). Which derived kinds are produced depends on the composition (static → image+chat+thumbnail; **gif source → gif**; **video source → video + gif** lightweight silent derivative + still previews).
 
 ---
 
@@ -249,8 +246,6 @@ Schema kinds via `media_assets.kind`: `image` | `chat` | `thumbnail` | `mask` | 
 ## 7. BLOB Composition
 
 A sticker is one published/rendered composition. The **document** stores intent (transforms, crop, text, masks, timing) — never embedded pixels or library canvas blobs.
-
-
 
 ### 7.1 Canonical document
 
@@ -316,11 +311,9 @@ A sticker is one published/rendered composition. The **document** stores intent 
 
 Do **not** store objects as `type: "reference"` to a parent composition for rendering.
 
-
-
 ### 7.4 Smart cutout
 
-First-class editor operation (image stickers only; see [`docs/diff.md`](diff.md)):
+First-class editor operation (image stickers only; see `[docs/diff.md](diff.md)`):
 
 - **Brush add/remove** + **polygon keep-region** in the editor; no ML / auto remove-BG in package or host for this pass.
 - Mask stored as asset / `mask_asset_id` on the media object; optional outline stroke (e.g. white border).
@@ -342,30 +335,32 @@ Composition engine (shared draw contract)
 
 Editor must show three live previews of the **same** composer output:
 
-| Label | Size | Typical use |
-| ----- | ---- | ----------- |
-| Chat | 128×128 | Messaging / compact |
-| Thumbnail | 256×256 | Browse cards |
-| Full | 1024×1024 | Detail / download still |
+
+| Label     | Size      | Typical use             |
+| --------- | --------- | ----------------------- |
+| Chat      | 128×128   | Messaging / compact     |
+| Thumbnail | 256×256   | Browse cards            |
+| Full      | 1024×1024 | Detail / download still |
+
 
 Do not maintain a separate “pretty preview” path that diverges from export.
-
-
 
 ### 7.6 Portable packages (extractability)
 
 Cross-platform contract = Composition JSON **v2** + `version`. Host consumes published packages — do not vend or fork.
 
-| Package | Entry | Role |
-| ------- | ----- | ---- |
-| **npm `blob-editor`** | `blob-editor/core` | Validate, ops, `remixDeepCopy`, `renderFrame` / `renderExports` |
-| | `blob-editor/react` | Drop-in `BlobEditor` (+ CSS); theme via primary/secondary |
-| | `blob-editor/encode` | **Node worker only** — `encodeComposition` (gif/mp4); never browser |
-| | `blob-editor/print` | PrintDocument helpers + host `PrintLayout` |
-| **Flutter/Dart** | `blob_editor` | Same document version; painter/render parity |
+
+| Package               | Entry                | Role                                                                |
+| --------------------- | -------------------- | ------------------------------------------------------------------- |
+| **npm** `blob-editor` | `blob-editor/core`   | Validate, ops, `remixDeepCopy`, `renderFrame` / `renderExports`     |
+|                       | `blob-editor/react`  | Drop-in `BlobEditor` (+ CSS); theme via primary/secondary           |
+|                       | `blob-editor/encode` | **Node worker only** — `encodeComposition` (gif/mp4); never browser |
+|                       | `blob-editor/print`  | PrintDocument helpers + host `PrintLayout`                          |
+| **Flutter/Dart**      | `blob_editor`        | Same document version; painter/render parity                        |
+
 
 - UI chrome may differ per platform; **document + rendered pixels** must match for the same inputs.
-- Host integration notes: [`docs/diff.md`](diff.md) (composition), [`docs/print-layout-host.md`](print-layout-host.md) (prints — later).
+- Host integration notes: `[docs/diff.md](diff.md)` (composition), `[docs/print-layout-host.md](print-layout-host.md)` (prints — later).
 
 
 
@@ -420,24 +415,20 @@ On approve + public: link public-facing assets to app-owned public PRISM
 
 Create/save **must not** block the HTTP request on FFmpeg / heavy segmentation / full export. Show “Processing…” while `processing_status = processing`.
 
-
-
 ### 8.2 Square standardization
 
 All stickers are **1:1 square**. Canonical document is **1024×1024**. The user chooses how content fills the square (transform/crop) and whether empty space is **transparent** or a **solid color**. Do not apply a silent center-crop outside the editor.
 
-
-
 ### 8.3 Edit rules (locked)
 
 
-| What                                                                  | When editable                                                                              |
-| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| Original `assets` binaries                                            | **Create/upload only** — immutable afterward                                               |
+| What                                                                  | When editable                                                                                                              |
+| --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Original `assets` binaries                                            | **Create/upload only** — immutable afterward                                                                               |
 | Composition document                                                  | New **revision** on save (create and post-create); owner **or linked Blobber user** for credited stickers; admin as needed |
-| Derived `media_assets`                                                | Regenerated from current revision (cache); not hand-edited                                 |
-| Title, description, tags, category, visibility, attribution, keywords | After create: owner or linked Blobber user (member) for credited stickers; admin for any — subject to moderation rules |
-| Replacing original binary                                             | **Out of scope** — reject/delete and create/remix anew if needed                         |
+| Derived `media_assets`                                                | Regenerated from current revision (cache); not hand-edited                                                                 |
+| Title, description, tags, category, visibility, attribution, keywords | After create: owner or linked Blobber user (member) for credited stickers; admin for any — subject to moderation rules     |
+| Replacing original binary                                             | **Out of scope** — reject/delete and create/remix anew if needed                                                           |
 
 
 Metadata edits: client → Next.js Route Handler / Server Action → PostgreSQL.  
@@ -562,8 +553,6 @@ First-class feature. Index / query against:
 
 Tag alias expansion in query planning is **Should-have** (table exists in schema).
 
-
-
 ### Planned: Meilisearch (post-v1)
 
 Meilisearch is the intended next search engine (replaces or augments PG FTS). Same field contract: title, aliases, tags, categories, keywords, author. Tag **display** names stay ALL CAPS in Postgres; search indexes treat them case-insensitively. Sync/index workers are out of scope for v1.
@@ -587,11 +576,11 @@ Do not store tags as a comma string on the sticker row.
 ## 13. Favourites, likes tally, collections
 
 
-| Feature     | Semantics                         | v1                                                              |
-| ----------- | --------------------------------- | --------------------------------------------------------------- |
-| Favorite    | Private bookmark “find again”     | **Must** — polymorphic `favorites` + Favourites UI at `/profile/favourites` |
-| Like tally  | Public count of sticker favourites | **Must** — denormalized `stickers.likes_count` (no separate `sticker_likes` table) |
-| Collections | Public named lists                | **Must** — always public; unique name + slug; tags; **1–60** items; not deletable; `/collections` |
+| Feature     | Semantics                          | v1                                                                                                |
+| ----------- | ---------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Favorite    | Private bookmark “find again”      | **Must** — polymorphic `favorites` + Favourites UI at `/profile/favourites`                       |
+| Like tally  | Public count of sticker favourites | **Must** — denormalized `stickers.likes_count` (no separate `sticker_likes` table)                |
+| Collections | Public named lists                 | **Must** — always public; unique name + slug; tags; **1–60** items; not deletable; `/collections` |
 
 
 There is **no** separate like action. Favouriting a sticker increments `likes_count`; unfavouriting decrements (clamped at 0). Favourites remain polymorphic (`subject_type` + `subject_id`); only sticker favourites affect `likes_count`.
@@ -601,15 +590,17 @@ There is **no** separate like action. Favouriting a sticker increments `likes_co
 - Always **public** (no visibility column).
 - **Globally unique** `name` and `slug` across all users.
 - Tags via `collection_tags` (reuse `tags` table; ALL CAPS names).
-- Members: polymorphic `collection_items` — `sticker` \| `sticker_sheet` \| `sticker_pack`, **1–60** items (cannot delete the collection; cannot remove the last item).
+- Members: polymorphic `collection_items` — `sticker`  `sticker_sheet`  `sticker_pack`, **1–60** items (cannot delete the collection; cannot remove the last item).
 - Browse `/collections` with search + infinite-scroll cursor pagination.
 - Card/detail: `PlayingCardsFan` adds a subject to a collection (modal: pick own / create). Owner can remove stickers down to one remaining item.
 - Detail CTAs: make sheet from stickers (max 20), make/combine pack from sheets/packs.
 
+
+
 ### Favourites
 
-- Private to the signed-in user; page at **`/profile/favourites`** (profile sub-nav only; not main header).
-- `subject_type`: `sticker` \| `collection` \| `sticker_sheet` \| `sticker_pack`.
+- Private to the signed-in user; page at `/profile/favourites` (profile sub-nav only; not main header).
+- `subject_type`: `sticker`  `collection`  `sticker_sheet`  `sticker_pack`.
 - UI: all four subject types.
 - Searchable (by subject title) + infinite-scroll cursor pagination.
 - Card/detail: `Heart` toggles favourite; sticker detail shows live **likes** count (`likes_count`).
@@ -624,16 +615,20 @@ Sheets-first product UI (this pass).
 
 ### Glossary (locked)
 
-| Term | Meaning |
-| ---- | ------- |
+
+| Term              | Meaning                                                                                               |
+| ----------------- | ----------------------------------------------------------------------------------------------------- |
 | **Sticker Sheet** | A single printable page — one PDF page **or** one sheet image/PNG; first-class row with PrintDocument |
-| **Sticker Pack** | A bundle of ≥2 sheets; stores ordered sheet FKs; combined multi-page PDF + contact-sheet PNG |
-| **Print Layout** | Geometry preset (A4/A5 from `blob-editor/print`) — not a DB entity |
+| **Sticker Pack**  | A bundle of ≥2 sheets; stores ordered sheet FKs; combined multi-page PDF + contact-sheet PNG          |
+| **Print Layout**  | Geometry preset (A4/A5 from `blob-editor/print`) — not a DB entity                                    |
+
 
 ```
 Stickers (1–20) → PrintLayout → Sticker Sheet (pending → encodePrint → ready)
 Sheets (≥2) → Sticker Pack (pending → combinePdfs/combinePngsGrid → ready)
 ```
+
+
 
 ### Sheet
 
@@ -808,7 +803,7 @@ GET    /api/packs/{id}/stickers
 - [x] Mobile-usable web composition editor (touch, three live previews)
 - [x] Remix snapshot (edit deep-copy → bake own original + `remixed_from_sticker_id` + `composition_parents`)
 - [x] Smart cutout (brush + polygon; no ML auto-BG)
-- [x] Consume **`blob-editor`** npm (`react` client + `encode` worker)
+- [x] Consume `blob-editor` npm (`react` client + `encode` worker)
 - [x] Video ≤20s; audio preserved when present
 - [x] Async render/processing + admin moderation (approve / request-edit / purge-reject)
 - [x] Open-queue still diffs; discard non-current-revision derivatives on approve
@@ -829,7 +824,7 @@ GET    /api/packs/{id}/stickers
 
 ### Should have (after Must)
 
-- [ ] Flutter editor shell consuming published Dart package and APIs exposed for Flutter app with Deeplink support
+- [ ] Flutter editor shell consuming published Dart package and APIs exposed for Flutter app with chat keyboard optimized APIs
 - [ ] Server composer parity hardening / golden-image tests across platforms
 - [x] Tag aliases table + expansion in search
 - [x] **Meilisearch** search (replace/augment PG FTS)
