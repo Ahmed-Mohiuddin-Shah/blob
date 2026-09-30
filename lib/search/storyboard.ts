@@ -288,6 +288,10 @@ async function compositeStoryboard(frameBufs: Buffer[]): Promise<Buffer> {
     const x = col * TILE;
     const y = row * TILE;
     ctx.drawImage(img, x, y, TILE, TILE);
+    // Frame border — helps the vision model see cell edges (not sticker content).
+    ctx.strokeStyle = "#000";
+    ctx.lineWidth = 4;
+    ctx.strokeRect(x + 1, y + 1, TILE - 2, TILE - 2);
     // Sequence badge — bitmap digits (no font dependency)
     ctx.fillStyle = "rgba(0,0,0,0.6)";
     ctx.fillRect(x + 4, y + 4, 22, 26);
