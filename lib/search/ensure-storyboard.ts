@@ -60,9 +60,7 @@ export async function ensureStickerStoryboard(
     filename: `${slug}-storyboard.jpg`,
     fileExtension: "jpg",
   });
-  const objectId = (up as { object_id?: string; id?: string }).object_id ??
-    (up as { id?: string }).id;
-  if (!objectId) throw new Error("Glass upload missing object id");
+  const objectId = up.object_id;
 
   await prisma.mediaAsset.upsert({
     where: {
