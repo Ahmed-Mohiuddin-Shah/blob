@@ -1,3 +1,4 @@
+import { blobberMediaUrl } from "@/lib/blobber-media-url";
 import { COLLECTION_ITEM } from "@/lib/collections";
 import { MODERATION_STATUS } from "@/lib/moderation";
 import { PRINT_STATUS } from "@/lib/prints";
@@ -121,6 +122,7 @@ export async function buildCollectionSearchDoc(collectionId: bigint) {
     include: {
       items: {
         where: { subjectType: COLLECTION_ITEM.sticker },
+        orderBy: { sortOrder: "asc" },
         take: 40,
       },
     },
@@ -133,9 +135,10 @@ export async function buildCollectionSearchDoc(collectionId: bigint) {
           id: { in: stickerIds },
           searchMetaStatus: SEARCH_META_STATUS.approved,
         },
-        select: { title: true, aiCaption: true },
+        select: { id: true, title: true, aiCaption: true },
       })
     : [];
+  const coverId = stickerIds[0];
   return {
     id: c.id.toString(),
     slug: c.slug,
@@ -145,6 +148,9 @@ export async function buildCollectionSearchDoc(collectionId: bigint) {
       .map((s) => `${s.title} ${s.aiCaption ?? ""}`)
       .join(" ")
       .slice(0, 4000),
+    previewUrl: coverId
+      ? `/api/stickers/${coverId}/media/thumbnail`
+      : "",
     likesCount: Number(c.likesCount),
     updatedAt: c.updatedAt.getTime(),
   };
@@ -181,6 +187,7 @@ export async function buildPrintSearchDoc(
         .map((x) => `${x.sticker.title} ${x.sticker.aiCaption ?? ""}`)
         .join(" ")
         .slice(0, 4000),
+      previewUrl: `/api/sheets/${sheet.id}/media/png`,
       likesCount: Number(sheet.likesCount),
       updatedAt: sheet.updatedAt.getTime(),
     };
@@ -219,6 +226,7 @@ export async function buildPrintSearchDoc(
     name: pack.name,
     description: pack.description ?? "",
     memberText,
+    previewUrl: `/api/packs/${pack.id}/media/png`,
     likesCount: Number(pack.likesCount),
     updatedAt: pack.updatedAt.getTime(),
   };
@@ -248,5 +256,6 @@ export async function buildBlobberSearchDoc(blobberId: bigint) {
     slug: b.slug,
     bio: b.description ?? "",
     stickerCount: b._count.stickers,
+    previewUrl: blobberMediaUrl(b.avatarGlassObjectId) ?? "",
   };
 }

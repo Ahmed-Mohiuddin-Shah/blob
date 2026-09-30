@@ -262,7 +262,17 @@ export function SiteSearch({
           const res = await fetch("/api/search/agent", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ q: nextQ }),
+            body: JSON.stringify({
+              q: nextQ,
+              ...(imageMedia
+                ? {
+                    media: {
+                      mime: imageMedia.mime,
+                      data: imageMedia.data,
+                    },
+                  }
+                : {}),
+            }),
           });
           const data = await parseJsonResponse(res);
           if (!res.ok) throw new Error(String(data.error || "Agent search failed"));
@@ -420,6 +430,11 @@ export function SiteSearch({
         imagePreviewUrl={imagePreview}
         onClearImagePreview={clearImage}
         onSubmit={(next) => {
+          // Agent + attached pic → agent fuse (not pure image mode).
+          if (mode === "agent") {
+            runSearch(next, "agent");
+            return;
+          }
           if (imageMedia && canImage) {
             runImageSearch(imageMedia, next);
             return;
@@ -434,7 +449,15 @@ export function SiteSearch({
           );
         }}
         onImageSearch={(file) => {
-          void fileToHandoff(file).then((media) => runImageSearch(media, q));
+          void fileToHandoff(file).then((media) => {
+            setImageMedia(media);
+            setImagePreview(`data:${media.mime};base64,${media.data}`);
+            if (mode === "agent") {
+              runSearch(q, "agent");
+              return;
+            }
+            runImageSearch(media, q);
+          });
         }}
         onAgentSearch={(next) => {
           setMode("agent");
@@ -458,6 +481,10 @@ export function SiteSearch({
         query={q}
         onPick={(title) => {
           setQ(title);
+          if (mode === "agent") {
+            runSearch(title, "agent");
+            return;
+          }
           if (imageMedia && canImage) {
             runImageSearch(imageMedia, title);
             return;
@@ -504,14 +531,14 @@ export function SiteSearch({
                   runSearch(q, "agent");
                   return;
                 }
-                // Image attached → always image(+text); no manual mode pick needed.
-                if (imageMedia && canImage && m.id !== "image") {
-                  setMode("image");
-                  runImageSearch(imageMedia, q);
-                  return;
-                }
                 if (m.id === "image") {
                   if (imageMedia) runImageSearch(imageMedia, q);
+                  return;
+                }
+                // Image attached on text modes → image(+text). Agent handled above.
+                if (imageMedia && canImage) {
+                  setMode("image");
+                  runImageSearch(imageMedia, q);
                   return;
                 }
                 runSearch(q, m.id);

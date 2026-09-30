@@ -1,3 +1,4 @@
+import { blobberMediaUrl } from "@/lib/blobber-media-url";
 import { ensureMeiliIndexes } from "@/lib/meili/bootstrap";
 import { getMeili, isMeiliConfigured } from "@/lib/meili/client";
 import { MEILI_EMBEDDER, MEILI_INDEX } from "@/lib/meili/indexes";
@@ -22,6 +23,86 @@ export type FederatedHit = {
   kind?: string;
   [key: string]: unknown;
 };
+
+/** Fill previewUrl when Meili docs predate the field (no reindex required). */
+async function hydratePreviewUrls(hits: FederatedHit[]): Promise<FederatedHit[]> {
+  const needColl = new Set<string>();
+  const needBlob = new Set<string>();
+  for (const h of hits) {
+    if (h.previewUrl) continue;
+    if (h.index === MEILI_INDEX.prints) {
+      if (h.id.startsWith("sheet-")) {
+        h.previewUrl = `/api/sheets/${h.id.slice(6)}/media/png`;
+      } else if (h.id.startsWith("pack-")) {
+        h.previewUrl = `/api/packs/${h.id.slice(5)}/media/png`;
+      }
+    } else if (h.index === MEILI_INDEX.stickers) {
+      h.previewUrl = `/api/stickers/${h.id}/media/thumbnail`;
+    } else if (h.index === MEILI_INDEX.collections) {
+      needColl.add(h.id);
+    } else if (h.index === MEILI_INDEX.blobbers) {
+      needBlob.add(h.id);
+    }
+  }
+
+  if (needColl.size) {
+    const ids = [...needColl].flatMap((id) => {
+      try {
+        return [BigInt(id)];
+      } catch {
+        return [];
+      }
+    });
+    if (ids.length) {
+      const items = await prisma.collectionItem.findMany({
+        where: { collectionId: { in: ids }, subjectType: "sticker" },
+        orderBy: { sortOrder: "asc" },
+        select: { collectionId: true, subjectId: true },
+      });
+      const cover = new Map<string, string>();
+      for (const it of items) {
+        const key = it.collectionId.toString();
+        if (!cover.has(key)) cover.set(key, it.subjectId.toString());
+      }
+      for (const h of hits) {
+        if (h.index !== MEILI_INDEX.collections || h.previewUrl) continue;
+        const stickerId = cover.get(h.id);
+        if (stickerId) {
+          h.previewUrl = `/api/stickers/${stickerId}/media/thumbnail`;
+        }
+      }
+    }
+  }
+
+  if (needBlob.size) {
+    const ids = [...needBlob].flatMap((id) => {
+      try {
+        return [BigInt(id)];
+      } catch {
+        return [];
+      }
+    });
+    if (ids.length) {
+      const rows = await prisma.blobber.findMany({
+        where: { id: { in: ids } },
+        select: { id: true, avatarGlassObjectId: true },
+      });
+      const avatars = new Map(
+        rows.map((b) => [
+          b.id.toString(),
+          blobberMediaUrl(b.avatarGlassObjectId) ?? "",
+        ]),
+      );
+      for (const h of hits) {
+        if (h.index !== MEILI_INDEX.blobbers || h.previewUrl) continue;
+        const url = avatars.get(h.id);
+        if (url) h.previewUrl = url;
+      }
+    }
+  }
+
+  return hits;
+}
 
 /** Reciprocal rank fusion — Meili can't take image + q in one query. */
 export function mergeRrfHits(
@@ -80,7 +161,9 @@ export async function meiliFederatedSearch(opts: {
     ]);
     return {
       engine: byImage.engine === "meili" || byText.engine === "meili" ? "meili" : "prisma",
-      hits: mergeRrfHits([byImage.hits, byText.hits], limit),
+      hits: await hydratePreviewUrls(
+        mergeRrfHits([byImage.hits, byText.hits], limit),
+      ),
       facetDistribution:
         byImage.facetDistribution ?? byText.facetDistribution,
     };
@@ -193,11 +276,18 @@ export async function meiliFederatedSearch(opts: {
         .catch(() => {});
     }
 
-    return { engine: "meili", hits, facetDistribution };
+    return {
+      engine: "meili",
+      hits: await hydratePreviewUrls(hits),
+      facetDistribution,
+    };
   } catch (err) {
     console.error("Meili search failed, Prisma fallback:", err);
     logMeiliError("federated search", err);
-    return { engine: "prisma", hits: await prismaFallback(q, limit) };
+    return {
+      engine: "prisma",
+      hits: await hydratePreviewUrls(await prismaFallback(q, limit)),
+    };
   }
 }
 

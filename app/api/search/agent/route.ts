@@ -11,19 +11,40 @@ import {
   runAgentSearchTool,
   SEARCH_AGENT_TOOLS,
   searchCapabilitiesPayload,
+  type AgentTextMode,
 } from "@/lib/search/agent-tools";
 import {
   getResolvedSearchPrompts,
   searchAgentPromptFromResolved,
 } from "@/lib/search/prompts";
-import { meiliFederatedSearch } from "@/lib/search/query";
+import {
+  meiliFederatedSearch,
+  mergeRrfHits,
+  type FederatedHit,
+} from "@/lib/search/query";
 import { parseSearchAgentPlan } from "@/lib/search/vision-parse";
 
 const MAX_TOOL_DEPTH = 2;
 
+type MediaIn = { mime: string; data: string };
+
+async function prepareMedia(media?: MediaIn | null): Promise<MediaIn | null> {
+  if (!media?.data || !media.mime) return null;
+  const { isMotionMime, storyboardBase64 } = await import(
+    "@/lib/search/storyboard"
+  );
+  if (isMotionMime(media.mime)) {
+    const jpegB64 = await storyboardBase64(
+      Buffer.from(media.data, "base64"),
+      media.mime,
+    );
+    return { mime: "image/jpeg", data: jpegB64 };
+  }
+  return media;
+}
+
 /**
- * Agentic search: tool loop (depth ≤ 2) then return hits.
- * Falls back to single-shot JSON plan if tools are ignored.
+ * Agentic search: tool loop (depth ≤ 2), then fuse with image search if media attached.
  */
 export async function POST(request: Request) {
   const session = await getSession(request);
@@ -54,26 +75,41 @@ export async function POST(request: Request) {
 
   const body = (await request.json().catch(() => null)) as {
     q?: string;
+    media?: MediaIn;
   } | null;
-  const userQ = body?.q?.trim();
-  if (!userQ) {
-    return NextResponse.json({ error: "q required" }, { status: 400 });
+  const userQ = body?.q?.trim() ?? "";
+  let media: MediaIn | null = null;
+  try {
+    media = await prepareMedia(body?.media ?? null);
+  } catch (err) {
+    console.warn("agent media prepare failed:", err);
+  }
+
+  if (!userQ && !media) {
+    return NextResponse.json(
+      { error: "q or media required" },
+      { status: 400 },
+    );
   }
 
   const model = process.env.OLLAMA_AGENT_MODEL?.trim() || "qwen2.5:3b";
   const prompts = await getResolvedSearchPrompts();
   const steps: string[] = ["peeking at what we can search…"];
+  if (media) steps.push("got your pic — will fuse lookalikes too…");
 
   const messages: ChatMessage[] = [
     {
       role: "system",
       content: `${prompts.agent.trim()}
 
-Use tools to inspect capabilities and run searches. Max ${MAX_TOOL_DEPTH} tool rounds.`,
+Use tools to inspect capabilities and run searches. Max ${MAX_TOOL_DEPTH} tool rounds.
+${media ? "The user also attached an image; text search results will be fused with image similarity — still plan a good text/hybrid query." : ""}`,
     },
     {
       role: "user",
-      content: `Find stickers/collections for: ${userQ}`,
+      content: userQ
+        ? `Find stickers/collections for: ${userQ}`
+        : "Find stickers similar to the attached image.",
     },
   ];
 
@@ -101,8 +137,9 @@ Use tools to inspect capabilities and run searches. Max ${MAX_TOOL_DEPTH} tool r
           steps.push("checking modes & filters…");
           toolContent = JSON.stringify(searchCapabilitiesPayload(user));
         } else if (name === "search") {
-          steps.push(`sniffing for “${String(args.q ?? userQ)}”…`);
-          lastSearch = await runAgentSearchTool(args);
+          const q = String(args.q ?? (userQ || "sticker"));
+          steps.push(`sniffing for “${q}”…`);
+          lastSearch = await runAgentSearchTool({ ...args, q });
           toolContent = JSON.stringify({
             engine: lastSearch.engine,
             hitCount: lastSearch.hitCount,
@@ -122,7 +159,6 @@ Use tools to inspect capabilities and run searches. Max ${MAX_TOOL_DEPTH} tool r
       }
     }
 
-    // Optional closing turn without tools (ignored if empty)
     if (usedTools && !lastSearch) {
       steps.push("agent hummed but never searched — using your words…");
     }
@@ -131,50 +167,76 @@ Use tools to inspect capabilities and run searches. Max ${MAX_TOOL_DEPTH} tool r
     usedTools = false;
   }
 
+  let plan: {
+    q: string;
+    mode: AgentTextMode;
+    filter: string;
+  } = {
+    q: userQ || "sticker",
+    mode: "hybrid",
+    filter: "",
+  };
+  let textHits: FederatedHit[] = [];
+  let engine: "meili" | "prisma" = "meili";
+  let facetDistribution: Record<string, Record<string, number>> | undefined;
+
   if (lastSearch) {
-    return NextResponse.json({
-      plan: {
-        q: lastSearch.q,
-        mode: lastSearch.mode,
-        filter: lastSearch.filter,
-      },
-      engine: lastSearch.engine,
-      hits: lastSearch.hitsFull,
-      facetDistribution: lastSearch.facetDistribution,
-      thoughtSteps: steps,
-      usedTools: true,
+    plan = {
+      q: lastSearch.q,
+      mode: lastSearch.mode,
+      filter: lastSearch.filter,
+    };
+    textHits = lastSearch.hitsFull;
+    engine = lastSearch.engine;
+    facetDistribution = lastSearch.facetDistribution;
+  } else {
+    planFallback = true;
+    steps.push("agent shrugged; searching your words as-is…");
+    if (userQ) {
+      const planRaw = await ollamaChat({
+        model,
+        prompt: searchAgentPromptFromResolved(prompts, userQ),
+      });
+      plan = parseSearchAgentPlan(planRaw, userQ);
+    }
+    const result = await meiliFederatedSearch({
+      q: plan.q,
+      mode: plan.mode,
+      filter: plan.filter || undefined,
+      limit: 5,
     });
+    textHits = result.hits;
+    engine = result.engine;
+    facetDistribution = result.facetDistribution;
   }
 
-  // Fallback: legacy single-shot JSON plan
-  planFallback = true;
-  steps.push("agent shrugged; searching your words as-is…");
-  const planRaw = await ollamaChat({
-    model,
-    prompt: searchAgentPromptFromResolved(prompts, userQ),
-  });
-  const plan = parseSearchAgentPlan(planRaw, userQ);
-  if (
-    plan.q === userQ &&
-    plan.mode === "hybrid" &&
-    !plan.filter &&
-    !planRaw.includes("{")
-  ) {
-    steps.push("plan was mush — hybrid with your query…");
+  let hits = textHits;
+  if (media) {
+    steps.push("sniffing lookalikes from your pic…");
+    try {
+      const byImage = await meiliFederatedSearch({
+        q: plan.q || userQ,
+        mode: "image",
+        media,
+        limit: 5,
+      });
+      hits = mergeRrfHits([textHits, byImage.hits], 5);
+      if (byImage.engine === "meili") engine = "meili";
+      facetDistribution = facetDistribution ?? byImage.facetDistribution;
+    } catch (err) {
+      console.warn("agent image fuse failed:", err);
+      steps.push("pic sniff failed — text-only results");
+    }
   }
-
-  const result = await meiliFederatedSearch({
-    q: plan.q,
-    mode: plan.mode,
-    filter: plan.filter || undefined,
-    limit: 5,
-  });
 
   return NextResponse.json({
     plan,
-    ...result,
+    engine,
+    hits,
+    facetDistribution,
     thoughtSteps: steps,
-    usedTools: false,
+    usedTools,
     planFallback,
+    usedImage: Boolean(media),
   });
 }

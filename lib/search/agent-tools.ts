@@ -64,6 +64,8 @@ export function searchCapabilitiesPayload(user: CapabilityUser | null) {
   };
 }
 
+export type AgentTextMode = "keywords" | "hybrid" | "semantic";
+
 export async function runAgentSearchTool(args: {
   q?: string;
   mode?: string;
@@ -71,14 +73,14 @@ export async function runAgentSearchTool(args: {
   limit?: number;
 }) {
   const q = (args.q ?? "").trim();
-  const mode = (
+  const mode: AgentTextMode = (
     ["keywords", "hybrid", "semantic"].includes(args.mode ?? "")
       ? args.mode
       : "hybrid"
-  ) as SearchMode;
+  ) as AgentTextMode;
   const result = await meiliFederatedSearch({
     q,
-    mode,
+    mode: mode as SearchMode,
     filter: args.filter?.trim() || undefined,
     limit: Math.min(5, Math.max(1, Number(args.limit) || 5)),
   });
