@@ -1,10 +1,12 @@
 "use client";
 
+import { ArrowLeftRight, Combine } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { BusyButton } from "./busy-button";
 import { StickerMedia } from "./sticker-media";
 import { TagPillsInput } from "./tag-pills-input";
+import { Tooltip } from "./tooltip";
 
 export type SearchMetaItem = {
   id: string;
@@ -16,6 +18,51 @@ export type SearchMetaItem = {
 };
 
 type View = "live" | "draft";
+type MetaFields = { caption: string; scenario: string; tags: string[] };
+type FieldKey = keyof MetaFields;
+type Stash = Partial<MetaFields>;
+
+function tagsEqual(a: string[], b: string[]) {
+  return a.length === b.length && a.every((t, i) => t === b[i]);
+}
+
+function mergeTags(draft: string[], live: string[]) {
+  const seen = new Set(draft);
+  const out = [...draft];
+  for (const t of live) {
+    if (!seen.has(t)) {
+      seen.add(t);
+      out.push(t);
+    }
+  }
+  return out;
+}
+
+function FieldIconBtn({
+  label,
+  disabled,
+  onClick,
+  children,
+}: {
+  label: string;
+  disabled?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <Tooltip content={label}>
+      <button
+        type="button"
+        aria-label={label}
+        disabled={disabled}
+        onClick={onClick}
+        className="inline-flex h-6 w-6 items-center justify-center rounded-full text-inactive hover:text-primary disabled:opacity-40"
+      >
+        {children}
+      </button>
+    </Tooltip>
+  );
+}
 
 export function SearchMetaModerationList({ items }: { items: SearchMetaItem[] }) {
   const router = useRouter();
@@ -26,9 +73,7 @@ export function SearchMetaModerationList({ items }: { items: SearchMetaItem[] })
       items.map((i) => [i.id, i.draft ? ("draft" as View) : ("live" as View)]),
     ),
   );
-  const [drafts, setDrafts] = useState<
-    Record<string, { caption: string; scenario: string; tags: string[] }>
-  >(() =>
+  const [drafts, setDrafts] = useState<Record<string, MetaFields>>(() =>
     Object.fromEntries(
       items.map((i) => [
         i.id,
@@ -36,6 +81,42 @@ export function SearchMetaModerationList({ items }: { items: SearchMetaItem[] })
       ]),
     ),
   );
+  const [stashById, setStashById] = useState<Record<string, Stash>>({});
+
+  function swapField(id: string, field: FieldKey, live: MetaFields, d: MetaFields) {
+    const stash = stashById[id] ?? {};
+    if (field in stash) {
+      const restored = stash[field]!;
+      setDrafts((prev) => ({
+        ...prev,
+        [id]: { ...d, [field]: restored },
+      }));
+      setStashById((prev) => {
+        const next = { ...(prev[id] ?? {}) };
+        delete next[field];
+        return { ...prev, [id]: next };
+      });
+      return;
+    }
+    const current = d[field];
+    const liveVal = live[field];
+    const same =
+      field === "tags"
+        ? tagsEqual(current as string[], liveVal as string[])
+        : current === liveVal;
+    if (same) return;
+    setStashById((prev) => ({
+      ...prev,
+      [id]: { ...(prev[id] ?? {}), [field]: current },
+    }));
+    setDrafts((prev) => ({
+      ...prev,
+      [id]: {
+        ...d,
+        [field]: field === "tags" ? [...(liveVal as string[])] : liveVal,
+      },
+    }));
+  }
 
   async function approve(id: string) {
     const d = drafts[id];
@@ -124,9 +205,13 @@ export function SearchMetaModerationList({ items }: { items: SearchMetaItem[] })
           tags: [] as string[],
         };
         const showingLive = view === "live" && hasLive;
+        const showFieldActions = hasLive && Boolean(item.draft) && !showingLive;
+        const stash = stashById[item.id] ?? {};
         const caption = showingLive ? item.live.caption : d.caption;
         const scenario = showingLive ? item.live.scenario : d.scenario;
         const tags = showingLive ? item.live.tags : d.tags;
+        const mergedTags = mergeTags(d.tags, item.live.tags);
+        const mergeDisabled = tagsEqual(mergedTags, d.tags);
 
         return (
           <article
@@ -180,7 +265,31 @@ export function SearchMetaModerationList({ items }: { items: SearchMetaItem[] })
                   )}
                 </div>
                 <label className="block text-xs text-inactive">
-                  Caption
+                  <span className="flex items-center gap-1">
+                    Caption
+                    {showFieldActions ? (
+                      <FieldIconBtn
+                        label={
+                          "caption" in stash
+                            ? "Restore draft caption"
+                            : "Use live caption"
+                        }
+                        disabled={
+                          !("caption" in stash) &&
+                          d.caption === item.live.caption
+                        }
+                        onClick={() =>
+                          swapField(item.id, "caption", item.live, d)
+                        }
+                      >
+                        <ArrowLeftRight
+                          className="h-3.5 w-3.5"
+                          strokeWidth={1.75}
+                          aria-hidden
+                        />
+                      </FieldIconBtn>
+                    ) : null}
+                  </span>
                   <textarea
                     className="mt-1 w-full rounded-2xl border border-divider bg-transparent p-2 text-sm text-primary disabled:opacity-70"
                     rows={2}
@@ -195,7 +304,31 @@ export function SearchMetaModerationList({ items }: { items: SearchMetaItem[] })
                   />
                 </label>
                 <label className="block text-xs text-inactive">
-                  Scenario
+                  <span className="flex items-center gap-1">
+                    Scenario
+                    {showFieldActions ? (
+                      <FieldIconBtn
+                        label={
+                          "scenario" in stash
+                            ? "Restore draft scenario"
+                            : "Use live scenario"
+                        }
+                        disabled={
+                          !("scenario" in stash) &&
+                          d.scenario === item.live.scenario
+                        }
+                        onClick={() =>
+                          swapField(item.id, "scenario", item.live, d)
+                        }
+                      >
+                        <ArrowLeftRight
+                          className="h-3.5 w-3.5"
+                          strokeWidth={1.75}
+                          aria-hidden
+                        />
+                      </FieldIconBtn>
+                    ) : null}
+                  </span>
                   <textarea
                     className="mt-1 w-full rounded-2xl border border-divider bg-transparent p-2 text-sm text-primary disabled:opacity-70"
                     rows={2}
@@ -210,7 +343,49 @@ export function SearchMetaModerationList({ items }: { items: SearchMetaItem[] })
                   />
                 </label>
                 <div className="block text-xs text-inactive">
-                  Visual tags
+                  <span className="flex items-center gap-1">
+                    Visual tags
+                    {showFieldActions ? (
+                      <>
+                        <FieldIconBtn
+                          label={
+                            "tags" in stash
+                              ? "Restore draft tags"
+                              : "Use live tags"
+                          }
+                          disabled={
+                            !("tags" in stash) &&
+                            tagsEqual(d.tags, item.live.tags)
+                          }
+                          onClick={() =>
+                            swapField(item.id, "tags", item.live, d)
+                          }
+                        >
+                          <ArrowLeftRight
+                            className="h-3.5 w-3.5"
+                            strokeWidth={1.75}
+                            aria-hidden
+                          />
+                        </FieldIconBtn>
+                        <FieldIconBtn
+                          label="Merge live and draft tags"
+                          disabled={mergeDisabled}
+                          onClick={() =>
+                            setDrafts((prev) => ({
+                              ...prev,
+                              [item.id]: { ...d, tags: mergedTags },
+                            }))
+                          }
+                        >
+                          <Combine
+                            className="h-3.5 w-3.5"
+                            strokeWidth={1.75}
+                            aria-hidden
+                          />
+                        </FieldIconBtn>
+                      </>
+                    ) : null}
+                  </span>
                   <div className="mt-1">
                     <TagPillsInput
                       value={tags}

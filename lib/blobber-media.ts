@@ -27,8 +27,11 @@ async function storePrepared(opts: {
   const glass = getGlass();
   const checksum = createHash("sha256").update(opts.bytes).digest("hex");
 
+  const prismId = await getPublicPrismId();
+
   if (opts.objectId) {
     await glass.objects.putBytes({
+      prismId,
       objectId: opts.objectId,
       file: opts.bytes,
       checksum,
@@ -37,7 +40,6 @@ async function storePrepared(opts: {
     return opts.objectId;
   }
 
-  const prismId = await getPublicPrismId();
   const uploaded = await glass.objects.upload({
     prismId,
     file: opts.bytes,
