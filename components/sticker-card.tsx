@@ -72,7 +72,8 @@ export function StickerCard({
           />
         </Link>
 
-        <div className="pointer-events-none absolute right-3 top-3 flex items-center gap-1.5">
+        {/* z-20: StickerMedia paints at z-10 once loaded — without this the type pill vanishes. */}
+        <div className="pointer-events-none absolute right-3 top-3 z-20 flex items-center gap-1.5">
           {showSound ? (
             <span
               className="flex h-7 w-7 items-center justify-center rounded-full bg-badge text-foreground"
@@ -88,7 +89,7 @@ export function StickerCard({
         </div>
 
         {status ? (
-          <div className="pointer-events-none absolute left-3 top-3 rounded-full bg-badge px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-secondary">
+          <div className="pointer-events-none absolute left-3 top-3 z-20 rounded-full bg-badge px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-secondary">
             {status.replaceAll("_", " ")}
           </div>
         ) : null}
@@ -102,7 +103,7 @@ export function StickerCard({
           />
         ) : null}
 
-        <div className="absolute bottom-3 right-3 z-10 flex flex-col gap-2">
+        <div className="absolute bottom-3 right-3 z-20 flex flex-col gap-2">
           {actions ? (
             <>
               <FavouriteButton

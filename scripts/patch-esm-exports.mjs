@@ -6,7 +6,7 @@
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { join } from "path";
 
-const pkgs = ["glass-ts", "blob-editor"];
+const pkgs = ["glass-ts", "blob-editor", "@zitadel/next-auth"];
 
 function patchPkg(name) {
   const pkgPath = join(process.cwd(), "node_modules", name, "package.json");

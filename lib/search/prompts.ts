@@ -63,11 +63,12 @@ export async function getResolvedMetaPrompts(): Promise<ResolvedMetaPrompts> {
 }
 
 export async function getResolvedSearchPrompts(): Promise<ResolvedSearchPrompts> {
-  const [agent, outputExample] = await Promise.all([
+  const [agent, agentVisual, outputExample] = await Promise.all([
     getLlmPrompt(LLM_PROMPT_KEY.searchAgent),
+    getLlmPrompt(LLM_PROMPT_KEY.searchAgentVisual),
     getLlmPrompt(LLM_PROMPT_KEY.searchOutputExample),
   ]);
-  return { agent, outputExample };
+  return { agent, agentVisual, outputExample };
 }
 
 export async function upsertLlmPrompts(
@@ -109,11 +110,13 @@ export function metaPromptsFromDraft(draft: {
 
 export function searchPromptsFromDraft(draft: {
   agent: string;
+  agentVisual?: string;
   outputExample: string;
 }): ResolvedSearchPrompts {
   const d = defaultResolvedSearchPrompts();
   return {
     agent: draft.agent.trim() || d.agent,
+    agentVisual: draft.agentVisual?.trim() || d.agentVisual,
     outputExample: draft.outputExample.trim() || d.outputExample,
   };
 }

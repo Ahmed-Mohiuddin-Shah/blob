@@ -11,7 +11,11 @@ import {
   type SearchTestState,
 } from "@/app/actions/admin-prompts";
 import { BusyButton } from "./busy-button";
-import { fileToHandoff } from "@/lib/search/image-handoff";
+import { SearchBar } from "@/components/search-bar";
+import {
+  fileToSearchMedia,
+  type ImageHandoff,
+} from "@/lib/search/image-handoff";
 import { LLM_PROMPT_KEY, type LlmPromptKey } from "@/lib/search/prompt-defaults";
 
 type Bodies = Record<LlmPromptKey, string>;
@@ -57,6 +61,23 @@ function TextArea({
   );
 }
 
+function ProcessedPreview({ b64 }: { b64?: string }) {
+  if (!b64) return null;
+  return (
+    <div className="mb-3">
+      <p className="text-xs font-bold uppercase tracking-wider text-inactive">
+        Processed for vision
+      </p>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={`data:image/jpeg;base64,${b64}`}
+        alt="Storyboard / processed media"
+        className="mt-2 max-h-64 w-auto rounded-2xl border border-divider object-contain"
+      />
+    </div>
+  );
+}
+
 /** Superadmin: tune search-metadata + search-agent prompts with Test / Apply. */
 export function PromptsAdmin({ initial }: { initial: Bodies }) {
   const [metaApply, metaApplyAction, metaApplyPending] = useActionState(
@@ -66,10 +87,6 @@ export function PromptsAdmin({ initial }: { initial: Bodies }) {
   const [searchApply, searchApplyAction, searchApplyPending] = useActionState(
     applySearchPromptsAction,
     initialApply,
-  );
-  const [searchTest, searchTestAction, searchTestPending] = useActionState(
-    testSearchPromptAction,
-    initialSearchTest,
   );
 
   const [visionDescribe, setVisionDescribe] = useState(
@@ -88,12 +105,21 @@ export function PromptsAdmin({ initial }: { initial: Bodies }) {
     initial[LLM_PROMPT_KEY.metaOutputExample],
   );
   const [agent, setAgent] = useState(initial[LLM_PROMPT_KEY.searchAgent]);
+  const [agentVisual, setAgentVisual] = useState(
+    initial[LLM_PROMPT_KEY.searchAgentVisual] ?? "",
+  );
   const [searchOutput, setSearchOutput] = useState(
     initial[LLM_PROMPT_KEY.searchOutputExample],
   );
   const [metaTest, setMetaTest] = useState<MetaTestState>(initialMetaTest);
   const [metaTestBusy, setMetaTestBusy] = useState(false);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
+
+  const [searchQ, setSearchQ] = useState("");
+  const [searchMedia, setSearchMedia] = useState<ImageHandoff | null>(null);
+  const [searchPreview, setSearchPreview] = useState<string | null>(null);
+  const [searchTest, setSearchTest] = useState<SearchTestState>(initialSearchTest);
+  const [searchTestBusy, setSearchTestBusy] = useState(false);
 
   const metaHidden = (
     <>
@@ -107,13 +133,13 @@ export function PromptsAdmin({ initial }: { initial: Bodies }) {
 
   async function runMetaTest() {
     if (!photoFile) {
-      setMetaTest({ error: "Choose a photo to test" });
+      setMetaTest({ error: "Choose a media file to test" });
       return;
     }
     setMetaTestBusy(true);
     setMetaTest({});
     try {
-      const handoff = await fileToHandoff(photoFile);
+      const handoff = await fileToSearchMedia(photoFile);
       const fd = new FormData();
       fd.set("visionDescribe", visionDescribe);
       fd.set("visionMotion", visionMotion);
@@ -133,6 +159,49 @@ export function PromptsAdmin({ initial }: { initial: Bodies }) {
     }
   }
 
+  async function runSearchTest() {
+    if (!searchQ.trim() && !searchMedia) {
+      setSearchTest({ error: "Enter a query and/or attach a visual" });
+      return;
+    }
+    setSearchTestBusy(true);
+    setSearchTest({});
+    try {
+      const fd = new FormData();
+      fd.set("agent", agent);
+      fd.set("agentVisual", agentVisual);
+      fd.set("outputExample", searchOutput);
+      fd.set("q", searchQ);
+      if (searchMedia) {
+        fd.set("mediaData", searchMedia.data);
+        fd.set("mediaMime", searchMedia.mime);
+      }
+      const result = await testSearchPromptAction({}, fd);
+      setSearchTest(result);
+      if (result.processedImage) {
+        setSearchMedia((prev) =>
+          prev
+            ? {
+                ...prev,
+                mime: "image/jpeg",
+                data: result.processedImage!,
+              }
+            : {
+                mime: "image/jpeg",
+                data: result.processedImage!,
+              },
+        );
+        setSearchPreview(`data:image/jpeg;base64,${result.processedImage}`);
+      }
+    } catch (err) {
+      setSearchTest({
+        error: err instanceof Error ? err.message : "Test failed",
+      });
+    } finally {
+      setSearchTestBusy(false);
+    }
+  }
+
   return (
     <div className="space-y-8">
       <section className="rounded-[28px] border border-divider bg-surface p-6 sm:p-8">
@@ -149,13 +218,13 @@ export function PromptsAdmin({ initial }: { initial: Bodies }) {
         <div className="mt-3 flex flex-wrap gap-2">
           <Chip label="description" />
           <Chip label="output example" />
-          <Chip label="image" />
+          <Chip label="visual" />
         </div>
 
         <div className="mt-6 space-y-4">
           <TextArea
             label="Vision describe"
-            hint="Plain instructions for pass 1 (image → prose)."
+            hint="Plain instructions for pass 1 (still image → prose)."
             value={visionDescribe}
             onChange={setVisionDescribe}
             rows={3}
@@ -193,14 +262,15 @@ export function PromptsAdmin({ initial }: { initial: Bodies }) {
         <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-end">
           <label className="block flex-1">
             <span className="text-xs font-bold uppercase tracking-wider text-inactive">
-              Test photo
+              Test media
             </span>
             <p className="mt-0.5 text-xs text-secondary">
-              Sent as 512px JPEG — wallpapers are fine.
+              Stills → 512px JPEG. GIF/video → 6-frame storyboard (shown below
+              after test).
             </p>
             <input
               type="file"
-              accept="image/*"
+              accept="image/*,video/mp4,video/webm,video/quicktime"
               className="mt-2 block w-full text-sm text-secondary file:mr-3 file:rounded-full file:border-0 file:bg-accent-gradient file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white"
               onChange={(e) => {
                 setPhotoFile(e.target.files?.[0] ?? null);
@@ -241,6 +311,7 @@ export function PromptsAdmin({ initial }: { initial: Bodies }) {
             {metaTest.error ? (
               <p className="text-metro-pink">{metaTest.error}</p>
             ) : null}
+            <ProcessedPreview b64={metaTest.processedImage} />
             {metaTest.prose ? (
               <div className="mb-3">
                 <p className="text-xs font-bold uppercase tracking-wider text-inactive">
@@ -281,11 +352,13 @@ export function PromptsAdmin({ initial }: { initial: Bodies }) {
           Query planner
         </h2>
         <p className="mt-1 text-sm text-secondary">
-          Tune how the agent rewrites user queries into Meili plans. System
-          injects the query and the output example.
+          Tune how the agent rewrites user queries into Meili plans. Visual
+          appendix is appended when media is attached. Media-only tests run
+          visual search (same as members).
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
           <Chip label="query" />
+          <Chip label="visual" />
           <Chip label="output example" />
         </div>
 
@@ -297,6 +370,13 @@ export function PromptsAdmin({ initial }: { initial: Bodies }) {
             rows={4}
           />
           <TextArea
+            label="When visual attached"
+            hint="Appended to the system prompt when the user uploads media with text."
+            value={agentVisual}
+            onChange={setAgentVisual}
+            rows={4}
+          />
+          <TextArea
             label="Output example JSON"
             value={searchOutput}
             onChange={setSearchOutput}
@@ -304,35 +384,60 @@ export function PromptsAdmin({ initial }: { initial: Bodies }) {
           />
         </div>
 
-        <form
-          action={searchTestAction}
-          className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-end"
-        >
-          <input type="hidden" name="agent" value={agent} />
-          <input type="hidden" name="outputExample" value={searchOutput} />
-          <label className="block flex-1">
-            <span className="text-xs font-bold uppercase tracking-wider text-inactive">
-              Test search
-            </span>
-            <input
-              type="text"
-              name="q"
-              required
-              placeholder="angry cat reaction"
-              className="mt-2 w-full rounded-full border border-divider bg-background px-4 py-2.5 text-sm outline-none focus:border-accent-pink/50"
-            />
-          </label>
+        <div className="mt-6">
+          <p className="text-xs font-bold uppercase tracking-wider text-inactive">
+            Test search
+          </p>
+          <p className="mt-0.5 text-xs text-secondary">
+            Same search field members use — text, image, GIF, or video.
+          </p>
+          <SearchBar
+            variant="universal"
+            className="mt-3"
+            value={searchQ}
+            onChange={setSearchQ}
+            busy={searchTestBusy}
+            showCamera
+            showAgent={false}
+            placeholder="angry cat reaction…"
+            imagePreviewUrl={searchPreview}
+            imagePreviewMime={searchMedia?.mime ?? null}
+            onClearImagePreview={() => {
+              setSearchPreview(null);
+              setSearchMedia(null);
+            }}
+            onSubmit={() => void runSearchTest()}
+            onImageSearch={(file) => {
+              void fileToSearchMedia(file)
+                .then((media) => {
+                  setSearchMedia(media);
+                  setSearchPreview(
+                    media.mime.startsWith("video/")
+                      ? URL.createObjectURL(file)
+                      : `data:${media.mime};base64,${media.data}`,
+                  );
+                })
+                .catch((e) =>
+                  setSearchTest({
+                    error: e instanceof Error ? e.message : "Upload failed",
+                  }),
+                );
+            }}
+          />
           <BusyButton
-            type="submit"
-            busy={searchTestPending}
-            className="rounded-full border border-divider bg-background px-5 py-2.5 text-sm font-semibold hover:border-accent-pink/40"
+            type="button"
+            busy={searchTestBusy}
+            disabled={searchTestBusy || (!searchQ.trim() && !searchMedia)}
+            onClick={() => void runSearchTest()}
+            className="mt-3 rounded-full border border-divider bg-background px-5 py-2.5 text-sm font-semibold hover:border-accent-pink/40"
           >
             Test prompt
           </BusyButton>
-        </form>
+        </div>
 
         <form action={searchApplyAction} className="mt-3">
           <input type="hidden" name="agent" value={agent} />
+          <input type="hidden" name="agentVisual" value={agentVisual} />
           <input type="hidden" name="outputExample" value={searchOutput} />
           <BusyButton
             type="submit"
@@ -353,6 +458,12 @@ export function PromptsAdmin({ initial }: { initial: Bodies }) {
           <div className="mt-6 rounded-2xl border border-divider bg-background p-4 text-sm">
             {searchTest.error ? (
               <p className="text-metro-pink">{searchTest.error}</p>
+            ) : null}
+            <ProcessedPreview b64={searchTest.processedImage} />
+            {searchTest.agentSkipped ? (
+              <p className="mb-2 text-xs text-secondary">
+                Media-only → visual search (agent skipped).
+              </p>
             ) : null}
             {searchTest.plan ? (
               <div className="mb-3">

@@ -28,6 +28,7 @@ export type MetaTestState = {
     aiVisualTags: string[];
   } | null;
   raw?: string | null;
+  processedImage?: string;
 };
 
 export type SearchTestState = {
@@ -36,6 +37,9 @@ export type SearchTestState = {
   plan?: { q: string; mode: string; filter: string };
   hits?: Array<{ id?: string; title?: string; slug?: string }>;
   raw?: string;
+  processedImage?: string;
+  usedVisual?: boolean;
+  agentSkipped?: boolean;
 };
 
 async function requireSuperadminUser() {
@@ -105,6 +109,9 @@ export async function applySearchPromptsAction(
     await upsertLlmPrompts(
       {
         [LLM_PROMPT_KEY.searchAgent]: String(formData.get("agent") ?? ""),
+        [LLM_PROMPT_KEY.searchAgentVisual]: String(
+          formData.get("agentVisual") ?? "",
+        ),
         [LLM_PROMPT_KEY.searchOutputExample]: String(
           formData.get("outputExample") ?? "",
         ),
@@ -126,15 +133,16 @@ export async function testMetaPromptAction(
   const user = await requireSuperadminUser();
   if (!user) return { error: "Forbidden" };
 
-  // Client sends resized JPEG base64 (fileToHandoff) — not the raw wallpaper.
   const photoData = String(formData.get("photoData") ?? "").trim();
   if (!photoData) {
-    return { error: "Choose a photo to test" };
+    return { error: "Choose a media file to test" };
   }
-  // ~1MB raw base64 ≈ 750KB decoded; vision handoff is far smaller.
-  if (photoData.length > 1_200_000) {
-    return { error: "Resized image still too large — try a smaller photo" };
+  // Motion uploads can be larger than still JPEG handoffs.
+  if (photoData.length > 12_000_000) {
+    return { error: "File too large for prompt test (max ~8MB)" };
   }
+
+  const photoMime = String(formData.get("photoMime") ?? "image/jpeg").trim();
 
   const prompts = metaPromptsFromDraft({
     visionDescribe: String(formData.get("visionDescribe") ?? ""),
@@ -146,14 +154,21 @@ export async function testMetaPromptAction(
 
   try {
     const buf = Buffer.from(photoData, "base64");
-    if (!buf.length) return { error: "Invalid photo data" };
-    const out = await testMetaPrompts(prompts, buf);
-    if (out.error) return { error: out.error, prose: out.prose };
+    if (!buf.length) return { error: "Invalid media data" };
+    const out = await testMetaPrompts(prompts, buf, photoMime);
+    if (out.error) {
+      return {
+        error: out.error,
+        prose: out.prose,
+        processedImage: out.processedImage,
+      };
+    }
     return {
       ok: true,
       prose: out.prose,
       result: out.result,
       raw: out.raw,
+      processedImage: out.processedImage,
     };
   } catch (err) {
     return {
@@ -170,21 +185,38 @@ export async function testSearchPromptAction(
   if (!user) return { error: "Forbidden" };
 
   const q = String(formData.get("q") ?? "").trim();
-  if (!q) return { error: "Enter a search query to test" };
+  const mediaData = String(formData.get("mediaData") ?? "").trim();
+  const mediaMime = String(formData.get("mediaMime") ?? "").trim();
+  const media =
+    mediaData && mediaMime ? { mime: mediaMime, data: mediaData } : null;
+
+  if (!q && !media) {
+    return { error: "Enter a query and/or attach a visual" };
+  }
 
   const prompts = searchPromptsFromDraft({
     agent: String(formData.get("agent") ?? ""),
+    agentVisual: String(formData.get("agentVisual") ?? ""),
     outputExample: String(formData.get("outputExample") ?? ""),
   });
 
   try {
-    const out = await testSearchPrompts(prompts, q);
-    if (out.error) return { error: out.error, raw: out.raw };
+    const out = await testSearchPrompts(prompts, q, media);
+    if (out.error) {
+      return {
+        error: out.error,
+        raw: out.raw,
+        processedImage: out.processedImage,
+      };
+    }
     return {
       ok: true,
       plan: out.plan,
       hits: out.hits,
       raw: out.raw,
+      processedImage: out.processedImage,
+      usedVisual: out.usedVisual,
+      agentSkipped: out.agentSkipped,
     };
   } catch (err) {
     return {

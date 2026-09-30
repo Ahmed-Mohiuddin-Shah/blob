@@ -2,7 +2,14 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  useTransition,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import { MeiliTypeahead } from "@/components/meili-typeahead";
 import { SearchBar } from "@/components/search-bar";
 import {
@@ -12,14 +19,16 @@ import {
 import {
   allowedSearchModes,
   defaultSearchMode,
+  normalizeSearchUiMode,
   type CapabilityUser,
   type SearchUiMode,
 } from "@/lib/capabilities";
 import {
-  fileToHandoff,
+  fileToSearchMedia,
   takeImageHandoff,
   type ImageHandoff,
 } from "@/lib/search/image-handoff";
+import { runSearchOverWs } from "@/lib/search/search-ws-client";
 import { signIn } from "@zitadel/next-auth/react";
 
 type Hit = {
@@ -46,7 +55,7 @@ const MODES = [
   { id: "hybrid" as const, label: "Hybrid" },
   { id: "keywords" as const, label: "Keywords" },
   { id: "semantic" as const, label: "Semantic" },
-  { id: "image" as const, label: "Image" },
+  { id: "visual" as const, label: "Visual" },
   { id: "agent" as const, label: "Agent" },
 ];
 
@@ -80,16 +89,26 @@ async function parseJsonResponse(res: Response): Promise<Record<string, unknown>
   }
 }
 
+function previewUrlFor(media: ImageHandoff): string {
+  if (media.mime.startsWith("video/")) {
+    try {
+      const bin = atob(media.data);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return URL.createObjectURL(new Blob([bytes], { type: media.mime }));
+    } catch {
+      /* fall through */
+    }
+  }
+  return `data:${media.mime};base64,${media.data}`;
+}
+
 function seedSteps(mode: string): ThoughtStep[] {
   if (mode === "agent") {
     return [{ label: "waking the search gremlin…", done: false }];
   }
-  if (mode === "image") {
-    return [
-      { label: "squishing your pic…", done: false },
-      { label: "sniffing lookalikes…", done: false },
-      { label: "mixing in your words…", done: false },
-    ];
+  if (mode === "visual" || mode === "visual+text") {
+    return [{ label: "warming…", done: false }];
   }
   if (mode === "semantic") {
     return [
@@ -114,10 +133,21 @@ function clampMode(
   allowed: Set<SearchUiMode>,
   fallback: SearchUiMode,
 ): SearchUiMode {
-  if (requested && allowed.has(requested as SearchUiMode)) {
-    return requested as SearchUiMode;
+  const norm = normalizeSearchUiMode(requested);
+  if (norm && allowed.has(norm as SearchUiMode)) {
+    return norm as SearchUiMode;
   }
   return fallback;
+}
+
+function pushLiveStep(
+  setSteps: Dispatch<SetStateAction<ThoughtStep[]>>,
+  label: string,
+) {
+  setSteps((prev) => {
+    const donePrev = prev.map((s) => ({ ...s, done: true }));
+    return [...donePrev, { label, done: false }];
+  });
 }
 
 export function SiteSearch({
@@ -149,7 +179,7 @@ export function SiteSearch({
   const [thoughtFailed, setThoughtFailed] = useState(false);
   const [showThought, setShowThought] = useState(false);
 
-  const canImage = allowed.has("image");
+  const canVisual = allowed.has("visual");
   const canAgent = allowed.has("agent");
   const lockedModes = MODES.filter((m) => !allowed.has(m.id));
 
@@ -178,7 +208,7 @@ export function SiteSearch({
     setThoughtLabel(
       nextMode === "agent"
         ? "agent is plotting…"
-        : nextMode === "image"
+        : nextMode === "visual" || nextMode === "visual+text"
           ? "eyeing your upload…"
           : "searching…",
     );
@@ -191,16 +221,15 @@ export function SiteSearch({
     engineName: string;
     plan?: AgentPlan | null;
     hitCount: number;
-    thoughtSteps?: string[];
     fallback?: boolean;
   }) {
-    const engine = opts.engineName || "search";
-    const prismaFallback = engine === "prisma";
+    const eng = opts.engineName || "search";
+    const prismaFallback = eng === "prisma";
     const failed = Boolean(opts.fallback || prismaFallback);
     setThoughtFailed(failed);
     const provenance = [
       opts.nextMode,
-      prismaFallback ? "filing-cabinet" : engine,
+      prismaFallback ? "filing-cabinet" : eng,
       `${opts.hitCount} find${opts.hitCount === 1 ? "" : "s"}`,
     ].join(" · ");
     setDoneLabel(
@@ -211,11 +240,6 @@ export function SiteSearch({
     setSteps((prev) => {
       const base = prev.map((s) => ({ ...s, done: true }));
       const extra: ThoughtStep[] = [];
-      if (opts.thoughtSteps?.length) {
-        for (const label of opts.thoughtSteps) {
-          extra.push({ label, done: true });
-        }
-      }
       if (prismaFallback) {
         extra.push({
           label: "Meili napped — dug through the filing cabinet instead",
@@ -237,12 +261,100 @@ export function SiteSearch({
     });
   }
 
-  function applyResult(data: Record<string, unknown>, engineFallback = "") {
+  function applyResult(data: {
+    hits?: unknown;
+    facetDistribution?: unknown;
+    engine?: unknown;
+  }, engineFallback = "") {
     setHits((data.hits as Hit[]) ?? []);
     setFacets(
       (data.facetDistribution as Record<string, Record<string, number>>) ?? {},
     );
     setEngine(String(data.engine ?? engineFallback));
+  }
+
+  async function withColdRetry<T>(fn: () => Promise<T>): Promise<T> {
+    try {
+      return await fn();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const cold =
+        /502|503|bad.?gateway|cold|ECONNRESET|connection closed|WebSocket/i.test(
+          msg,
+        );
+      if (!cold) throw e;
+      pushLiveStep(setSteps, "model was cold — trying once more…");
+      return await fn();
+    }
+  }
+
+  function runWsSearch(
+    wsMode: "visual" | "agent",
+    nextQ: string,
+    media: ImageHandoff | null,
+  ) {
+    const url = new URLSearchParams();
+    if (nextQ) url.set("q", nextQ);
+    url.set("mode", wsMode === "agent" && media && !nextQ.trim() ? "visual" : wsMode);
+    router.replace(`/search?${url.toString()}`);
+
+    const thoughtMode =
+      wsMode === "visual"
+        ? nextQ.trim()
+          ? "visual+text"
+          : "visual"
+        : "agent";
+    beginThought(thoughtMode);
+
+    startTransition(async () => {
+      try {
+        const data = await withColdRetry(() =>
+          runSearchOverWs({
+            mode: wsMode,
+            q: nextQ,
+            media,
+            onStep: (label) => pushLiveStep(setSteps, label),
+          }),
+        );
+        applyResult(data, "meili");
+        if (data.processedImage) {
+          // Storyboard JPEG — update mime so <video> isn't used for a still.
+          setImageMedia((prev) =>
+            prev
+              ? { ...prev, mime: "image/jpeg", data: data.processedImage! }
+              : prev,
+          );
+          setImagePreview(`data:image/jpeg;base64,${data.processedImage}`);
+        }
+        const resultMode =
+          data.mode === "visual"
+            ? nextQ.trim()
+              ? "visual+text"
+              : "visual"
+            : "agent";
+        if (data.mode === "visual") setMode("visual");
+        finishThought({
+          nextMode: resultMode,
+          engineName: String(data.engine ?? "meili"),
+          plan: (data.plan as AgentPlan | undefined) ?? null,
+          hitCount: ((data.hits as Hit[]) ?? []).length,
+          fallback: Boolean(data.planFallback),
+        });
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Search failed");
+        setHits([]);
+        setThoughtFailed(true);
+        setDoneLabel("Oop — search tripped");
+        setSteps((prev) => [
+          ...prev.map((s) => ({ ...s, done: true })),
+          {
+            label: e instanceof Error ? e.message : "something went sideways",
+            done: true,
+            failed: true,
+          },
+        ]);
+      }
+    });
   }
 
   function runSearch(nextQ = q, nextMode: SearchUiMode = mode) {
@@ -251,6 +363,30 @@ export function SiteSearch({
       return;
     }
     setError(null);
+
+    if (nextMode === "agent") {
+      if (imageMedia && !nextQ.trim()) {
+        if (!canVisual) {
+          setError("Visual search requires a member account");
+          return;
+        }
+        setMode("visual");
+        runWsSearch("visual", "", imageMedia);
+        return;
+      }
+      runWsSearch("agent", nextQ, imageMedia);
+      return;
+    }
+
+    if (nextMode === "visual") {
+      if (!imageMedia) {
+        setError("Attach an image, GIF, or video for visual search");
+        return;
+      }
+      runWsSearch("visual", nextQ, imageMedia);
+      return;
+    }
+
     const url = new URLSearchParams();
     if (nextQ) url.set("q", nextQ);
     url.set("mode", nextMode);
@@ -258,36 +394,6 @@ export function SiteSearch({
     beginThought(nextMode);
     startTransition(async () => {
       try {
-        if (nextMode === "agent") {
-          const res = await fetch("/api/search/agent", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              q: nextQ,
-              ...(imageMedia
-                ? {
-                    media: {
-                      mime: imageMedia.mime,
-                      data: imageMedia.data,
-                    },
-                  }
-                : {}),
-            }),
-          });
-          const data = await parseJsonResponse(res);
-          if (!res.ok) throw new Error(String(data.error || "Agent search failed"));
-          applyResult(data, "meili");
-          const plan = data.plan as AgentPlan | undefined;
-          finishThought({
-            nextMode,
-            engineName: String(data.engine ?? "meili"),
-            plan: plan ?? null,
-            hitCount: ((data.hits as Hit[]) ?? []).length,
-            thoughtSteps: (data.thoughtSteps as string[]) ?? undefined,
-            fallback: Boolean(data.planFallback),
-          });
-          return;
-        }
         const res = await fetch(
           `/api/search?q=${encodeURIComponent(nextQ)}&mode=${encodeURIComponent(nextMode)}&limit=5`,
         );
@@ -317,54 +423,16 @@ export function SiteSearch({
     });
   }
 
-  function runImageSearch(media: ImageHandoff, textQ = q) {
-    if (!canImage) {
-      setError("Image search requires a member account");
+  function runVisualSearch(media: ImageHandoff, textQ = q) {
+    if (!canVisual) {
+      setError("Visual search requires a member account");
       return;
     }
     setError(null);
-    setMode("image");
+    setMode("visual");
     setImageMedia(media);
-    setImagePreview(`data:${media.mime};base64,${media.data}`);
-    const trimmed = textQ.trim();
-    beginThought("image");
-    startTransition(async () => {
-      try {
-        const res = await fetch("/api/search", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            mode: "image",
-            q: trimmed || undefined,
-            media: { mime: media.mime, data: media.data },
-          }),
-        });
-        const json = await parseJsonResponse(res);
-        if (!res.ok) throw new Error(String(json.error || "Image search failed"));
-        applyResult(json);
-        finishThought({
-          nextMode: trimmed ? "image+text" : "image",
-          engineName: String(json.engine ?? "meili"),
-          hitCount: ((json.hits as Hit[]) ?? []).length,
-          fallback: String(json.engine ?? "") === "prisma",
-        });
-        const url = new URLSearchParams({ mode: "image" });
-        if (trimmed) url.set("q", trimmed);
-        router.replace(`/search?${url.toString()}`);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Image search failed");
-        setThoughtFailed(true);
-        setDoneLabel("Oop — image search tripped");
-        setSteps((prev) => [
-          ...prev.map((s) => ({ ...s, done: true })),
-          {
-            label: e instanceof Error ? e.message : "image search failed",
-            done: true,
-            failed: true,
-          },
-        ]);
-      }
-    });
+    setImagePreview(previewUrlFor(media));
+    runWsSearch("visual", textQ.trim(), media);
   }
 
   function clearImage() {
@@ -375,12 +443,12 @@ export function SiteSearch({
   useEffect(() => {
     const handoff = takeImageHandoff();
     if (handoff) {
-      if (!canImage) {
-        setError("Image search requires a member account — sign in as a member");
+      if (!canVisual) {
+        setError("Visual search requires a member account — sign in as a member");
         return;
       }
       const seedQ = initialQ || params.get("q") || q;
-      runImageSearch(handoff, seedQ);
+      runVisualSearch(handoff, seedQ);
       return;
     }
     const seedQ = initialQ || params.get("q");
@@ -404,9 +472,9 @@ export function SiteSearch({
   };
 
   const upsellText = !capUser
-    ? "Sign in for semantic search. Members unlock hybrid, image, and agent."
+    ? "Sign in for semantic search. Members unlock hybrid, visual, and agent."
     : lockedModes.length > 0
-      ? "Ask an admin to promote you to member for hybrid, image, and agent search."
+      ? "Ask an admin to promote you to member for hybrid, visual, and agent search."
       : null;
 
   return (
@@ -424,24 +492,28 @@ export function SiteSearch({
         value={q}
         onChange={setQ}
         busy={pending}
-        showCamera={canImage}
+        showCamera={canVisual}
         showAgent={canAgent}
         placeholder="Stickers, collections, prints, blobbers…"
         imagePreviewUrl={imagePreview}
+        imagePreviewMime={imageMedia?.mime ?? null}
         onClearImagePreview={clearImage}
         onSubmit={(next) => {
-          // Agent + attached pic → agent fuse (not pure image mode).
           if (mode === "agent") {
+            if (imageMedia && !next.trim()) {
+              runVisualSearch(imageMedia, "");
+              return;
+            }
             runSearch(next, "agent");
             return;
           }
-          if (imageMedia && canImage) {
-            runImageSearch(imageMedia, next);
+          if (imageMedia && canVisual) {
+            runVisualSearch(imageMedia, next);
             return;
           }
           runSearch(
             next,
-            mode === "image"
+            mode === "visual"
               ? allowed.has("hybrid")
                 ? "hybrid"
                 : fallback
@@ -449,18 +521,37 @@ export function SiteSearch({
           );
         }}
         onImageSearch={(file) => {
-          void fileToHandoff(file).then((media) => {
-            setImageMedia(media);
-            setImagePreview(`data:${media.mime};base64,${media.data}`);
-            if (mode === "agent") {
-              runSearch(q, "agent");
-              return;
-            }
-            runImageSearch(media, q);
-          });
+          void fileToSearchMedia(file)
+            .then((media) => {
+              setImageMedia(media);
+              // Video: object URL for <video> preview; still/gif: data URL or blob.
+              setImagePreview(
+                media.mime.startsWith("video/")
+                  ? URL.createObjectURL(file)
+                  : media.mime === "image/gif"
+                    ? URL.createObjectURL(file)
+                    : previewUrlFor(media),
+              );
+              if (mode === "agent") {
+                if (!q.trim()) {
+                  runVisualSearch(media, "");
+                  return;
+                }
+                runSearch(q, "agent");
+                return;
+              }
+              runVisualSearch(media, q);
+            })
+            .catch((e) =>
+              setError(e instanceof Error ? e.message : "Upload failed"),
+            );
         }}
         onAgentSearch={(next) => {
           setMode("agent");
+          if (imageMedia && !next.trim()) {
+            runVisualSearch(imageMedia, "");
+            return;
+          }
           runSearch(next, "agent");
         }}
       />
@@ -485,11 +576,11 @@ export function SiteSearch({
             runSearch(title, "agent");
             return;
           }
-          if (imageMedia && canImage) {
-            runImageSearch(imageMedia, title);
+          if (imageMedia && canVisual) {
+            runVisualSearch(imageMedia, title);
             return;
           }
-          runSearch(title, mode === "image" ? fallback : mode);
+          runSearch(title, mode === "visual" ? fallback : mode);
         }}
       />
       {!process.env.NEXT_PUBLIC_MEILI_HOST && suggestions.length > 0 ? (
@@ -501,11 +592,11 @@ export function SiteSearch({
                 className="rounded-full border border-divider bg-surface px-3 py-1.5 text-xs text-secondary hover:border-accent-pink/40 hover:text-accent-pink"
                 onClick={() => {
                   setQ(s.title || "");
-                  if (imageMedia && canImage) {
-                    runImageSearch(imageMedia, s.title || "");
+                  if (imageMedia && canVisual) {
+                    runVisualSearch(imageMedia, s.title || "");
                     return;
                   }
-                  runSearch(s.title || "", mode === "image" ? fallback : mode);
+                  runSearch(s.title || "", mode === "visual" ? fallback : mode);
                 }}
               >
                 {s.title}
@@ -528,17 +619,20 @@ export function SiteSearch({
                 if (!ok) return;
                 setMode(m.id);
                 if (m.id === "agent") {
+                  if (imageMedia && !q.trim()) {
+                    runVisualSearch(imageMedia, "");
+                    return;
+                  }
                   runSearch(q, "agent");
                   return;
                 }
-                if (m.id === "image") {
-                  if (imageMedia) runImageSearch(imageMedia, q);
+                if (m.id === "visual") {
+                  if (imageMedia) runVisualSearch(imageMedia, q);
                   return;
                 }
-                // Image attached on text modes → image(+text). Agent handled above.
-                if (imageMedia && canImage) {
-                  setMode("image");
-                  runImageSearch(imageMedia, q);
+                if (imageMedia && canVisual) {
+                  setMode("visual");
+                  runVisualSearch(imageMedia, q);
                   return;
                 }
                 runSearch(q, m.id);
@@ -647,7 +741,7 @@ export function SiteSearch({
         ) : null,
       )}
 
-      {!pending && !hits.length && (q || mode === "image") ? (
+      {!pending && !hits.length && (q || mode === "visual") ? (
         <p className="mt-12 text-center text-secondary">No results.</p>
       ) : null}
     </div>

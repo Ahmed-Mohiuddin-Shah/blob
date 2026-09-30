@@ -45,7 +45,7 @@ export const SEARCH_AGENT_TOOLS: OllamaToolDef[] = [
 
 export function searchCapabilitiesPayload(user: CapabilityUser | null) {
   const modes = [...allowedSearchModes(user)].filter(
-    (m) => m !== "image" && m !== "agent",
+    (m) => m !== "visual" && m !== "agent",
   );
   return {
     modes,

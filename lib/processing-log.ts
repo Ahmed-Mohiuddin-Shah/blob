@@ -6,6 +6,7 @@ export const PROCESSING_SUBJECT = {
   stickerPack: "sticker_pack",
   meili: "meili",
   worker: "worker",
+  search: "search",
 } as const;
 
 export type ProcessingSubjectType =
@@ -37,4 +38,15 @@ export function logMeiliError(title: string, err: unknown): void {
     subjectTitle: title.slice(0, 220),
     message,
   }).catch((e) => console.error("appendProcessingLog meili", e));
+}
+
+/** Fire-and-forget visual/agent search failure into admin processing logs. */
+export function logSearchError(title: string, err: unknown): void {
+  const message = err instanceof Error ? err.message : String(err);
+  void appendProcessingLog({
+    subjectType: PROCESSING_SUBJECT.search,
+    subjectId: BigInt(0),
+    subjectTitle: title.slice(0, 220),
+    message,
+  }).catch((e) => console.error("appendProcessingLog search", e));
 }

@@ -8,6 +8,12 @@ const nextConfig: NextConfig = {
     "gifenc",
     "pdf-lib",
   ],
+  // Prompt-manager visual tests send GIF/video base64 via server actions.
+  experimental: {
+    serverActions: {
+      bodySizeLimit: "12mb",
+    },
+  },
 };
 
 export default nextConfig;

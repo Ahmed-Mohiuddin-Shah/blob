@@ -4,7 +4,7 @@
  */
 import { createCanvas, loadImage } from "@napi-rs/canvas";
 import { spawn } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import sharp from "sharp";
@@ -56,6 +56,60 @@ async function probeDurationSec(path: string, ffmpeg: string): Promise<number> {
   return Math.max(0.1, Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]));
 }
 
+/** Dump all GIF frames then pick 6 evenly — avoids sharp disposal/black-frame bugs. */
+async function extractGifFramesFfmpeg(bytes: Buffer): Promise<Buffer[]> {
+  const ffmpeg = await resolveFfmpeg();
+  const dir = await mkdtemp(join(tmpdir(), "blob-sb-gif-"));
+  const src = join(dir, "src.gif");
+  try {
+    await writeFile(src, bytes);
+    const { code, stderr } = await run(ffmpeg, [
+      "-y",
+      "-i",
+      src,
+      "-vsync",
+      "0",
+      join(dir, "f%04d.png"),
+    ]);
+    if (code !== 0) {
+      throw new Error(`ffmpeg gif extract failed: ${stderr.slice(0, 200)}`);
+    }
+    const files = (await readdir(dir))
+      .filter((f) => /^f\d+\.png$/.test(f))
+      .sort();
+    if (!files.length) throw new Error("ffmpeg gif: no frames");
+    const out: Buffer[] = [];
+    for (let i = 0; i < FRAME_COUNT; i++) {
+      const idx = Math.min(
+        files.length - 1,
+        Math.floor(((i + 0.5) * files.length) / FRAME_COUNT),
+      );
+      out.push(await readFile(join(dir, files[idx]!)));
+    }
+    return out;
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+async function readNumberedFrames(dir: string, re: RegExp): Promise<Buffer[]> {
+  const files = (await readdir(dir)).filter((f) => re.test(f)).sort();
+  if (!files.length) return [];
+  const out: Buffer[] = [];
+  for (let i = 0; i < FRAME_COUNT; i++) {
+    const idx = Math.min(
+      files.length - 1,
+      Math.floor(((i + 0.5) * files.length) / FRAME_COUNT),
+    );
+    out.push(await readFile(join(dir, files[idx]!)));
+  }
+  return out;
+}
+
+/**
+ * Video → 6 frames. Prefer fps sampling (no seek); seek is fragile on short/
+ * oddly-muxed mp4s and often fails on frame 0.
+ */
 async function extractVideoFrames(
   bytes: Buffer,
   mime: string,
@@ -64,63 +118,87 @@ async function extractVideoFrames(
   const dir = await mkdtemp(join(tmpdir(), "blob-sb-"));
   const ext = mime.includes("webm")
     ? "webm"
-    : mime.includes("gif")
-      ? "gif"
-      : mime.includes("webp")
-        ? "webp"
-        : "mp4";
+    : mime.includes("mov") || mime.includes("quicktime")
+      ? "mov"
+      : "mp4";
   const src = join(dir, `src.${ext}`);
+  const pattern = join(dir, "f%04d.jpg");
   try {
     await writeFile(src, bytes);
     const dur = await probeDurationSec(src, ffmpeg);
-    const out: Buffer[] = [];
-    for (let i = 0; i < FRAME_COUNT; i++) {
-      const t = (dur * (i + 0.5)) / FRAME_COUNT;
-      const png = join(dir, `f${i}.jpg`);
-      const { code } = await run(ffmpeg, [
+    const fps = Math.max(0.1, FRAME_COUNT / Math.max(dur, 0.25));
+
+    // 1) Even samples via fps filter (most reliable for search uploads).
+    let { code, stderr } = await run(ffmpeg, [
+      "-y",
+      "-i",
+      src,
+      "-an",
+      "-vf",
+      `fps=${fps.toFixed(4)}`,
+      "-frames:v",
+      String(FRAME_COUNT),
+      "-q:v",
+      "3",
+      pattern,
+    ]);
+    let frames = code === 0 ? await readNumberedFrames(dir, /^f\d+\.jpg$/) : [];
+
+    // 2) Fallback: decode first N frames (ignores duration).
+    if (frames.length < FRAME_COUNT) {
+      ({ code, stderr } = await run(ffmpeg, [
         "-y",
-        "-ss",
-        String(t.toFixed(3)),
         "-i",
         src,
+        "-an",
+        "-vsync",
+        "0",
+        "-frames:v",
+        String(FRAME_COUNT),
+        "-q:v",
+        "3",
+        pattern,
+      ]));
+      frames = code === 0 ? await readNumberedFrames(dir, /^f\d+\.jpg$/) : [];
+    }
+
+    // 3) Last resort: single still (poster), tiled 6× so search still works.
+    if (!frames.length) {
+      const one = join(dir, "still.jpg");
+      ({ code, stderr } = await run(ffmpeg, [
+        "-y",
+        "-i",
+        src,
+        "-an",
         "-frames:v",
         "1",
         "-q:v",
-        "5",
-        png,
-      ]);
+        "3",
+        one,
+      ]));
       if (code !== 0) {
-        await run(ffmpeg, [
-          "-y",
-          "-i",
-          src,
-          "-ss",
-          String(t.toFixed(3)),
-          "-frames:v",
-          "1",
-          "-q:v",
-          "5",
-          png,
-        ]);
+        throw new Error(
+          `ffmpeg failed to extract video frames (${mime}): ${stderr.slice(-400)}`,
+        );
       }
-      try {
-        out.push(await readFile(png));
-      } catch {
-        throw new Error(`ffmpeg failed to extract frame ${i} (${mime})`);
-      }
+      const still = await readFile(one);
+      frames = Array.from({ length: FRAME_COUNT }, () => still);
     }
-    return out;
+
+    while (frames.length < FRAME_COUNT) {
+      frames.push(frames[frames.length - 1]!);
+    }
+    return frames.slice(0, FRAME_COUNT);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
 }
 
 /**
- * Animated gif/webp via sharp.
+ * Animated webp via sharp (ffmpeg often fails on animated webp).
  * With `{ page: n }`, sharp returns a strip from n→end — crop the top pageHeight.
  */
 async function extractSharpAnimFrames(bytes: Buffer): Promise<Buffer[]> {
-  // Normalize webp→gif when needed so page seeking is reliable.
   let input = bytes;
   const meta0 = await sharp(bytes, { animated: true }).metadata();
   if (meta0.format === "webp" && (meta0.pages ?? 1) > 1) {
@@ -148,11 +226,45 @@ async function extractSharpAnimFrames(bytes: Buffer): Promise<Buffer[]> {
     out.push(
       await sharp(input, { animated: true, page })
         .extract({ left: 0, top: 0, width, height: frameH })
+        .resize(TILE, TILE, { fit: "cover" })
         .jpeg({ quality: 70 })
         .toBuffer(),
     );
   }
   return out;
+}
+
+/**
+ * Draw digit 1–9 without system fonts (Docker slim often has none).
+ * 3×5 pixel grid scaled into the badge.
+ */
+function drawDigit(
+  ctx: ReturnType<ReturnType<typeof createCanvas>["getContext"]>,
+  digit: number,
+  ox: number,
+  oy: number,
+  cell = 3,
+) {
+  // 3×5 bitmaps for 1–9 (1 = filled)
+  const glyphs: Record<number, number[]> = {
+    1: [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0],
+    2: [1, 1, 1, 0, 0, 1, 1, 1, 1, 1, 0, 0, 1, 1, 1],
+    3: [1, 1, 1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 1, 1],
+    4: [1, 0, 1, 1, 0, 1, 1, 1, 1, 0, 0, 1, 0, 0, 1],
+    5: [1, 1, 1, 1, 0, 0, 1, 1, 1, 0, 0, 1, 1, 1, 1],
+    6: [1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1],
+    7: [1, 1, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1],
+    8: [1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1],
+    9: [1, 1, 1, 1, 0, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1],
+  };
+  const g = glyphs[digit] ?? glyphs[1]!;
+  ctx.fillStyle = "#fff";
+  for (let i = 0; i < 15; i++) {
+    if (!g[i]) continue;
+    const col = i % 3;
+    const row = Math.floor(i / 3);
+    ctx.fillRect(ox + col * cell, oy + row * cell, cell, cell);
+  }
 }
 
 async function compositeStoryboard(frameBufs: Buffer[]): Promise<Buffer> {
@@ -162,7 +274,6 @@ async function compositeStoryboard(frameBufs: Buffer[]): Promise<Buffer> {
   const ctx = canvas.getContext("2d");
   ctx.fillStyle = "#111";
   ctx.fillRect(0, 0, w, h);
-  ctx.font = "bold 22px sans-serif";
 
   for (let i = 0; i < FRAME_COUNT; i++) {
     const buf = frameBufs[i] ?? frameBufs[frameBufs.length - 1]!;
@@ -177,11 +288,10 @@ async function compositeStoryboard(frameBufs: Buffer[]): Promise<Buffer> {
     const x = col * TILE;
     const y = row * TILE;
     ctx.drawImage(img, x, y, TILE, TILE);
-    // Sequence badge
-    ctx.fillStyle = "rgba(0,0,0,0.55)";
-    ctx.fillRect(x + 4, y + 4, 28, 28);
-    ctx.fillStyle = "#fff";
-    ctx.fillText(String(i + 1), x + 10, y + 25);
+    // Sequence badge — bitmap digits (no font dependency)
+    ctx.fillStyle = "rgba(0,0,0,0.6)";
+    ctx.fillRect(x + 4, y + 4, 22, 26);
+    drawDigit(ctx, i + 1, x + 7, y + 6, 3);
   }
 
   const png = canvas.toBuffer("image/png");
@@ -198,7 +308,14 @@ export async function buildStoryboardJpeg(
   if (bytes.byteLength === 0) throw new Error("Empty media for storyboard");
   const m = mime.toLowerCase();
   let frames: Buffer[];
-  if (m.includes("gif") || m.includes("webp")) {
+  if (m.includes("gif")) {
+    try {
+      frames = await extractGifFramesFfmpeg(bytes);
+    } catch (err) {
+      console.warn("gif ffmpeg extract failed, sharp fallback:", err);
+      frames = await extractSharpAnimFrames(bytes);
+    }
+  } else if (m.includes("webp")) {
     frames = await extractSharpAnimFrames(bytes);
   } else {
     frames = await extractVideoFrames(bytes, mime);

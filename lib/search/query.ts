@@ -11,7 +11,16 @@ import {
   VISIBILITY,
 } from "@/lib/stickers";
 
-export type SearchMode = "keywords" | "hybrid" | "semantic" | "image";
+export type SearchMode = "keywords" | "hybrid" | "semantic" | "visual";
+
+/** Legacy API alias `image` → `visual`. */
+export function normalizeSearchMode(mode: string | undefined | null): SearchMode {
+  if (mode === "image" || mode === "visual") return "visual";
+  if (mode === "keywords" || mode === "semantic" || mode === "hybrid") {
+    return mode;
+  }
+  return "hybrid";
+}
 
 export type FederatedHit = {
   index: string;
@@ -142,12 +151,12 @@ export async function meiliFederatedSearch(opts: {
   const q = opts.q.trim();
 
   // Meili multimodal: q + media hit different searchFragments → error. Run both, RRF.
-  if (mode === "image" && opts.media && q) {
+  if (mode === "visual" && opts.media && q) {
     const fetchLimit = Math.min(96, Math.max(limit * 2, limit + 12));
-    const [byImage, byText] = await Promise.all([
+    const [byVisual, byText] = await Promise.all([
       meiliFederatedSearch({
         q: "",
-        mode: "image",
+        mode: "visual",
         limit: fetchLimit,
         filter: opts.filter,
         media: opts.media,
@@ -160,12 +169,15 @@ export async function meiliFederatedSearch(opts: {
       }),
     ]);
     return {
-      engine: byImage.engine === "meili" || byText.engine === "meili" ? "meili" : "prisma",
+      engine:
+        byVisual.engine === "meili" || byText.engine === "meili"
+          ? "meili"
+          : "prisma",
       hits: await hydratePreviewUrls(
-        mergeRrfHits([byImage.hits, byText.hits], limit),
+        mergeRrfHits([byVisual.hits, byText.hits], limit),
       ),
       facetDistribution:
-        byImage.facetDistribution ?? byText.facetDistribution,
+        byVisual.facetDistribution ?? byText.facetDistribution,
     };
   }
 
@@ -179,12 +191,12 @@ export async function meiliFederatedSearch(opts: {
       ? undefined
       : {
           embedder:
-            mode === "image" ? MEILI_EMBEDDER.image : MEILI_EMBEDDER.text,
-          semanticRatio: mode === "semantic" || mode === "image" ? 1 : 0.5,
+            mode === "visual" ? MEILI_EMBEDDER.image : MEILI_EMBEDDER.text,
+          semanticRatio: mode === "semantic" || mode === "visual" ? 1 : 0.5,
         };
 
   try {
-    // Image search must omit `q` — empty q still matches the text searchFragment
+    // Visual search must omit `q` — empty q still matches the text searchFragment
     // and Meili errors with "Query matches multiple search fragments".
     // Cap stickers at 5 for federated /search UI rows (callers can still pass lower).
     const stickerLimit = Math.min(5, limit);
@@ -193,7 +205,7 @@ export async function meiliFederatedSearch(opts: {
       facets: ["categorySlug", "tags", "mediaKind"],
       ...(opts.filter ? { filter: opts.filter } : {}),
       ...(hybrid ? { hybrid } : {}),
-      ...(mode === "image" && opts.media
+      ...(mode === "visual" && opts.media
         ? { media: { image: opts.media } }
         : { q }),
     };
@@ -208,7 +220,7 @@ export async function meiliFederatedSearch(opts: {
           indexUid: MEILI_INDEX.collections,
           q,
           limit: Math.min(5, limit),
-          ...(mode !== "keywords" && mode !== "image"
+          ...(mode !== "keywords" && mode !== "visual"
             ? {
                 hybrid: {
                   embedder: MEILI_EMBEDDER.text,
@@ -221,7 +233,7 @@ export async function meiliFederatedSearch(opts: {
           indexUid: MEILI_INDEX.prints,
           q,
           limit: Math.min(5, limit),
-          ...(mode !== "keywords" && mode !== "image"
+          ...(mode !== "keywords" && mode !== "visual"
             ? {
                 hybrid: {
                   embedder: MEILI_EMBEDDER.text,

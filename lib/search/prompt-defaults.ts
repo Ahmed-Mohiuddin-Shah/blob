@@ -10,6 +10,7 @@ export const LLM_PROMPT_KEY = {
   metaVisionJson: "meta_vision_json",
   metaOutputExample: "meta_output_example",
   searchAgent: "search_agent",
+  searchAgentVisual: "search_agent_visual",
   searchOutputExample: "search_output_example",
 } as const;
 
@@ -59,6 +60,8 @@ Do not echo example captions or filler tags.`;
 
 export const DEFAULT_SEARCH_AGENT = `You help users search a sticker site. Use the provided tools to learn allowed search modes and filter fields, then search. Prefer hybrid mode unless the user clearly wants keywords-only or pure semantic. Reply briefly when done.`;
 
+export const DEFAULT_SEARCH_AGENT_VISUAL = `The user also attached a visual (image/GIF/video). Text search results will be fused with visual similarity ranking. Still plan a good text/hybrid query from their words. Do not invent filters from the image alone.`;
+
 export const LLM_PROMPT_DEFAULTS: Record<LlmPromptKey, string> = {
   [LLM_PROMPT_KEY.metaVisionDescribe]: DEFAULT_META_VISION_DESCRIBE,
   [LLM_PROMPT_KEY.metaVisionMotion]: DEFAULT_META_VISION_MOTION,
@@ -66,6 +69,7 @@ export const LLM_PROMPT_DEFAULTS: Record<LlmPromptKey, string> = {
   [LLM_PROMPT_KEY.metaVisionJson]: DEFAULT_META_VISION_JSON,
   [LLM_PROMPT_KEY.metaOutputExample]: DEFAULT_META_OUTPUT_EXAMPLE,
   [LLM_PROMPT_KEY.searchAgent]: DEFAULT_SEARCH_AGENT,
+  [LLM_PROMPT_KEY.searchAgentVisual]: DEFAULT_SEARCH_AGENT_VISUAL,
   [LLM_PROMPT_KEY.searchOutputExample]: DEFAULT_SEARCH_OUTPUT_EXAMPLE,
 };
 
@@ -79,6 +83,7 @@ export type ResolvedMetaPrompts = {
 
 export type ResolvedSearchPrompts = {
   agent: string;
+  agentVisual: string;
   outputExample: string;
 };
 
@@ -113,8 +118,10 @@ export function assembleSearchAgentPrompt(
   instructions: string,
   outputExample: string,
   query: string,
+  opts?: { visualAppendix?: string },
 ): string {
-  return `${instructions.trim()}
+  const visual = opts?.visualAppendix?.trim();
+  return `${instructions.trim()}${visual ? `\n\n${visual}` : ""}
 
 If you cannot use tools, reply with ONLY JSON matching:
 ${outputExample.trim()}
@@ -148,11 +155,13 @@ Reminder: corner numbers 1-6 on a storyboard are sequence markers only — not s
 export function searchAgentPromptFromResolved(
   prompts: ResolvedSearchPrompts,
   query: string,
+  opts?: { hasVisual?: boolean },
 ): string {
   return assembleSearchAgentPrompt(
     prompts.agent,
     prompts.outputExample,
     query,
+    opts?.hasVisual ? { visualAppendix: prompts.agentVisual } : undefined,
   );
 }
 
@@ -169,6 +178,7 @@ export function defaultResolvedMetaPrompts(): ResolvedMetaPrompts {
 export function defaultResolvedSearchPrompts(): ResolvedSearchPrompts {
   return {
     agent: DEFAULT_SEARCH_AGENT,
+    agentVisual: DEFAULT_SEARCH_AGENT_VISUAL,
     outputExample: DEFAULT_SEARCH_OUTPUT_EXAMPLE,
   };
 }

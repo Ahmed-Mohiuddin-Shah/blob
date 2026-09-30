@@ -119,7 +119,7 @@ export default async function HomePage() {
 
   const popular = categories.slice(0, 4).map((c) => c.name);
   const searchMode = defaultSearchMode(capUser);
-  const showCamera = canUseSearchMode(capUser, "image");
+  const showCamera = canUseSearchMode(capUser, "visual");
 
   return (
     <>

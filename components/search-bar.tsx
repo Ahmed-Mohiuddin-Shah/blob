@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { BusyButton } from "@/components/busy-button";
 import {
-  fileToHandoff,
+  fileToSearchMedia,
+  isSearchMediaFile,
   stashImageHandoff,
 } from "@/lib/search/image-handoff";
 
@@ -24,7 +25,7 @@ type Props = {
   submitLabel?: string;
   /** Text submit. If omitted and navigateTo set, pushes navigateTo?q= */
   onSubmit?: (q: string) => void;
-  /** Image picked / dropped / pasted. If omitted, handoff → /search?mode=image */
+  /** Media picked / dropped / pasted. If omitted, handoff → /search?mode=visual */
   onImageSearch?: (file: File) => void;
   onAgentSearch?: (q: string) => void;
   /** GET-style navigation target for text search when onSubmit omitted */
@@ -36,6 +37,8 @@ type Props = {
   hideSubmit?: boolean;
   /** Controlled preview (e.g. handoff on /search). Overrides internal preview. */
   imagePreviewUrl?: string | null;
+  /** When preview is a video blob/data URL — render <video> not <img>. */
+  imagePreviewMime?: string | null;
   onClearImagePreview?: () => void;
 };
 
@@ -43,14 +46,17 @@ function fileFromClipboard(e: React.ClipboardEvent): File | null {
   const items = e.clipboardData?.items;
   if (!items) return null;
   for (const item of items) {
-    if (item.kind === "file" && item.type.startsWith("image/")) {
+    if (
+      item.kind === "file" &&
+      (item.type.startsWith("image/") || item.type.startsWith("video/"))
+    ) {
       return item.getAsFile();
     }
   }
   const files = e.clipboardData?.files;
   if (files?.length) {
     for (const file of files) {
-      if (file.type.startsWith("image/")) return file;
+      if (isSearchMediaFile(file)) return file;
     }
   }
   return null;
@@ -75,6 +81,7 @@ export function SearchBar({
   className = "",
   hideSubmit = false,
   imagePreviewUrl,
+  imagePreviewMime = null,
   onClearImagePreview,
 }: Props) {
   const router = useRouter();
@@ -135,7 +142,7 @@ export function SearchBar({
   }
 
   async function handleImage(file: File | null) {
-    if (!file || !file.type.startsWith("image/")) return;
+    if (!file || !isSearchMediaFile(file)) return;
     if (imagePreviewUrl === undefined) {
       setLocalPreviewUrl(URL.createObjectURL(file));
     }
@@ -143,9 +150,9 @@ export function SearchBar({
       onImageSearch(file);
       return;
     }
-    const payload = await fileToHandoff(file);
+    const payload = await fileToSearchMedia(file);
     stashImageHandoff(payload);
-    const params = new URLSearchParams({ mode: "image" });
+    const params = new URLSearchParams({ mode: "visual" });
     const trimmed = q.trim();
     if (trimmed) params.set("q", trimmed);
     router.push(`/search?${params}`);
@@ -209,16 +216,27 @@ export function SearchBar({
         </div>
         {preview ? (
           <div className={`relative mr-1 shrink-0 ${thumb}`}>
-            {/* eslint-disable-next-line @next/next/no-img-element -- blob/data URL preview */}
-            <img
-              src={preview}
-              alt="Search image"
-              className={`${thumb} rounded-full object-cover ring-1 ring-divider`}
-            />
+            {imagePreviewMime?.startsWith("video/") ? (
+              <video
+                src={preview}
+                muted
+                playsInline
+                autoPlay
+                loop
+                className={`${thumb} rounded-full object-cover ring-1 ring-divider`}
+              />
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element -- blob/data URL preview
+              <img
+                src={preview}
+                alt="Search visual"
+                className={`${thumb} rounded-full object-cover ring-1 ring-divider`}
+              />
+            )}
             <button
               type="button"
-              aria-label="Clear search image"
-              title="Clear search image"
+              aria-label="Clear search visual"
+              title="Clear search visual"
               onClick={clearPreview}
               className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-foreground text-background shadow"
             >
@@ -234,7 +252,7 @@ export function SearchBar({
           onPaste={handlePaste}
           placeholder={
             preview
-              ? "Add words to refine the image search…"
+              ? "Add words to refine the visual search…"
               : placeholder
           }
           className={`min-w-0 flex-1 bg-transparent outline-none placeholder:text-inactive ${
@@ -247,8 +265,8 @@ export function SearchBar({
             <>
               <button
                 type="button"
-                aria-label="Search with image"
-                title="Search with image (or paste)"
+                aria-label="Search with visual"
+                title="Search with image, GIF, or video (or paste)"
                 className="flex h-9 w-9 items-center justify-center rounded-full text-inactive transition-colors hover:bg-black/5 hover:text-accent-pink"
                 onClick={() => fileRef.current?.click()}
               >
@@ -257,7 +275,7 @@ export function SearchBar({
               <input
                 ref={fileRef}
                 type="file"
-                accept="image/*"
+                accept="image/*,video/mp4,video/webm,video/quicktime"
                 className="hidden"
                 onChange={(e) => {
                   void handleImage(e.target.files?.[0] ?? null);

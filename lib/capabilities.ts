@@ -56,7 +56,7 @@ export const SEARCH_UI_MODES = [
   "keywords",
   "hybrid",
   "semantic",
-  "image",
+  "visual",
   "agent",
 ] as const;
 export type SearchUiMode = (typeof SEARCH_UI_MODES)[number];
@@ -67,9 +67,15 @@ const MEMBER_MODES = new Set<SearchUiMode>([
   "keywords",
   "hybrid",
   "semantic",
-  "image",
+  "visual",
   "agent",
 ]);
+
+/** Normalize legacy `image` bookmarks → `visual`. */
+export function normalizeSearchUiMode(mode: string | undefined | null): string {
+  if (mode === "image") return "visual";
+  return mode ?? "";
+}
 
 /** Guest / inactive → keywords; role=user → +semantic; member+ → full set. */
 export function allowedSearchModes(
@@ -84,7 +90,8 @@ export function canUseSearchMode(
   user: CapabilityUser | null | undefined,
   mode: string,
 ): boolean {
-  return allowedSearchModes(user).has(mode as SearchUiMode);
+  const m = normalizeSearchUiMode(mode);
+  return allowedSearchModes(user).has(m as SearchUiMode);
 }
 
 /** Default mode for /search UI. */
@@ -97,7 +104,7 @@ export function defaultSearchMode(
   return "keywords";
 }
 
-/** Highest text mode for library list APIs (no image/agent). */
+/** Highest text mode for library list APIs (no visual/agent). */
 export function bestLibrarySearchMode(
   user: CapabilityUser | null | undefined,
 ): "keywords" | "semantic" | "hybrid" {

@@ -9,10 +9,10 @@ import { MEILI_INDEX } from "@/lib/meili/indexes";
 import {
   meiliFederatedSearch,
   meiliScopedSearch,
-  type SearchMode,
+  normalizeSearchMode,
 } from "@/lib/search/query";
 
-const MODES = new Set(["keywords", "hybrid", "semantic", "image"]);
+const MODES = new Set(["keywords", "hybrid", "semantic", "visual", "image"]);
 
 function searchError(err: unknown) {
   const message = err instanceof Error ? err.message : "Search failed";
@@ -45,7 +45,9 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const q = url.searchParams.get("q") ?? "";
     const modeRaw = url.searchParams.get("mode") ?? "hybrid";
-    const mode = (MODES.has(modeRaw) ? modeRaw : "hybrid") as SearchMode;
+    const mode = MODES.has(modeRaw)
+      ? normalizeSearchMode(modeRaw)
+      : ("hybrid" as const);
     const limit = Math.min(
       48,
       Math.max(1, Number(url.searchParams.get("limit") ?? "24") || 24),
@@ -75,10 +77,6 @@ export async function GET(request: Request) {
     const user = await capUser(request);
     if (!canUseSearchMode(user, mode)) {
       return forbidMode(user, mode);
-    }
-
-    if (scope && scope !== "all" && scope in MEILI_INDEX === false) {
-      // scope is uid string
     }
 
     if (
@@ -114,35 +112,28 @@ export async function POST(request: Request) {
       media?: { mime: string; data: string };
     } | null;
 
-    const modeRaw = body?.mode ?? "image";
-    const mode = (MODES.has(modeRaw) ? modeRaw : "image") as SearchMode;
+    const mode = normalizeSearchMode(body?.mode ?? "visual");
     const user = await capUser(request);
     if (!canUseSearchMode(user, mode)) {
       return forbidMode(user, mode);
     }
 
-    let media = body?.media;
-    if (media?.data && media.mime) {
-      const { isMotionMime, storyboardBase64 } = await import(
-        "@/lib/search/storyboard"
-      );
-      if (isMotionMime(media.mime)) {
-        const jpegB64 = await storyboardBase64(
-          Buffer.from(media.data, "base64"),
-          media.mime,
-        );
-        media = { mime: "image/jpeg", data: jpegB64 };
-      }
-    }
+    const { prepareSearchMedia } = await import("@/lib/search/prepare-media");
+    const prepared = await prepareSearchMedia(body?.media ?? null);
 
     const result = await meiliFederatedSearch({
       q: body?.q ?? "",
       mode,
       limit: body?.limit ?? 5,
       filter: body?.filter,
-      media,
+      media: prepared.media ?? undefined,
     });
-    return NextResponse.json(result);
+    return NextResponse.json({
+      ...result,
+      processedImage: prepared.processedFromMotion
+        ? prepared.media?.data
+        : undefined,
+    });
   } catch (err) {
     return searchError(err);
   }

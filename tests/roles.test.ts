@@ -126,7 +126,8 @@ describe("search modes", () => {
     for (const role of [BLOB_ROLE.member, BLOB_ROLE.admin, BLOB_ROLE.superadmin]) {
       const u = active(role);
       expect(canUseSearchMode(u, "hybrid")).toBe(true);
-      expect(canUseSearchMode(u, "image")).toBe(true);
+      expect(canUseSearchMode(u, "visual")).toBe(true);
+      expect(canUseSearchMode(u, "image")).toBe(true); // legacy alias
       expect(canUseSearchMode(u, "agent")).toBe(true);
       expect(defaultSearchMode(u)).toBe("hybrid");
       expect(bestLibrarySearchMode(u)).toBe("hybrid");
