@@ -360,6 +360,17 @@ async function processComposition(stickerId: bigint): Promise<void> {
       });
     }
 
+    if (encoded.exports.gif || encoded.exports.video) {
+      try {
+        const { ensureStickerStoryboard } = await import(
+          "@/lib/search/ensure-storyboard"
+        );
+        await ensureStickerStoryboard(stickerId, { force: true });
+      } catch (sbErr) {
+        console.warn("storyboard encode skipped:", sbErr);
+      }
+    }
+
     await markReady(stickerId);
     await ensurePublicStickerMediaLinked(stickerId);
   } catch (err) {

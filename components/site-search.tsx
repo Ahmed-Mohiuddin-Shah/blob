@@ -82,30 +82,30 @@ async function parseJsonResponse(res: Response): Promise<Record<string, unknown>
 
 function seedSteps(mode: string): ThoughtStep[] {
   if (mode === "agent") {
-    return [{ label: "Planning query with agent…", done: false }];
+    return [{ label: "waking the search gremlin…", done: false }];
   }
   if (mode === "image") {
     return [
-      { label: "Encoding image…", done: false },
-      { label: "Image similarity search", done: false },
-      { label: "Merging with text (if any)…", done: false },
+      { label: "squishing your pic…", done: false },
+      { label: "sniffing lookalikes…", done: false },
+      { label: "mixing in your words…", done: false },
     ];
   }
   if (mode === "semantic") {
     return [
-      { label: "Embedding query…", done: false },
-      { label: "Semantic search", done: false },
+      { label: "turning words into vibes…", done: false },
+      { label: "hunting by meaning…", done: false },
     ];
   }
   if (mode === "hybrid") {
     return [
-      { label: "Hybrid keyword + semantic…", done: false },
-      { label: "Federated Meili search", done: false },
+      { label: "keywords + vibes mashup…", done: false },
+      { label: "scouring the shelves…", done: false },
     ];
   }
   return [
-    { label: "Keyword search", done: false },
-    { label: "Federated Meili search", done: false },
+    { label: "literal keyword dig…", done: false },
+    { label: "scouring the shelves…", done: false },
   ];
 }
 
@@ -146,6 +146,7 @@ export function SiteSearch({
   const [steps, setSteps] = useState<ThoughtStep[]>([]);
   const [thoughtLabel, setThoughtLabel] = useState("Searching…");
   const [doneLabel, setDoneLabel] = useState("Thought for");
+  const [thoughtFailed, setThoughtFailed] = useState(false);
   const [showThought, setShowThought] = useState(false);
 
   const canImage = allowed.has("image");
@@ -173,12 +174,13 @@ export function SiteSearch({
 
   function beginThought(nextMode: string) {
     setShowThought(true);
+    setThoughtFailed(false);
     setThoughtLabel(
       nextMode === "agent"
-        ? "Agent thinking…"
+        ? "agent is plotting…"
         : nextMode === "image"
-          ? "Searching by image…"
-          : "Searching…",
+          ? "eyeing your upload…"
+          : "searching…",
     );
     setDoneLabel("Thought for");
     setSteps(seedSteps(nextMode));
@@ -189,29 +191,49 @@ export function SiteSearch({
     engineName: string;
     plan?: AgentPlan | null;
     hitCount: number;
+    thoughtSteps?: string[];
+    fallback?: boolean;
   }) {
+    const engine = opts.engineName || "search";
+    const prismaFallback = engine === "prisma";
+    const failed = Boolean(opts.fallback || prismaFallback);
+    setThoughtFailed(failed);
     const provenance = [
       opts.nextMode,
-      opts.engineName || "search",
-      `${opts.hitCount} hit${opts.hitCount === 1 ? "" : "s"}`,
+      prismaFallback ? "filing-cabinet" : engine,
+      `${opts.hitCount} find${opts.hitCount === 1 ? "" : "s"}`,
     ].join(" · ");
-    setDoneLabel(`Done · ${provenance}`);
+    setDoneLabel(
+      failed
+        ? `Wobbly but done · ${provenance}`
+        : `Done · ${provenance}`,
+    );
     setSteps((prev) => {
       const base = prev.map((s) => ({ ...s, done: true }));
-      if (opts.plan) {
-        const planBits = [
-          `Plan q: ${opts.plan.q}`,
-          `Plan mode: ${opts.plan.mode}`,
-          opts.plan.filter ? `Filter: ${opts.plan.filter}` : null,
-        ].filter(Boolean) as string[];
-        return [
-          { label: "Planned Meili query", done: true },
-          ...planBits.map((label) => ({ label, done: true })),
-          { label: `Ran search · ${opts.engineName}`, done: true },
-          { label: provenance, done: true },
-        ];
+      const extra: ThoughtStep[] = [];
+      if (opts.thoughtSteps?.length) {
+        for (const label of opts.thoughtSteps) {
+          extra.push({ label, done: true });
+        }
       }
-      return [...base, { label: provenance, done: true }];
+      if (prismaFallback) {
+        extra.push({
+          label: "Meili napped — dug through the filing cabinet instead",
+          done: true,
+          failed: true,
+        });
+      }
+      if (opts.plan) {
+        extra.push(
+          { label: `hunting “${opts.plan.q}”`, done: true },
+          { label: `mode: ${opts.plan.mode}`, done: true },
+        );
+        if (opts.plan.filter) {
+          extra.push({ label: `filter: ${opts.plan.filter}`, done: true });
+        }
+      }
+      extra.push({ label: provenance, done: true, failed });
+      return [...base, ...extra];
     });
   }
 
@@ -251,11 +273,13 @@ export function SiteSearch({
             engineName: String(data.engine ?? "meili"),
             plan: plan ?? null,
             hitCount: ((data.hits as Hit[]) ?? []).length,
+            thoughtSteps: (data.thoughtSteps as string[]) ?? undefined,
+            fallback: Boolean(data.planFallback),
           });
           return;
         }
         const res = await fetch(
-          `/api/search?q=${encodeURIComponent(nextQ)}&mode=${encodeURIComponent(nextMode)}&limit=36`,
+          `/api/search?q=${encodeURIComponent(nextQ)}&mode=${encodeURIComponent(nextMode)}&limit=5`,
         );
         const data = await parseJsonResponse(res);
         if (!res.ok) throw new Error(String(data.error || "Search failed"));
@@ -264,16 +288,19 @@ export function SiteSearch({
           nextMode,
           engineName: String(data.engine ?? ""),
           hitCount: ((data.hits as Hit[]) ?? []).length,
+          fallback: String(data.engine ?? "") === "prisma",
         });
       } catch (e) {
         setError(e instanceof Error ? e.message : "Search failed");
         setHits([]);
-        setDoneLabel("Search failed");
+        setThoughtFailed(true);
+        setDoneLabel("Oop — search tripped");
         setSteps((prev) => [
           ...prev.map((s) => ({ ...s, done: true })),
           {
-            label: e instanceof Error ? e.message : "Search failed",
+            label: e instanceof Error ? e.message : "something went sideways",
             done: true,
+            failed: true,
           },
         ]);
       }
@@ -309,13 +336,23 @@ export function SiteSearch({
           nextMode: trimmed ? "image+text" : "image",
           engineName: String(json.engine ?? "meili"),
           hitCount: ((json.hits as Hit[]) ?? []).length,
+          fallback: String(json.engine ?? "") === "prisma",
         });
         const url = new URLSearchParams({ mode: "image" });
         if (trimmed) url.set("q", trimmed);
         router.replace(`/search?${url.toString()}`);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Image search failed");
-        setDoneLabel("Search failed");
+        setThoughtFailed(true);
+        setDoneLabel("Oop — image search tripped");
+        setSteps((prev) => [
+          ...prev.map((s) => ({ ...s, done: true })),
+          {
+            label: e instanceof Error ? e.message : "image search failed",
+            done: true,
+            failed: true,
+          },
+        ]);
       }
     });
   }
@@ -409,6 +446,7 @@ export function SiteSearch({
         <div className="mt-4 rounded-[24px] border border-divider bg-surface/80 px-4 py-3">
           <ThoughtLine
             working={pending}
+            failed={thoughtFailed}
             label={thoughtLabel}
             doneLabel={doneLabel}
             steps={steps}
@@ -546,22 +584,25 @@ export function SiteSearch({
             <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-inactive">
               {section}
             </h2>
-            <ul className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {list.map((hit) => (
-                <li key={`${hit.index}-${hit.id}`}>
+            <ul className="mt-4 flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {list.slice(0, 5).map((hit) => (
+                <li
+                  key={`${hit.index}-${hit.id}`}
+                  className="w-[11.5rem] shrink-0 snap-start"
+                >
                   <Link
                     href={hrefFor(hit)}
-                    className="flex gap-3 rounded-[28px] border border-divider bg-surface p-3 transition hover:border-accent-pink/40"
+                    className="flex h-full flex-col gap-2 rounded-[28px] border border-divider bg-surface p-3 transition hover:border-accent-pink/40"
                   >
                     {hit.previewUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={hit.previewUrl}
                         alt=""
-                        className="h-16 w-16 rounded-2xl object-cover"
+                        className="aspect-square w-full rounded-2xl object-cover"
                       />
                     ) : (
-                      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-accent-gradient/20 text-xs text-accent-pink">
+                      <div className="flex aspect-square w-full items-center justify-center rounded-2xl bg-accent-gradient/20 text-sm text-accent-pink">
                         {section.slice(0, 1).toUpperCase()}
                       </div>
                     )}

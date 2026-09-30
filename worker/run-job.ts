@@ -153,14 +153,21 @@ async function runSearchEnrich(
 }> {
   const ollamaBase = (process.env.OLLAMA_BASE_URL || "").replace(/\/$/, "");
   if (!ollamaBase) throw new Error("OLLAMA_BASE_URL is not set on worker");
-  const visionModel = process.env.OLLAMA_VISION_MODEL?.trim() || "moondream";
+  const visionModel =
+    process.env.OLLAMA_VISION_MODEL?.trim() || "qwen2.5vl:3b";
   const agentModel = process.env.OLLAMA_AGENT_MODEL?.trim() || "qwen2.5:3b";
 
   const glass = glassClient(glassUrl, glassKey);
   const res = await glass.objects.download(payload.glassObjectId);
-  const b64 = await visionImageBase64(
-    Buffer.from(await res.arrayBuffer()),
+  const rawBytes = Buffer.from(await res.arrayBuffer());
+  const mime = payload.mimeType || "image/png";
+  const { isMotionMime, storyboardBase64 } = await import(
+    "../lib/search/storyboard"
   );
+  const storyboard = isMotionMime(mime);
+  const b64 = storyboard
+    ? await storyboardBase64(rawBytes, mime)
+    : await visionImageBase64(rawBytes);
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -168,9 +175,13 @@ async function runSearchEnrich(
   const key = process.env.OLLAMA_API_KEY?.trim();
   if (key) headers.Authorization = `Bearer ${key}`;
 
-  const prompts: ResolvedMetaPrompts =
-    payload.prompts ?? defaultResolvedMetaPrompts();
-  const describe = describePromptFromResolved(prompts, visionModel);
+  const prompts: ResolvedMetaPrompts = {
+    ...defaultResolvedMetaPrompts(),
+    ...(payload.prompts ?? {}),
+  };
+  const describe = describePromptFromResolved(prompts, visionModel, {
+    storyboard,
+  });
 
   const chatOnce = () =>
     ollamaChatWorkerSafe({
@@ -226,7 +237,7 @@ async function runSearchEnrich(
         base: ollamaBase,
         headers,
         model: visionModel,
-        content: visionJsonPromptFromResolved(prompts),
+        content: visionJsonPromptFromResolved(prompts, { storyboard }),
         images: [b64],
         options: jsonOpts,
       }),
@@ -416,6 +427,41 @@ async function runComposition(
       durationMs: encoded.meta.duration_ms || null,
       hasAudio: encoded.meta.has_audio,
     });
+  }
+
+  const motionSrc =
+    kinds.find((k) => k.kind === MEDIA_KIND.gif) ??
+    kinds.find((k) => k.kind === MEDIA_KIND.video);
+  if (motionSrc) {
+    try {
+      const { buildStoryboardJpeg } = await import("../lib/search/storyboard");
+      const sb = await buildStoryboardJpeg(
+        Buffer.from(motionSrc.bytes),
+        motionSrc.mime,
+      );
+      const up = await glass.objects.upload({
+        prismId: payload.prismId,
+        file: sb,
+        title: `${payload.slug}-storyboard`,
+        filename: `${payload.slug}-storyboard.jpg`,
+        fileExtension: "jpg",
+      });
+      derivatives.push({
+        kind: MEDIA_KIND.storyboard,
+        glassObjectId: up.object_id,
+        glassPrismId: payload.prismId,
+        mimeType: "image/jpeg",
+        fileExtension: "jpg",
+        width: 510,
+        height: 340,
+        sizeBytes: sb.length,
+        checksumSha256: sha256Hex(sb),
+        durationMs: null,
+        hasAudio: false,
+      });
+    } catch (err) {
+      console.warn("worker storyboard skipped:", err);
+    }
   }
 
   return {

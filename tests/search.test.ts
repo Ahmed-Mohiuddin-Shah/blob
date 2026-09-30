@@ -76,7 +76,7 @@ describe("search constants", () => {
     expect(structureEnrichPrompt("a blackboard on a wall")).toContain(
       "a blackboard on a wall",
     );
-    expect(structureEnrichPrompt("x")).toContain("ONLY JSON");
+    expect(structureEnrichPrompt("x")).toContain("ONLY a single JSON object");
     expect(structureEnrichPrompt("x")).toContain("5 to 12");
   });
 
@@ -97,8 +97,13 @@ describe("search constants", () => {
         '{"caption":"VOID","scenario":"VOID","tags":["VOID"]}',
       ),
     ).toThrow(/empty or placeholder/);
+    expect(() =>
+      parseVisionEnrichResult(
+        '{"caption":"<a character holding balloons>","scenario":"party","tags":["HAPPY"]}',
+      ),
+    ).toThrow(/empty or placeholder/);
     const ok = parseVisionEnrichResult(
-      '{"caption":"a blue cat under rain","scenario":"weather chat","tags":["CAT","RAIN"]}',
+      '```json\n{"caption":"a blue cat under rain","scenario":"weather chat","tags":["CAT","RAIN"],}\n```',
     );
     expect(ok.aiCaption).toBe("a blue cat under rain");
     expect(ok.aiVisualTags).toEqual(["CAT", "RAIN"]);

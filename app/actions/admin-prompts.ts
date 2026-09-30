@@ -74,6 +74,9 @@ export async function applyMetaPromptsAction(
         [LLM_PROMPT_KEY.metaVisionDescribe]: String(
           formData.get("visionDescribe") ?? "",
         ),
+        [LLM_PROMPT_KEY.metaVisionMotion]: String(
+          formData.get("visionMotion") ?? "",
+        ),
         [LLM_PROMPT_KEY.metaStructure]: String(formData.get("structure") ?? ""),
         [LLM_PROMPT_KEY.metaVisionJson]: String(
           formData.get("visionJson") ?? "",
@@ -135,6 +138,7 @@ export async function testMetaPromptAction(
 
   const prompts = metaPromptsFromDraft({
     visionDescribe: String(formData.get("visionDescribe") ?? ""),
+    visionMotion: String(formData.get("visionMotion") ?? ""),
     structure: String(formData.get("structure") ?? ""),
     visionJson: String(formData.get("visionJson") ?? ""),
     outputExample: String(formData.get("outputExample") ?? ""),

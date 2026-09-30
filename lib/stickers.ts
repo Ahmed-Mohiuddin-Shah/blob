@@ -31,6 +31,8 @@ export const MEDIA_KIND = {
   mask: "mask",
   gif: "gif",
   video: "video",
+  /** 2×3 frame storyboard for CLIP / vision enrich (gif/video). */
+  storyboard: "storyboard",
   /** WhatsApp / social link-preview JPEG (hidden from downloads). */
   og: "og",
   prevThumbnail: "prev_thumbnail",

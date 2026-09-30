@@ -7,6 +7,7 @@ export const MEDIA_KIND = {
   mask: "mask",
   gif: "gif",
   video: "video",
+  storyboard: "storyboard",
   og: "og",
 } as const;
 

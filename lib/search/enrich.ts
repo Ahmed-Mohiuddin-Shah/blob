@@ -69,10 +69,56 @@ export function searchEnrichMediaCandidates<
   return out;
 }
 
-async function stickerPreviewBase64(stickerId: bigint): Promise<string | null> {
+async function stickerPreviewBase64(
+  stickerId: bigint,
+): Promise<{ b64: string; storyboard: boolean } | null> {
   const media = await prisma.mediaAsset.findMany({
     where: { stickerId, status: MEDIA_ASSET_STATUS.ready },
   });
+  const isMotion = media.some(
+    (m) =>
+      m.kind === MEDIA_KIND.gif ||
+      m.kind === MEDIA_KIND.video ||
+      String(m.mimeType).startsWith("video/"),
+  );
+
+  if (isMotion) {
+    try {
+      const { ensureStickerStoryboard } = await import(
+        "@/lib/search/ensure-storyboard"
+      );
+      const { storyboardBase64 } = await import("@/lib/search/storyboard");
+      await ensureStickerStoryboard(stickerId);
+      const sb = await prisma.mediaAsset.findUnique({
+        where: {
+          stickerId_kind: { stickerId, kind: MEDIA_KIND.storyboard },
+        },
+      });
+      if (sb) {
+        const glass = getGlass();
+        const res = await glass.objects.download(sb.glassObjectId);
+        const buf = Buffer.from(await res.arrayBuffer());
+        return { b64: buf.toString("base64"), storyboard: true };
+      }
+      // In-memory fallback without persisted asset
+      const source =
+        media.find((m) => m.kind === MEDIA_KIND.gif) ??
+        media.find((m) => m.kind === MEDIA_KIND.video);
+      if (source) {
+        const glass = getGlass();
+        const res = await glass.objects.download(source.glassObjectId);
+        const buf = Buffer.from(await res.arrayBuffer());
+        const b64 = await storyboardBase64(
+          buf,
+          source.mimeType || "image/gif",
+        );
+        return { b64, storyboard: true };
+      }
+    } catch (err) {
+      console.warn("storyboard enrich fallback to still:", err);
+    }
+  }
+
   const candidates = searchEnrichMediaCandidates(media);
   if (candidates.length === 0) {
     if (media.some((m) => String(m.mimeType).startsWith("video/"))) {
@@ -88,7 +134,7 @@ async function stickerPreviewBase64(stickerId: bigint): Promise<string | null> {
     try {
       const res = await glass.objects.download(asset.glassObjectId);
       const buf = Buffer.from(await res.arrayBuffer());
-      return await visionImageBase64(buf);
+      return { b64: await visionImageBase64(buf), storyboard: false };
     } catch (err) {
       lastErr = err;
     }
@@ -114,8 +160,11 @@ async function visionProse(
   visionModel: string,
   b64: string,
   prompts: ResolvedMetaPrompts,
+  storyboard: boolean,
 ): Promise<string> {
-  const describe = describePromptFromResolved(prompts, visionModel);
+  const describe = describePromptFromResolved(prompts, visionModel, {
+    storyboard,
+  });
   const once = () =>
     chatSafe({
       model: visionModel,
@@ -145,13 +194,15 @@ export async function runSearchEnrich(stickerId: bigint): Promise<EnrichResult> 
   if (!isOllamaConfigured()) {
     throw new Error("OLLAMA_BASE_URL is not set");
   }
-  const visionModel = process.env.OLLAMA_VISION_MODEL?.trim() || "moondream";
+  const visionModel =
+    process.env.OLLAMA_VISION_MODEL?.trim() || "qwen2.5vl:3b";
   const agentModel = process.env.OLLAMA_AGENT_MODEL?.trim() || "qwen2.5:3b";
-  const b64 = await stickerPreviewBase64(stickerId);
-  if (!b64) throw new Error("No preview media for caption");
+  const preview = await stickerPreviewBase64(stickerId);
+  if (!preview) throw new Error("No preview media for caption");
+  const { b64, storyboard } = preview;
 
   const prompts = await getResolvedMetaPrompts();
-  const prose = await visionProse(visionModel, b64, prompts);
+  const prose = await visionProse(visionModel, b64, prompts, storyboard);
   if (!prose) {
     throw new Error(
       `Vision description empty (${visionModel}) — check Ollama vision model`,
@@ -183,7 +234,7 @@ export async function runSearchEnrich(stickerId: bigint): Promise<EnrichResult> 
     result = tryParse(
       await chatSafe({
         model: visionModel,
-        prompt: visionJsonPromptFromResolved(prompts),
+        prompt: visionJsonPromptFromResolved(prompts, { storyboard }),
         images: [b64],
         options: jsonOpts,
       }),
@@ -219,12 +270,12 @@ export async function applySearchEnrichResult(
   stickerId: bigint,
   result: EnrichResult,
 ): Promise<void> {
+  const { draftFromEnrich } = await import("@/lib/search/meta-draft");
+  // Draft only — live ai* stay until admin approves (plan 1B).
   await prisma.sticker.update({
     where: { id: stickerId },
     data: {
-      aiCaption: result.aiCaption,
-      aiScenario: result.aiScenario,
-      aiVisualTags: JSON.stringify(result.aiVisualTags),
+      aiMetaDraft: draftFromEnrich(result),
       searchMetaStatus: SEARCH_META_STATUS.pendingSearchMeta,
     },
   });

@@ -5,6 +5,7 @@
 
 export const LLM_PROMPT_KEY = {
   metaVisionDescribe: "meta_vision_describe",
+  metaVisionMotion: "meta_vision_motion",
   metaStructure: "meta_structure",
   metaVisionJson: "meta_vision_json",
   metaOutputExample: "meta_output_example",
@@ -15,38 +16,52 @@ export const LLM_PROMPT_KEY = {
 export type LlmPromptKey =
   (typeof LLM_PROMPT_KEY)[keyof typeof LLM_PROMPT_KEY];
 
-/** Neutral example tags — avoid ANIME/ANGRY/MEME echo loops. */
-export const DEFAULT_META_OUTPUT_EXAMPLE = `{"caption":"<one concrete visual sentence>","scenario":"<when someone would send this sticker>","tags":["CHARACTER","EMOTION","OBJECT","STYLE"]}`;
+/**
+ * Concrete example only — no angle brackets / schema placeholders models echo.
+ * Escape as a single JSON line after a Schema: block in assemblers.
+ */
+export const DEFAULT_META_OUTPUT_EXAMPLE = `{"caption":"Chibi girl with round glasses sticks tongue out under a bunch of colorful balloons","scenario":"Celebrate a birthday or share silly happy energy in chat","tags":["CHIBI_GIRL","GLASSES","BALLOONS","HAPPY","TONGUE_OUT","CELEBRATION"]}`;
 
-export const DEFAULT_SEARCH_OUTPUT_EXAMPLE = `{"q":"rewritten keyword/semantic query","mode":"hybrid"|"semantic"|"keywords","filter":"optional meilisearch filter or empty string"}`;
+export const DEFAULT_SEARCH_OUTPUT_EXAMPLE = `{"q":"happy birthday balloons sticker","mode":"hybrid","filter":""}`;
 
 export const DEFAULT_META_VISION_DESCRIBE =
   "Describe this sticker for search in 2-4 sentences: subjects, text on image, emotion, and style.";
 
-export const DEFAULT_META_STRUCTURE = `Given this sticker description, reply with ONLY JSON (no markdown).
+/** 6-frame storyboard — corner digits are sequence markers, not content. */
+export const DEFAULT_META_VISION_MOTION = `This image is a 2x3 storyboard of six frames from a GIF or video, in time order.
 
-Requirements (all required):
-- caption: one concrete visual sentence (not empty)
-- scenario: when someone would send this sticker (not empty)
-- tags: 5 to 12 SEPARATE array strings (one word or underscore_phrase each; NEVER put commas inside a tag)
-- Specific visuals: character, emotion, objects, style, text-on-image if any
-- Do NOT use placeholder words like SHORT, TAGS, VOID, EXAMPLE
-- Prefer concrete tags from the image; do not copy example tag names when they do not fit`;
+IMPORTANT: The small numbers 1-6 in the corners are frame sequence markers only. They are NOT part of the sticker art, text, or objects. Never mention them in your description, and never use them as tags.
 
-export const DEFAULT_META_VISION_JSON = `Look at this sticker image. Reply with ONLY JSON (no markdown).
+Describe what is happening across the timeline in 2-4 sentences for search: subjects, motion/action, on-screen text if any, emotion, and style.`;
 
-Requirements (all required):
-- caption: one concrete visual sentence
-- scenario: when someone would send this sticker
-- tags: 5 to 12 separate short tags in the array (no commas inside a tag)
-- Specific: character, emotion, objects, style, text-on-image if any
-- Do NOT use SHORT, TAGS, VOID, EXAMPLE
-- Prefer concrete tags from the image; do not copy example tag names when they do not fit`;
+export const DEFAULT_META_STRUCTURE = `Given this sticker description, reply with ONLY a single JSON object. No markdown fences, no prose before or after.
 
-export const DEFAULT_SEARCH_AGENT = `You help search a sticker site. Given the user query, reply with ONLY JSON.`;
+Schema (all required):
+- caption: string — one concrete visual sentence grounded in the description
+- scenario: string — when someone would send this sticker
+- tags: string[] — 5 to 12 items; each tag is ONE_WORD or underscore_phrase; UPPERCASE preferred; no spaces, commas, or parentheses inside a tag
+
+Rules:
+- Do not copy example wording unless it truly fits
+- Do not use placeholder tokens (VOID, EXAMPLE, SHORT, TAGS, CHARACTER, EMOTION, OBJECT, STYLE as generic fillers)
+- Prefer concrete visuals from the description`;
+
+export const DEFAULT_META_VISION_JSON = `Look at this sticker image. Reply with ONLY a single JSON object. No markdown fences, no prose before or after.
+
+If this image is a numbered 2x3 storyboard: corner digits 1-6 are sequence markers only — ignore them as content; describe the animation/action across frames.
+
+Schema (all required):
+- caption: string — one concrete visual sentence
+- scenario: string — when someone would send this sticker
+- tags: string[] — 5 to 12 short tags (underscore_phrase OK; no spaces/commas inside a tag)
+
+Do not echo example captions or filler tags.`;
+
+export const DEFAULT_SEARCH_AGENT = `You help users search a sticker site. Use the provided tools to learn allowed search modes and filter fields, then search. Prefer hybrid mode unless the user clearly wants keywords-only or pure semantic. Reply briefly when done.`;
 
 export const LLM_PROMPT_DEFAULTS: Record<LlmPromptKey, string> = {
   [LLM_PROMPT_KEY.metaVisionDescribe]: DEFAULT_META_VISION_DESCRIBE,
+  [LLM_PROMPT_KEY.metaVisionMotion]: DEFAULT_META_VISION_MOTION,
   [LLM_PROMPT_KEY.metaStructure]: DEFAULT_META_STRUCTURE,
   [LLM_PROMPT_KEY.metaVisionJson]: DEFAULT_META_VISION_JSON,
   [LLM_PROMPT_KEY.metaOutputExample]: DEFAULT_META_OUTPUT_EXAMPLE,
@@ -56,6 +71,7 @@ export const LLM_PROMPT_DEFAULTS: Record<LlmPromptKey, string> = {
 
 export type ResolvedMetaPrompts = {
   visionDescribe: string;
+  visionMotion: string;
   structure: string;
   visionJson: string;
   outputExample: string;
@@ -74,6 +90,7 @@ export function assembleStructurePrompt(
 ): string {
   return `${instructions.trim()}
 
+Example JSON (shape only — invent values from the description):
 ${outputExample.trim()}
 
 Description:
@@ -87,17 +104,21 @@ export function assembleVisionJsonPrompt(
 ): string {
   return `${instructions.trim()}
 
+Example JSON (shape only — invent values from the image):
 ${outputExample.trim()}`;
 }
 
-/** Assemble search-agent planner prompt. */
+/** Assemble search-agent planner prompt (legacy single-shot / fallback). */
 export function assembleSearchAgentPrompt(
   instructions: string,
   outputExample: string,
   query: string,
 ): string {
   return `${instructions.trim()}
+
+If you cannot use tools, reply with ONLY JSON matching:
 ${outputExample.trim()}
+
 User query: ${query.trim()}`;
 }
 
@@ -115,8 +136,13 @@ export function structurePromptFromResolved(
 
 export function visionJsonPromptFromResolved(
   prompts: ResolvedMetaPrompts,
+  opts?: { storyboard?: boolean },
 ): string {
-  return assembleVisionJsonPrompt(prompts.visionJson, prompts.outputExample);
+  const base = assembleVisionJsonPrompt(prompts.visionJson, prompts.outputExample);
+  if (!opts?.storyboard) return base;
+  return `${base}
+
+Reminder: corner numbers 1-6 on a storyboard are sequence markers only — not sticker content.`;
 }
 
 export function searchAgentPromptFromResolved(
@@ -133,6 +159,7 @@ export function searchAgentPromptFromResolved(
 export function defaultResolvedMetaPrompts(): ResolvedMetaPrompts {
   return {
     visionDescribe: DEFAULT_META_VISION_DESCRIBE,
+    visionMotion: DEFAULT_META_VISION_MOTION,
     structure: DEFAULT_META_STRUCTURE,
     visionJson: DEFAULT_META_VISION_JSON,
     outputExample: DEFAULT_META_OUTPUT_EXAMPLE,

@@ -103,8 +103,10 @@ export async function meiliFederatedSearch(opts: {
   try {
     // Image search must omit `q` — empty q still matches the text searchFragment
     // and Meili errors with "Query matches multiple search fragments".
+    // Cap stickers at 5 for federated /search UI rows (callers can still pass lower).
+    const stickerLimit = Math.min(5, limit);
     const stickerParams: Record<string, unknown> = {
-      limit,
+      limit: stickerLimit,
       facets: ["categorySlug", "tags", "mediaKind"],
       ...(opts.filter ? { filter: opts.filter } : {}),
       ...(hybrid ? { hybrid } : {}),
@@ -122,7 +124,7 @@ export async function meiliFederatedSearch(opts: {
         {
           indexUid: MEILI_INDEX.collections,
           q,
-          limit: Math.min(12, limit),
+          limit: Math.min(5, limit),
           ...(mode !== "keywords" && mode !== "image"
             ? {
                 hybrid: {
@@ -135,7 +137,7 @@ export async function meiliFederatedSearch(opts: {
         {
           indexUid: MEILI_INDEX.prints,
           q,
-          limit: Math.min(12, limit),
+          limit: Math.min(5, limit),
           ...(mode !== "keywords" && mode !== "image"
             ? {
                 hybrid: {
@@ -148,7 +150,7 @@ export async function meiliFederatedSearch(opts: {
         {
           indexUid: MEILI_INDEX.blobbers,
           q,
-          limit: Math.min(8, limit),
+          limit: Math.min(5, limit),
         },
       ],
     });

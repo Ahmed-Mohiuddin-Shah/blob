@@ -75,6 +75,9 @@ export function PromptsAdmin({ initial }: { initial: Bodies }) {
   const [visionDescribe, setVisionDescribe] = useState(
     initial[LLM_PROMPT_KEY.metaVisionDescribe],
   );
+  const [visionMotion, setVisionMotion] = useState(
+    initial[LLM_PROMPT_KEY.metaVisionMotion],
+  );
   const [structure, setStructure] = useState(
     initial[LLM_PROMPT_KEY.metaStructure],
   );
@@ -95,6 +98,7 @@ export function PromptsAdmin({ initial }: { initial: Bodies }) {
   const metaHidden = (
     <>
       <input type="hidden" name="visionDescribe" value={visionDescribe} />
+      <input type="hidden" name="visionMotion" value={visionMotion} />
       <input type="hidden" name="structure" value={structure} />
       <input type="hidden" name="visionJson" value={visionJson} />
       <input type="hidden" name="outputExample" value={metaOutput} />
@@ -112,6 +116,7 @@ export function PromptsAdmin({ initial }: { initial: Bodies }) {
       const handoff = await fileToHandoff(photoFile);
       const fd = new FormData();
       fd.set("visionDescribe", visionDescribe);
+      fd.set("visionMotion", visionMotion);
       fd.set("structure", structure);
       fd.set("visionJson", visionJson);
       fd.set("outputExample", metaOutput);
@@ -154,6 +159,13 @@ export function PromptsAdmin({ initial }: { initial: Bodies }) {
             value={visionDescribe}
             onChange={setVisionDescribe}
             rows={3}
+          />
+          <TextArea
+            label="Vision motion (storyboard)"
+            hint="GIF/video 2×3 grid. Remind the model corner 1–6 are sequence markers only."
+            value={visionMotion}
+            onChange={setVisionMotion}
+            rows={5}
           />
           <TextArea
             label="Structure instructions"

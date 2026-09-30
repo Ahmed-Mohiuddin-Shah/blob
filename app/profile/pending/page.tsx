@@ -5,6 +5,7 @@ import { MODERATION_STATUS } from "@/lib/moderation";
 import { prisma } from "@/lib/prisma";
 import { requireSessionUser } from "@/lib/require-user";
 import { SEARCH_META_STATUS } from "@/lib/search/constants";
+import { parseAiMetaDraft } from "@/lib/search/meta-draft";
 import { MEDIA_KIND } from "@/lib/stickers";
 
 function typeFromMedia(kinds: string[]): string {
@@ -46,6 +47,7 @@ export default async function ProfilePendingPage() {
             aiCaption: true,
             aiScenario: true,
             aiVisualTags: true,
+            aiMetaDraft: true,
           },
         })
       : [];
@@ -103,14 +105,24 @@ export default async function ProfilePendingPage() {
                 } catch {
                   tags = [];
                 }
+                const draft = parseAiMetaDraft(s.aiMetaDraft);
                 return {
                   id: s.id.toString(),
                   title: s.title,
                   slug: s.slug,
                   thumbUrl: `/api/stickers/${s.id}/media/thumbnail`,
-                  aiCaption: s.aiCaption ?? "",
-                  aiScenario: s.aiScenario ?? "",
-                  aiVisualTags: tags,
+                  live: {
+                    caption: s.aiCaption ?? "",
+                    scenario: s.aiScenario ?? "",
+                    tags,
+                  },
+                  draft: draft
+                    ? {
+                        caption: draft.caption,
+                        scenario: draft.scenario,
+                        tags: draft.tags,
+                      }
+                    : null,
                 };
               })}
             />

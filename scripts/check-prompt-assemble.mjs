@@ -6,6 +6,7 @@ import {
   assembleVisionJsonPrompt,
   DEFAULT_META_OUTPUT_EXAMPLE,
   DEFAULT_META_STRUCTURE,
+  DEFAULT_META_VISION_MOTION,
   DEFAULT_SEARCH_AGENT,
   DEFAULT_SEARCH_OUTPUT_EXAMPLE,
 } from "../lib/search/prompt-defaults.ts";
@@ -16,7 +17,8 @@ const structured = assembleStructurePrompt(
   "a blackboard on a wall",
 );
 assert.ok(structured.includes("a blackboard on a wall"));
-assert.ok(structured.includes("CHARACTER"));
+assert.ok(structured.includes("CHIBI_GIRL"));
+assert.ok(!structured.includes("<one concrete"));
 assert.ok(!structured.includes("ANIME"));
 assert.ok(!structured.includes("ANGRY"));
 assert.ok(!/MEME/.test(DEFAULT_META_OUTPUT_EXAMPLE));
@@ -27,6 +29,9 @@ const visionJson = assembleVisionJsonPrompt(
 );
 assert.ok(visionJson.includes("Look at this sticker."));
 assert.ok(visionJson.includes(DEFAULT_META_OUTPUT_EXAMPLE));
+
+assert.ok(DEFAULT_META_VISION_MOTION.includes("sequence markers"));
+assert.ok(DEFAULT_META_VISION_MOTION.includes("NOT part of the sticker"));
 
 const agent = assembleSearchAgentPrompt(
   DEFAULT_SEARCH_AGENT,

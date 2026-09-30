@@ -316,6 +316,8 @@ model Sticker {
   aiScenario             String?   @map("ai_scenario")
   /// JSON string array of visual tags from vision caption.
   aiVisualTags           String?   @map("ai_visual_tags")
+  /// Pending enrich draft: { caption, scenario, tags, updatedAt } — live ai* unchanged until approve.
+  aiMetaDraft            Json?     @map("ai_meta_draft")
   searchIndexedAt        DateTime? @map("search_indexed_at") @db.Timestamptz(6)
   publishedAt            DateTime? @map("published_at") @db.Timestamptz(6)
   createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)

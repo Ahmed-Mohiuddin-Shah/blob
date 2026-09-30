@@ -48,16 +48,18 @@ export async function loadPromptFormBodies(): Promise<Record<LlmPromptKey, strin
 export async function getResolvedMetaPrompts(): Promise<ResolvedMetaPrompts> {
   const [
     visionDescribe,
+    visionMotion,
     structure,
     visionJson,
     outputExample,
   ] = await Promise.all([
     getLlmPrompt(LLM_PROMPT_KEY.metaVisionDescribe),
+    getLlmPrompt(LLM_PROMPT_KEY.metaVisionMotion),
     getLlmPrompt(LLM_PROMPT_KEY.metaStructure),
     getLlmPrompt(LLM_PROMPT_KEY.metaVisionJson),
     getLlmPrompt(LLM_PROMPT_KEY.metaOutputExample),
   ]);
-  return { visionDescribe, structure, visionJson, outputExample };
+  return { visionDescribe, visionMotion, structure, visionJson, outputExample };
 }
 
 export async function getResolvedSearchPrompts(): Promise<ResolvedSearchPrompts> {
@@ -90,6 +92,7 @@ export async function upsertLlmPrompts(
 /** Draft pack from form fields (unsaved test). */
 export function metaPromptsFromDraft(draft: {
   visionDescribe: string;
+  visionMotion?: string;
   structure: string;
   visionJson: string;
   outputExample: string;
@@ -97,6 +100,7 @@ export function metaPromptsFromDraft(draft: {
   const d = defaultResolvedMetaPrompts();
   return {
     visionDescribe: draft.visionDescribe.trim() || d.visionDescribe,
+    visionMotion: draft.visionMotion?.trim() || d.visionMotion,
     structure: draft.structure.trim() || d.structure,
     visionJson: draft.visionJson.trim() || d.visionJson,
     outputExample: draft.outputExample.trim() || d.outputExample,

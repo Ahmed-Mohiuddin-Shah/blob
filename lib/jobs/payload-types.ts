@@ -59,6 +59,7 @@ export type SearchEnrichJobPayload = {
   /** Resolved at enqueue (worker is Prisma-free). Optional for old jobs. */
   prompts?: {
     visionDescribe: string;
+    visionMotion?: string;
     structure: string;
     visionJson: string;
     outputExample: string;

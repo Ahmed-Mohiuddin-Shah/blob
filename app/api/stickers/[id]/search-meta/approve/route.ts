@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { headers } from "next/headers";
+import { Prisma } from "@prisma/client";
 import { getSession } from "@/lib/auth";
 import { canModerate } from "@/lib/capabilities";
 import { prisma } from "@/lib/prisma";
@@ -60,6 +61,7 @@ export async function POST(
       aiCaption: body?.aiCaption?.trim() ?? sticker.aiCaption,
       aiScenario: body?.aiScenario?.trim() ?? sticker.aiScenario,
       aiVisualTags: JSON.stringify(tags),
+      aiMetaDraft: Prisma.DbNull,
       searchMetaStatus: SEARCH_META_STATUS.approved,
     },
   });

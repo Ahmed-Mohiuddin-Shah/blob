@@ -60,8 +60,11 @@ async function buildSearchEnrichPayload(
   });
   if (!sticker) throw new Error("Missing sticker");
   const media = sticker.media.filter((m) => m.status === MEDIA_ASSET_STATUS.ready);
-  // Image mime only — Math Cat had thumbnail stored as video/mp4.
-  const asset = pickSearchEnrichMedia(media);
+  // Prefer gif/video for storyboard enrich; else still image mime.
+  const motion =
+    media.find((m) => m.kind === "gif") ??
+    media.find((m) => m.kind === "video");
+  const asset = motion ?? pickSearchEnrichMedia(media);
   if (!asset) {
     throw new Error(
       media.some((m) => m.mimeType.startsWith("video/"))

@@ -31,6 +31,7 @@ export type StickerSearchDoc = {
   aiScenario: string;
   aiVisualTags: string[];
   previewUrl: string;
+  clipPreviewUrl: string;
   mediaKind: string;
   hasAudio: boolean;
   likesCount: number;
@@ -95,6 +96,10 @@ export async function buildStickerSearchDoc(
     aiScenario: s.aiScenario ?? "",
     aiVisualTags,
     previewUrl: `${publicBase()}/api/stickers/${s.id}/media/${previewKind}`,
+    // CLIP: storyboard for gif/video when present (same grid as vision enrich).
+    clipPreviewUrl: kinds.includes(MEDIA_KIND.storyboard)
+      ? `${publicBase()}/api/stickers/${s.id}/media/${MEDIA_KIND.storyboard}`
+      : `${publicBase()}/api/stickers/${s.id}/media/${previewKind}`,
     mediaKind: kinds.includes(MEDIA_KIND.video)
       ? "video"
       : kinds.includes(MEDIA_KIND.gif)

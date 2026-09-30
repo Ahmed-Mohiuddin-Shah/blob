@@ -26,7 +26,7 @@ function multimodalEmbedderSettings(): Record<string, unknown> | null {
     ...(apiKey ? { apiKey } : {}),
     indexingFragments: {
       image: {
-        value: [{ image: "{{doc.previewUrl}}" }],
+        value: [{ image: "{{doc.clipPreviewUrl}}" }],
       },
       text: {
         value: [

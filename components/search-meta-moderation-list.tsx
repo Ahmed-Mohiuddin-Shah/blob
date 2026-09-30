@@ -11,26 +11,28 @@ export type SearchMetaItem = {
   title: string;
   slug: string;
   thumbUrl: string;
-  aiCaption: string;
-  aiScenario: string;
-  aiVisualTags: string[];
+  live: { caption: string; scenario: string; tags: string[] };
+  draft: { caption: string; scenario: string; tags: string[] } | null;
 };
+
+type View = "live" | "draft";
 
 export function SearchMetaModerationList({ items }: { items: SearchMetaItem[] }) {
   const router = useRouter();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [viewById, setViewById] = useState<Record<string, View>>(() =>
+    Object.fromEntries(
+      items.map((i) => [i.id, i.draft ? ("draft" as View) : ("live" as View)]),
+    ),
+  );
   const [drafts, setDrafts] = useState<
     Record<string, { caption: string; scenario: string; tags: string[] }>
   >(() =>
     Object.fromEntries(
       items.map((i) => [
         i.id,
-        {
-          caption: i.aiCaption,
-          scenario: i.aiScenario,
-          tags: i.aiVisualTags,
-        },
+        i.draft ?? { caption: "", scenario: "", tags: [] as string[] },
       ]),
     ),
   );
@@ -58,6 +60,26 @@ export function SearchMetaModerationList({ items }: { items: SearchMetaItem[] })
       router.refresh();
     } catch {
       setError("Approve failed");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function keepLive(id: string) {
+    setBusyId(`keep-${id}`);
+    setError(null);
+    try {
+      const res = await fetch(`/api/stickers/${id}/search-meta/keep`, {
+        method: "POST",
+      });
+      const json = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setError(json.error ?? "Keep live failed");
+        return;
+      }
+      router.refresh();
+    } catch {
+      setError("Keep live failed");
     } finally {
       setBusyId(null);
     }
@@ -91,11 +113,21 @@ export function SearchMetaModerationList({ items }: { items: SearchMetaItem[] })
     <div className="space-y-6">
       {error ? <p className="text-sm text-red-500">{error}</p> : null}
       {items.map((item) => {
+        const hasLive =
+          Boolean(item.live.caption.trim()) ||
+          Boolean(item.live.scenario.trim()) ||
+          item.live.tags.length > 0;
+        const view = viewById[item.id] ?? (item.draft ? "draft" : "live");
         const d = drafts[item.id] ?? {
           caption: "",
           scenario: "",
           tags: [] as string[],
         };
+        const showingLive = view === "live" && hasLive;
+        const caption = showingLive ? item.live.caption : d.caption;
+        const scenario = showingLive ? item.live.scenario : d.scenario;
+        const tags = showingLive ? item.live.tags : d.tags;
+
         return (
           <article
             key={item.id}
@@ -110,13 +142,50 @@ export function SearchMetaModerationList({ items }: { items: SearchMetaItem[] })
                 />
               </div>
               <div className="min-w-0 flex-1 space-y-3">
-                <h3 className="font-semibold text-primary">{item.title}</h3>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="font-semibold text-primary">{item.title}</h3>
+                  {hasLive && item.draft ? (
+                    <div className="flex rounded-full border border-divider p-0.5 text-xs font-semibold uppercase tracking-wide">
+                      <button
+                        type="button"
+                        className={`rounded-full px-3 py-1 ${
+                          view === "live"
+                            ? "bg-accent-gradient text-white"
+                            : "text-inactive"
+                        }`}
+                        onClick={() =>
+                          setViewById((p) => ({ ...p, [item.id]: "live" }))
+                        }
+                      >
+                        Live
+                      </button>
+                      <button
+                        type="button"
+                        className={`rounded-full px-3 py-1 ${
+                          view === "draft"
+                            ? "bg-accent-gradient text-white"
+                            : "text-inactive"
+                        }`}
+                        onClick={() =>
+                          setViewById((p) => ({ ...p, [item.id]: "draft" }))
+                        }
+                      >
+                        Draft
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="text-xs font-semibold uppercase tracking-wide text-inactive">
+                      {item.draft ? "Draft" : "Live"}
+                    </span>
+                  )}
+                </div>
                 <label className="block text-xs text-inactive">
                   Caption
                   <textarea
-                    className="mt-1 w-full rounded-2xl border border-divider bg-transparent p-2 text-sm text-primary"
+                    className="mt-1 w-full rounded-2xl border border-divider bg-transparent p-2 text-sm text-primary disabled:opacity-70"
                     rows={2}
-                    value={d.caption}
+                    value={caption}
+                    disabled={showingLive}
                     onChange={(e) =>
                       setDrafts((prev) => ({
                         ...prev,
@@ -128,9 +197,10 @@ export function SearchMetaModerationList({ items }: { items: SearchMetaItem[] })
                 <label className="block text-xs text-inactive">
                   Scenario
                   <textarea
-                    className="mt-1 w-full rounded-2xl border border-divider bg-transparent p-2 text-sm text-primary"
+                    className="mt-1 w-full rounded-2xl border border-divider bg-transparent p-2 text-sm text-primary disabled:opacity-70"
                     rows={2}
-                    value={d.scenario}
+                    value={scenario}
+                    disabled={showingLive}
                     onChange={(e) =>
                       setDrafts((prev) => ({
                         ...prev,
@@ -143,13 +213,14 @@ export function SearchMetaModerationList({ items }: { items: SearchMetaItem[] })
                   Visual tags
                   <div className="mt-1">
                     <TagPillsInput
-                      value={d.tags}
-                      onChange={(tags) =>
+                      value={tags}
+                      onChange={(next) => {
+                        if (showingLive) return;
                         setDrafts((prev) => ({
                           ...prev,
-                          [item.id]: { ...d, tags },
-                        }))
-                      }
+                          [item.id]: { ...d, tags: next },
+                        }));
+                      }}
                     />
                   </div>
                 </div>
@@ -158,17 +229,28 @@ export function SearchMetaModerationList({ items }: { items: SearchMetaItem[] })
                     type="button"
                     busy={busyId === item.id}
                     onClick={() => void approve(item.id)}
-                    className="rounded-full bg-accent-gradient px-5 py-2 text-sm font-semibold text-white"
+                    disabled={showingLive && !item.draft}
+                    className="rounded-full bg-accent-gradient px-5 py-2 text-sm font-semibold text-white disabled:opacity-40"
                   >
-                    Approve search meta
+                    Approve draft
                   </BusyButton>
+                  {hasLive ? (
+                    <BusyButton
+                      type="button"
+                      busy={busyId === `keep-${item.id}`}
+                      onClick={() => void keepLive(item.id)}
+                      className="rounded-full border border-divider px-5 py-2 text-sm font-semibold text-primary"
+                    >
+                      Keep live
+                    </BusyButton>
+                  ) : null}
                   <BusyButton
                     type="button"
                     busy={busyId === `retry-${item.id}`}
                     onClick={() => void retryEnrich(item.id)}
                     className="rounded-full border border-divider px-5 py-2 text-sm font-semibold text-primary"
                   >
-                    Retry AI caption
+                    Regenerate
                   </BusyButton>
                 </div>
               </div>

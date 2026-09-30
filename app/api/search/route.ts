@@ -121,12 +121,26 @@ export async function POST(request: Request) {
       return forbidMode(user, mode);
     }
 
+    let media = body?.media;
+    if (media?.data && media.mime) {
+      const { isMotionMime, storyboardBase64 } = await import(
+        "@/lib/search/storyboard"
+      );
+      if (isMotionMime(media.mime)) {
+        const jpegB64 = await storyboardBase64(
+          Buffer.from(media.data, "base64"),
+          media.mime,
+        );
+        media = { mime: "image/jpeg", data: jpegB64 };
+      }
+    }
+
     const result = await meiliFederatedSearch({
       q: body?.q ?? "",
       mode,
-      limit: body?.limit ?? 24,
+      limit: body?.limit ?? 5,
       filter: body?.filter,
-      media: body?.media,
+      media,
     });
     return NextResponse.json(result);
   } catch (err) {

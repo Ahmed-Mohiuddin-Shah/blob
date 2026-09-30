@@ -1,11 +1,12 @@
 "use client";
 
-import { Check, ChevronDown, Sparkles } from "lucide-react";
+import { Check, ChevronDown, Sparkles, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 export type ThoughtStep = {
   label: string;
   done?: boolean;
+  failed?: boolean;
 };
 
 type Props = {
@@ -13,6 +14,8 @@ type Props = {
   doneLabel?: string;
   steps?: ThoughtStep[];
   working?: boolean;
+  /** Settled in a failed/fallback state — show X vibe on glyph. */
+  failed?: boolean;
   showTimer?: boolean;
   collapsible?: boolean;
   collapseOnSettle?: boolean;
@@ -33,6 +36,7 @@ export function ThoughtLine({
   doneLabel = "Thought for",
   steps = [],
   working = true,
+  failed = false,
   showTimer = true,
   collapsible = true,
   collapseOnSettle = true,
@@ -64,6 +68,8 @@ export function ThoughtLine({
       <span className="thought-line__glyph" aria-hidden>
         {working ? (
           <Sparkles className="h-full w-full" strokeWidth={1.75} />
+        ) : failed ? (
+          <X className="h-full w-full" strokeWidth={1.75} />
         ) : (
           <Check className="h-full w-full" strokeWidth={1.75} />
         )}
@@ -138,10 +144,19 @@ export function ThoughtLine({
                 <li key={`${i}-${step.label}`} className="thought-line__step">
                   <span
                     className="thought-line__step-mark"
-                    data-done={step.done || !working ? "" : undefined}
+                    data-done={
+                      step.failed
+                        ? undefined
+                        : step.done || !working
+                          ? ""
+                          : undefined
+                    }
+                    data-failed={step.failed ? "" : undefined}
                     aria-hidden
                   >
-                    {step.done || !working ? (
+                    {step.failed ? (
+                      <X className="h-3 w-3" strokeWidth={2} />
+                    ) : step.done || !working ? (
                       <Check className="h-3 w-3" strokeWidth={2} />
                     ) : (
                       <span className="thought-line__step-dot" />
