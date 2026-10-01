@@ -71,7 +71,7 @@ Hover/focus only (no noise), plus required busy state:
 | Pattern | Look |
 |---------|------|
 | Shell | `bg-background`, fixed blurred accent orbs |
-| Header | Logo + wordmark, muted nav, theme toggle (Lucide sun/monitor/moon), inverted Login pill |
+| Header | Logo + wordmark, muted nav, theme toggle (single Lucide icon cycles light/system/dark), inverted Login pill |
 | Hero | Eyebrow pill, huge tight headline, gradient word, search |
 | Search | Soft surface capsule + gradient Search btn + chip tags |
 | Section heading | Colored uppercase eyebrow + tight h2 (+ optional Zune overflow on metro pages) + “→” link |
