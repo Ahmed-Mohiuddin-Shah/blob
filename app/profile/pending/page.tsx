@@ -80,6 +80,7 @@ export default async function ProfilePendingPage() {
               prevThumbUrl: kinds.includes(MEDIA_KIND.prevThumbnail)
                 ? `/api/stickers/${s.id}/media/${MEDIA_KIND.prevThumbnail}`
                 : null,
+              wasPublished: s.publishedAt != null,
               createdAt: s.createdAt.toISOString(),
             };
           })}

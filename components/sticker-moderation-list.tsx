@@ -19,6 +19,8 @@ export type ModerationItem = {
   thumbUrl: string;
   /** Prior revision still when available (open-queue diff). */
   prevThumbUrl?: string | null;
+  /** Previously published — reject restores prior revision instead of purge. */
+  wasPublished?: boolean;
   createdAt: string;
   moderationNote?: string | null;
 };
@@ -248,11 +250,10 @@ export function StickerModerationList({
                 type="button"
                 busy={busyId === item.id}
                 onClick={() => {
-                  if (
-                    !confirm(
-                      "Reject and permanently delete this sticker from GLASS and the database?",
-                    )
-                  ) {
+                  const msg = item.wasPublished
+                    ? "Reject this edit and restore the previous published version?"
+                    : "Reject and permanently delete this sticker from GLASS and the database?";
+                  if (!confirm(msg)) {
                     return;
                   }
                   void act(item.id, "reject");
