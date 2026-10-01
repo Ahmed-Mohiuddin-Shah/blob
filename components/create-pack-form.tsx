@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { MIN_PACK_SHEETS } from "@/lib/prints";
 import { BusyButton } from "./busy-button";
+import { useDialogA11y } from "./use-dialog-a11y";
 
 type SheetOpt = {
   id: string;
@@ -51,6 +52,9 @@ export function CreatePackForm({
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  const closeExisting = useCallback(() => setExistingPack(null), []);
+  const panelRef = useDialogA11y(!!existingPack, closeExisting);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -249,8 +253,13 @@ export function CreatePackForm({
               role="dialog"
               aria-modal="true"
               aria-labelledby="pack-exists-title"
+              onClick={closeExisting}
             >
-              <div className="w-full max-w-md rounded-[1.5rem] border border-divider bg-surface p-6 shadow-2xl">
+              <div
+                ref={panelRef}
+                className="w-full max-w-md rounded-[1.5rem] border border-divider bg-surface p-6 shadow-2xl"
+                onClick={(e) => e.stopPropagation()}
+              >
                 <p
                   id="pack-exists-title"
                   className="text-xs font-bold uppercase tracking-[0.18em] text-accent-orange"
@@ -277,7 +286,7 @@ export function CreatePackForm({
                   </BusyButton>
                   <button
                     type="button"
-                    onClick={() => setExistingPack(null)}
+                    onClick={closeExisting}
                     className="rounded-full border border-divider px-5 py-2.5 text-sm font-semibold text-secondary"
                   >
                     Stay here

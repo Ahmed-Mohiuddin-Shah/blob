@@ -7,8 +7,8 @@
   --color-white: #ffffff;
   --color-surface-dark: #1a1a1a;
   --color-surface-light: #f5f5f5;
-  --color-gray-secondary-light: #808080;
-  --color-gray-inactive-light: #b0b0b0;
+  --color-gray-secondary-light: #595959;
+  --color-gray-inactive-light: #6b6b6b;
   --color-badge-dark: #383838;
   --color-accent-pink: #f10ea0;
   --color-accent-orange: #e95214;
@@ -80,7 +80,7 @@
   --color-surface: var(--color-surface-dark);
   --color-text-primary: var(--color-white);
   --color-text-secondary: rgba(255, 255, 255, 0.7);
-  --color-text-inactive: rgba(255, 255, 255, 0.38);
+  --color-text-inactive: rgba(255, 255, 255, 0.55);
   --color-border: rgba(255, 255, 255, 0.2);
   --color-success: var(--color-success-raw);
   --color-warning: var(--color-warning-raw);

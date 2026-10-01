@@ -112,7 +112,7 @@ export function FavouriteButton({
       type="button"
       busy={busy}
       onClick={() => void toggle()}
-      className={`flex h-10 w-10 items-center justify-center rounded-full bg-badge text-foreground shadow-lg transition hover:scale-105 ${
+      className={`flex h-11 w-11 items-center justify-center rounded-full bg-badge text-foreground shadow-lg transition hover:scale-105 ${
         favourited ? "text-accent-pink" : ""
       } ${className}`}
       aria-pressed={favourited}

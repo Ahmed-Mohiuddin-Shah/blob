@@ -30,7 +30,7 @@ export function SectionHeading({
   return (
     <div className={`mb-7 flex items-end justify-between overflow-visible ${className}`}>
       <div className="overflow-visible">
-        <p className={`text-xs font-semibold uppercase tracking-[0.18em] leading-none ${accents[accent]}`}>{eyebrow}</p>
+        <p className={`text-lg font-bold uppercase tracking-[0.18em] leading-none ${accents[accent]}`}>{eyebrow}</p>
         <h2
           className={
             zune

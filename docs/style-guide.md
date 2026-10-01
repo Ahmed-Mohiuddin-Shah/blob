@@ -12,9 +12,9 @@
 ## Fonts
 
 - Family: **Segoe UI** (self-hosted TTFs in `public/fonts/`)
-- Weights: 300, 350, 400, 600, 700 (+ italics)
+- Weights: 300 (Light, oversized Zune titles), 400, 600, 700 (+ italics available as TTF)
 - Body: `font-sans`; headlines `font-semibold` + tight tracking
-- Eyebrows: `uppercase tracking-[0.18em] text-xs font-semibold` + accent color
+- Eyebrows: `uppercase tracking-[0.18em] text-lg font-bold` + accent color (large/bold for AA on pink/orange)
 - Overflow display: ~72px, weight 300, lowercase; baseline flush to content margin; `overflow: visible` so descenders (e.g. “p”) and dots stay intact
 
 ## Colors (CSS tokens)
@@ -26,8 +26,8 @@ Surfaces (`:root` / `html.dark`):
 | `--background` | `#ffffff` | `#000000` |
 | `--surface` | `#f5f5f5` | `#1a1a1a` |
 | `--foreground` | `#000000` | `#ffffff` |
-| `--secondary` | `#808080` | `white/70` |
-| `--inactive` | `#b0b0b0` | `white/38` |
+| `--secondary` | `#595959` | `white/70` |
+| `--inactive` | `#6b6b6b` | `white/55` |
 | `--divider` | `black/20` | `white/20` |
 | `--badge` | `#e8e8e8` | `#383838` |
 

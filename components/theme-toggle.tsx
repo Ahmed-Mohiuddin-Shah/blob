@@ -44,7 +44,7 @@ export function ThemeToggle({ className = "" }: { className?: string }) {
               window.__theme?.set(mode);
               setActive(mode);
             }}
-            className="rounded-full px-2.5 py-1.5 text-inactive transition-colors hover:text-foreground data-[active=true]:bg-background data-[active=true]:text-foreground data-[active=true]:shadow-sm"
+            className="flex min-h-11 min-w-11 items-center justify-center rounded-full px-2.5 py-1.5 text-inactive transition-colors hover:text-foreground data-[active=true]:bg-background data-[active=true]:text-foreground data-[active=true]:shadow-sm sm:min-h-0 sm:min-w-0"
             data-active={active === mode}
             aria-label={`${mode} theme`}
             aria-pressed={active === mode}

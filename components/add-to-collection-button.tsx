@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { COLLECTION_ITEM } from "@/lib/collections";
 import { BusyButton } from "./busy-button";
+import { useDialogA11y } from "./use-dialog-a11y";
 
 type CollectionOption = {
   id: string;
@@ -100,6 +101,9 @@ export function AddToCollectionButton({
     setOpen(true);
   }
 
+  const closeModal = useCallback(() => setOpen(false), []);
+  const panelRef = useDialogA11y(open, closeModal);
+
   async function addTo(slug: string) {
     setBusySlug(slug);
     setError(null);
@@ -171,7 +175,7 @@ export function AddToCollectionButton({
       <BusyButton
         type="button"
         onClick={openModal}
-        className={`flex h-10 w-10 items-center justify-center rounded-full bg-badge text-foreground shadow-lg transition hover:scale-105 ${
+        className={`flex h-11 w-11 items-center justify-center rounded-full bg-badge text-foreground shadow-lg transition hover:scale-105 ${
           inCollection ? "text-accent-pink" : ""
         } ${className}`}
         aria-pressed={inCollection}
@@ -190,9 +194,10 @@ export function AddToCollectionButton({
             role="dialog"
             aria-modal="true"
             aria-label="Add to collection"
-            onClick={() => setOpen(false)}
+            onClick={closeModal}
           >
             <div
+              ref={panelRef}
               className="w-full max-w-md rounded-[2rem] border border-divider bg-background p-5 shadow-2xl"
               onClick={(e) => e.stopPropagation()}
             >
@@ -200,8 +205,8 @@ export function AddToCollectionButton({
                 <h2 className="text-lg font-semibold">Add to collection</h2>
                 <button
                   type="button"
-                  onClick={() => setOpen(false)}
-                  className="rounded-full p-2 text-secondary hover:bg-surface hover:text-foreground"
+                  onClick={closeModal}
+                  className="flex h-11 w-11 items-center justify-center rounded-full text-secondary hover:bg-surface hover:text-foreground"
                   aria-label="Close"
                 >
                   <X className="h-4 w-4" strokeWidth={1.75} />

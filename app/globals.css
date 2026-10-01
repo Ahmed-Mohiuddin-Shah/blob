@@ -1,7 +1,15 @@
 @import "tailwindcss";
 @import "blobatar/motion.css";
 
-/* Critical faces only (woff2). Light/italic fall back to nearest weight / system. */
+/* Critical faces. Light used for oversized Zune titles only. */
+@font-face {
+  font-family: "Segoe UI";
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url("/fonts/Segoe%20UI%20Light.ttf") format("truetype");
+}
+
 @font-face {
   font-family: "Segoe UI";
   font-style: normal;
@@ -67,8 +75,9 @@
   --background: #ffffff;
   --surface: #f5f5f5;
   --foreground: #000000;
-  --secondary: #808080;
-  --inactive: #b0b0b0;
+  /* AA ≥4.5:1 on white for small text (Zune muted chrome, darkened) */
+  --secondary: #595959;
+  --inactive: #6b6b6b;
   --divider: rgb(0 0 0 / 0.2);
   --badge: #e8e8e8;
 }
@@ -79,7 +88,7 @@ html.dark {
   --surface: #1a1a1a;
   --foreground: #ffffff;
   --secondary: rgb(255 255 255 / 0.7);
-  --inactive: rgb(255 255 255 / 0.38);
+  --inactive: rgb(255 255 255 / 0.55);
   --divider: rgb(255 255 255 / 0.2);
   --badge: #383838;
 }
@@ -87,6 +96,16 @@ html.dark {
 body {
   background: var(--background);
   color: var(--foreground);
+}
+
+/* Keyboard / Full Keyboard Access — visible focus without fighting brand chrome */
+:focus-visible {
+  outline: 2px solid var(--color-accent-pink) !important;
+  outline-offset: 2px !important;
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
 }
 
 /* Async / API button pending — flowing pink→orange gradient (see style guide) */
@@ -122,6 +141,26 @@ body {
   pointer-events: none;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .btn-busy {
+    animation: none;
+    background-image: linear-gradient(
+      to bottom right,
+      var(--color-accent-pink),
+      var(--color-accent-orange)
+    ) !important;
+    background-size: 100% 100% !important;
+  }
+
+  /* Decorative hover scale/rotate — busy/aria cues stay */
+  a:hover,
+  button:hover,
+  .group:hover,
+  .group:hover * {
+    transform: none !important;
+  }
+}
+
 /* ThoughtLine — React Bits–inspired search progress (Lucide + CSS) */
 .thought-line {
   --tl-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
@@ -152,8 +191,11 @@ body {
   font: inherit;
   text-align: left;
   white-space: nowrap;
-  outline: none;
   cursor: default;
+}
+
+.thought-line__head:focus:not(:focus-visible) {
+  outline: none;
 }
 
 .thought-line__head[data-toggle] {
@@ -403,8 +445,12 @@ body {
   text-transform: uppercase;
   text-align: left;
   cursor: pointer;
-  outline: none;
+  border-radius: 4px;
   transition: color 200ms ease;
+}
+
+.branched-menu__head:focus:not(:focus-visible) {
+  outline: none;
 }
 
 .branched-menu__section[data-open] .branched-menu__head,
@@ -486,10 +532,14 @@ body {
   font-weight: 600;
   text-align: left;
   cursor: pointer;
-  outline: none;
+  border-radius: 4px;
   box-sizing: border-box;
   text-decoration: none;
   transition: color 200ms ease;
+}
+
+.branched-menu__item:focus:not(:focus-visible) {
+  outline: none;
 }
 
 @media (hover: hover) and (pointer: fine) {

@@ -57,7 +57,7 @@ export function RemoveFromCollectionButton({
         type="button"
         busy={busy}
         onClick={() => void remove()}
-        className="flex h-9 w-9 items-center justify-center rounded-full bg-badge text-foreground shadow-lg transition hover:scale-105"
+        className="flex h-11 w-11 items-center justify-center rounded-full bg-badge text-foreground shadow-lg transition hover:scale-105"
         aria-label="Remove from collection"
         title="Remove from collection"
       >

@@ -51,7 +51,7 @@ export function HeaderNavLinks() {
 
       <button
         type="button"
-        className="flex h-10 w-10 items-center justify-center rounded-full border border-divider bg-surface text-foreground sm:hidden"
+        className="flex h-11 w-11 items-center justify-center rounded-full border border-divider bg-surface text-foreground sm:hidden"
         aria-expanded={open}
         aria-controls="mobile-nav"
         aria-label={open ? "Close menu" : "Open menu"}

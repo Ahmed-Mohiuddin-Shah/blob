@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import { BusyButton } from "./busy-button";
 import { Skeleton } from "./skeleton";
 import { StickerMedia } from "./sticker-media";
+import { useDialogA11y } from "./use-dialog-a11y";
 import { MAX_SHEET_STICKERS } from "@/lib/prints";
 import { VISIBILITY } from "@/lib/stickers";
 
@@ -99,6 +100,8 @@ export function StickerPickerDialog({
     return () => clearTimeout(t);
   }, [open, q, tab, search]);
 
+  const panelRef = useDialogA11y(open, onClose);
+
   if (!mounted || !open) return null;
 
   const selectedList = [...selected.values()];
@@ -125,8 +128,13 @@ export function StickerPickerDialog({
       role="dialog"
       aria-modal
       aria-label="Pick stickers"
+      onClick={onClose}
     >
-      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-[2rem] border border-divider bg-surface shadow-xl">
+      <div
+        ref={panelRef}
+        className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-[2rem] border border-divider bg-surface shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between border-b border-divider px-5 py-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent-pink">
@@ -139,7 +147,7 @@ export function StickerPickerDialog({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full p-2 text-secondary hover:bg-badge"
+            className="flex h-11 w-11 items-center justify-center rounded-full text-secondary hover:bg-badge"
             aria-label="Close"
           >
             <X className="h-5 w-5" strokeWidth={1.75} />
@@ -171,6 +179,7 @@ export function StickerPickerDialog({
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Search stickers…"
+              aria-label="Search stickers"
               className="w-full bg-transparent px-3 py-2 text-sm outline-none"
             />
           </div>

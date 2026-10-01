@@ -66,9 +66,11 @@ export function AttributionCredit({
             onClick={goToSource}
             onMouseEnter={() => setOpen(true)}
             onMouseLeave={() => setOpen(false)}
-            className="flex h-5 w-5 items-center justify-center rounded-full bg-accent-gradient text-white shadow-sm"
+            className="flex h-11 w-11 items-center justify-center"
           >
-            <Info className="h-3 w-3" strokeWidth={1.75} aria-hidden />
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-accent-gradient text-white shadow-sm">
+              <Info className="h-3 w-3" strokeWidth={1.75} aria-hidden />
+            </span>
           </button>
           {open ? (
             <span

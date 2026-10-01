@@ -45,7 +45,8 @@ export function Header({
             {canUpload ? (
               <Link
                 href="/upload"
-                className="inline-flex items-center gap-1.5 rounded-full bg-accent-gradient px-3 py-2 text-xs font-semibold text-white shadow-md shadow-accent-pink/20 transition-transform hover:scale-105 sm:px-4 sm:text-sm"
+                aria-label="Upload"
+                className="inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-full bg-accent-gradient px-3 py-2 text-xs font-semibold text-white shadow-md shadow-accent-pink/20 transition-transform hover:scale-105 sm:min-h-0 sm:min-w-0 sm:px-4 sm:text-sm"
               >
                 <Upload className="h-4 w-4" strokeWidth={1.75} aria-hidden />
                 <span className="hidden sm:inline">Upload</span>

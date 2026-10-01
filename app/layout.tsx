@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { BlobBackground } from "@/components/blob-background";
 import { Footer } from "@/components/footer";
 import { Header } from "@/components/header";
+import { MobileBrowseNav } from "@/components/mobile-browse-nav";
 import { Providers } from "@/components/providers";
 import { ThemeScript } from "@/components/theme-script";
 import { getSession } from "@/lib/auth";
@@ -117,7 +118,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body className="bg-background font-sans text-foreground antialiased">
         <Providers>
           <BlobBackground />
-          <div className="min-h-screen overflow-x-clip">
+          <div className="min-h-screen overflow-x-clip pb-14 sm:pb-0">
             <Header
               user={user}
               canUpload={canUploadFlag}
@@ -125,6 +126,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             />
             <main>{children}</main>
             <Footer />
+            <MobileBrowseNav />
           </div>
         </Providers>
       </body>

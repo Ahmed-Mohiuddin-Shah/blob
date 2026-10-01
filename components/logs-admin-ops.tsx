@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   backfillWhatsAppOgAction,
@@ -9,6 +9,7 @@ import {
   type LogsOpState,
 } from "@/app/actions/admin-logs-ops";
 import { BusyButton } from "./busy-button";
+import { useDialogA11y } from "./use-dialog-a11y";
 
 type OpId = "reindex" | "og" | "enrich";
 
@@ -68,11 +69,13 @@ export function LogsAdminOps({
     setPendingOp(op);
   }
 
-  function closeConfirm() {
+  const closeConfirm = useCallback(() => {
     if (busy) return;
     setPendingOp(null);
     setUnderstood(false);
-  }
+  }, [busy]);
+
+  const panelRef = useDialogA11y(!!pendingOp, closeConfirm);
 
   const countHint =
     pendingOp === "og"
@@ -134,8 +137,13 @@ export function LogsAdminOps({
               role="dialog"
               aria-modal="true"
               aria-labelledby="logs-heavy-op-title"
+              onClick={closeConfirm}
             >
-              <div className="w-full max-w-md rounded-[1.5rem] border border-divider bg-surface p-6 shadow-2xl">
+              <div
+                ref={panelRef}
+                className="w-full max-w-md rounded-[1.5rem] border border-divider bg-surface p-6 shadow-2xl"
+                onClick={(e) => e.stopPropagation()}
+              >
                 <p
                   id="logs-heavy-op-title"
                   className="text-xs font-bold uppercase tracking-[0.18em] text-accent-orange"

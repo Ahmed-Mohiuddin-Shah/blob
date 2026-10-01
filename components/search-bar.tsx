@@ -238,9 +238,11 @@ export function SearchBar({
               aria-label="Clear search visual"
               title="Clear search visual"
               onClick={clearPreview}
-              className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-foreground text-background shadow"
+              className="absolute -right-2 -top-2 flex h-11 w-11 items-center justify-center"
             >
-              <X className="h-2.5 w-2.5" strokeWidth={2.5} aria-hidden />
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-foreground text-background shadow">
+                <X className="h-2.5 w-2.5" strokeWidth={2.5} aria-hidden />
+              </span>
             </button>
           </div>
         ) : null}
@@ -255,6 +257,9 @@ export function SearchBar({
               ? "Add words to refine the visual search…"
               : placeholder
           }
+          aria-label={
+            preview ? "Refine visual search" : placeholder || "Search stickers"
+          }
           className={`min-w-0 flex-1 bg-transparent outline-none placeholder:text-inactive ${
             compact ? "px-1 text-sm" : "px-2 text-base"
           }`}
@@ -267,7 +272,7 @@ export function SearchBar({
                 type="button"
                 aria-label="Search with visual"
                 title="Search with image, GIF, or video (or paste)"
-                className="flex h-9 w-9 items-center justify-center rounded-full text-inactive transition-colors hover:bg-black/5 hover:text-accent-pink"
+                className="flex h-11 w-11 items-center justify-center rounded-full text-inactive transition-colors hover:bg-black/5 hover:text-accent-pink sm:h-9 sm:w-9"
                 onClick={() => fileRef.current?.click()}
               >
                 <Camera className="h-4 w-4" strokeWidth={1.75} aria-hidden />
@@ -289,7 +294,7 @@ export function SearchBar({
               type="button"
               aria-label="Agent search"
               title="Agent search"
-              className="flex h-9 w-9 items-center justify-center rounded-full text-inactive transition-colors hover:bg-black/5 hover:text-accent-pink"
+              className="flex h-11 w-11 items-center justify-center rounded-full text-inactive transition-colors hover:bg-black/5 hover:text-accent-pink sm:h-9 sm:w-9"
               onClick={() => onAgentSearch?.(q.trim())}
             >
               <Sparkles className="h-4 w-4" strokeWidth={1.75} aria-hidden />
@@ -299,10 +304,8 @@ export function SearchBar({
             <BusyButton
               type="submit"
               busy={busy}
-              className={`rounded-full bg-accent-gradient text-sm font-semibold text-white shadow-md shadow-accent-pink/20 transition-transform duration-200 hover:scale-[1.03] ${
-                compact
-                  ? "px-3 py-1.5 text-xs"
-                  : "hidden px-6 py-3 sm:inline-flex"
+              className={`inline-flex rounded-full bg-accent-gradient text-sm font-semibold text-white shadow-md shadow-accent-pink/20 transition-transform duration-200 hover:scale-[1.03] ${
+                compact ? "px-3 py-1.5 text-xs" : "px-5 py-3 sm:px-6"
               }`}
             >
               {submitLabel}
