@@ -7,6 +7,7 @@ import {
 } from "blob-editor/encode";
 import { validateDocument, type CompositionDocument } from "blob-editor/core";
 import {
+  discardReplacedMediaGlass,
   encodePrismIdForSticker,
   ensurePublicStickerMediaLinked,
   getGlass,
@@ -325,6 +326,7 @@ async function processComposition(stickerId: bigint): Promise<void> {
         filename: `${sticker.slug}-${item.kind}.${item.ext}`,
         fileExtension: item.ext,
       });
+      await discardReplacedMediaGlass(stickerId, item.kind, up.object_id);
       await prisma.mediaAsset.upsert({
         where: { stickerId_kind: { stickerId, kind: item.kind } },
         create: {
@@ -451,6 +453,7 @@ async function ensureWhatsAppOg(
     filename: `${slug}-og.${og.ext}`,
     fileExtension: og.ext,
   });
+  await discardReplacedMediaGlass(stickerId, MEDIA_KIND.og, up.object_id);
   await prisma.mediaAsset.upsert({
     where: { stickerId_kind: { stickerId, kind: MEDIA_KIND.og } },
     create: {

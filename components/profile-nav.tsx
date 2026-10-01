@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   Clock,
   Flag,
@@ -50,32 +50,7 @@ type NavItem = {
 type NavSection = {
   title: string;
   items: NavItem[];
-  /** Shown in the always-visible mobile strip; others stay behind More */
-  primary?: boolean;
 };
-
-const linkClass = (active: boolean) =>
-  `flex items-center gap-2 rounded-2xl px-3 py-2 text-sm font-semibold transition-colors whitespace-nowrap ${
-    active
-      ? "bg-surface text-foreground shadow-sm ring-1 ring-divider"
-      : "text-secondary hover:bg-surface/60 hover:text-foreground"
-  }`;
-
-function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
-  const Icon = item.icon;
-  const active = item.active(pathname);
-  return (
-    <Link href={item.href} className={linkClass(active)}>
-      <Icon className="h-4 w-4" strokeWidth={1.75} aria-hidden />
-      {item.label}
-      {item.badge && item.badge > 0 ? (
-        <span className="ml-auto rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold text-white">
-          {item.badge}
-        </span>
-      ) : null}
-    </Link>
-  );
-}
 
 export function ProfileNav({
   canUpload,
@@ -89,13 +64,11 @@ export function ProfileNav({
   username,
 }: Props) {
   const pathname = usePathname();
-  const [moreOpen, setMoreOpen] = useState(false);
 
   const sections: NavSection[] = useMemo(
     () => [
       {
         title: "Library",
-        primary: true,
         items: [
           {
             href: "/profile",
@@ -187,7 +160,6 @@ export function ProfileNav({
       },
       {
         title: "Account",
-        primary: true,
         items: [
           {
             href: "/profile/settings",
@@ -265,19 +237,6 @@ export function ProfileNav({
     }))
     .filter((s) => s.items.length);
 
-  const primaryItems = visibleSections
-    .filter((s) => s.primary)
-    .flatMap((s) => s.items);
-  const moreItems = visibleSections
-    .filter((s) => !s.primary)
-    .flatMap((s) => s.items);
-  const moreActive = moreItems.some((item) => item.active(pathname));
-  const moreBadge = moreItems.reduce((n, item) => n + (item.badge ?? 0), 0);
-
-  useEffect(() => {
-    if (moreActive) setMoreOpen(true);
-  }, [moreActive]);
-
   const branchedItems: BranchedItem[] = visibleSections.map((section) => ({
     label: section.title,
     children: section.items.map((item) => ({
@@ -304,45 +263,11 @@ export function ProfileNav({
         @{username}
       </p>
 
-      {/* Mobile: primary links + More disclosure */}
-      <div className="sm:hidden">
-        <nav className="flex flex-row gap-1 overflow-x-auto">
-          {primaryItems.map((item) => (
-            <NavLink key={item.href} item={item} pathname={pathname} />
-          ))}
-          {moreItems.length > 0 ? (
-            <button
-              type="button"
-              className={linkClass(moreOpen || moreActive)}
-              aria-expanded={moreOpen}
-              onClick={() => setMoreOpen((v) => !v)}
-            >
-              More
-              {moreBadge > 0 ? (
-                <span className="ml-auto rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold text-white">
-                  {moreBadge}
-                </span>
-              ) : null}
-            </button>
-          ) : null}
-        </nav>
-        {moreOpen ? (
-          <nav className="mt-2 flex flex-col gap-1 rounded-[1.5rem] border border-divider bg-surface/80 p-2">
-            {moreItems.map((item) => (
-              <NavLink key={item.href} item={item} pathname={pathname} />
-            ))}
-          </nav>
-        ) : null}
-      </div>
-
-      {/* Desktop: branched collapsible sections */}
-      <div className="hidden sm:block">
-        <BranchedMenu
-          items={branchedItems}
-          defaultOpen={defaultOpen.length ? defaultOpen : 0}
-          activeValue={activeValue}
-        />
-      </div>
+      <BranchedMenu
+        items={branchedItems}
+        defaultOpen={defaultOpen.length ? defaultOpen : 0}
+        activeValue={activeValue}
+      />
 
       {canUpload ? (
         <Link

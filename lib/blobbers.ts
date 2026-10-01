@@ -38,6 +38,11 @@ export function normalizeBlobberName(name: string): string {
   return name.trim().slice(0, 200);
 }
 
+/** Stored unique key for CI display_name lookups (Prisma findUnique). */
+export function blobberDisplayNameKey(name: string): string {
+  return normalizeBlobberName(name).toLowerCase();
+}
+
 /** Pretty public profile path. */
 export function blobberPublicHref(blobber: { slug: string }): string {
   return `/blobbers/${blobber.slug}`;
@@ -112,11 +117,9 @@ export async function findBlobberByName(
 ) {
   const name = normalizeBlobberName(displayName);
   if (!name) return null;
-  const rows = await tx.$queryRaw<Array<{ id: bigint }>>`
-    SELECT id FROM blobbers WHERE lower(display_name) = lower(${name}) LIMIT 1
-  `;
-  if (!rows[0]) return null;
-  return tx.blobber.findUnique({ where: { id: rows[0].id } });
+  return tx.blobber.findUnique({
+    where: { displayNameKey: blobberDisplayNameKey(name) },
+  });
 }
 
 /**
@@ -137,6 +140,7 @@ export async function resolveUnlinkedBlobber(
     return await tx.blobber.create({
       data: {
         displayName: name,
+        displayNameKey: blobberDisplayNameKey(name),
         userId: null,
         slug: await allocateBlobberSlug(name, { tx }),
       },
@@ -196,6 +200,7 @@ export async function ensureLinkedBlobber(
       data: {
         userId,
         displayName,
+        displayNameKey: blobberDisplayNameKey(displayName),
         slug: await allocateBlobberSlug(displayName),
       },
     });
@@ -346,6 +351,7 @@ export async function applyCmsPayload(
     where: { id: blobberId },
     data: {
       displayName: payload.displayName,
+      displayNameKey: blobberDisplayNameKey(payload.displayName),
       slug,
       description: payload.description,
       bannerGlassObjectId: payload.bannerGlassObjectId,

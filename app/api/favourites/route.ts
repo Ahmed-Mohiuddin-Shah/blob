@@ -302,10 +302,14 @@ export async function PUT(request: Request) {
 
   let likesCount: string | undefined;
   if (!existing) {
-    await prisma.favorite.create({
-      data: { userId: user.id, subjectType, subjectId },
-    });
-    likesCount = (await bumpLikesCount(subjectType, subjectId, 1)).toString();
+    likesCount = (
+      await prisma.$transaction(async (tx) => {
+        await tx.favorite.create({
+          data: { userId: user.id, subjectType, subjectId },
+        });
+        return bumpLikesCount(subjectType, subjectId, 1, tx);
+      })
+    ).toString();
   } else {
     const current = await readLikesCount(subjectType, subjectId);
     likesCount = current?.toString();
@@ -348,14 +352,19 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: "subjectId required" }, { status: 400 });
   }
 
-  const result = await prisma.favorite.deleteMany({
-    where: { userId: user.id, subjectType, subjectId },
-  });
-
   let likesCount: string | undefined;
-  if (result.count > 0) {
-    likesCount = (await bumpLikesCount(subjectType, subjectId, -1)).toString();
-  } else {
+  likesCount = (
+    await prisma.$transaction(async (tx) => {
+      const result = await tx.favorite.deleteMany({
+        where: { userId: user.id, subjectType, subjectId },
+      });
+      if (result.count > 0) {
+        return bumpLikesCount(subjectType, subjectId, -1, tx);
+      }
+      return null;
+    })
+  )?.toString();
+  if (likesCount === undefined) {
     const current = await readLikesCount(subjectType, subjectId);
     likesCount = current?.toString();
   }

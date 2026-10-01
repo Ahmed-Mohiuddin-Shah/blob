@@ -2,7 +2,7 @@
  * Persist MEDIA_KIND.storyboard JPEG on Glass for gif/video stickers.
  */
 import { createHash } from "node:crypto";
-import { getGlass } from "@/lib/glass";
+import { discardReplacedMediaGlass, getGlass } from "@/lib/glass";
 import { prisma } from "@/lib/prisma";
 import { buildStoryboardJpeg } from "@/lib/search/storyboard";
 import {
@@ -62,6 +62,7 @@ export async function ensureStickerStoryboard(
   });
   const objectId = up.object_id;
 
+  await discardReplacedMediaGlass(stickerId, MEDIA_KIND.storyboard, objectId);
   await prisma.mediaAsset.upsert({
     where: {
       stickerId_kind: { stickerId, kind: MEDIA_KIND.storyboard },

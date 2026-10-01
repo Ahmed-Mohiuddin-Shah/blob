@@ -1,5 +1,9 @@
 import { createHash } from "crypto";
-import { ensurePublicStickerMediaLinked } from "@/lib/glass";
+import {
+  discardReplacedMediaGlass,
+  ensurePublicStickerMediaLinked,
+  replaceGlassObjectRef,
+} from "@/lib/glass";
 import { JOB_STATUS, JOB_TYPE } from "@/lib/jobs/types";
 import { enqueueJob } from "@/lib/jobs/enqueue";
 import {
@@ -238,6 +242,7 @@ async function applyCompositionResult(
     }
 
     const ext = item.fileExtension || mimeToExt(item.mimeType);
+    await discardReplacedMediaGlass(stickerId, item.kind, item.glassObjectId);
     await prisma.mediaAsset.upsert({
       where: { stickerId_kind: { stickerId, kind: item.kind } },
       create: {
@@ -287,6 +292,25 @@ async function applySheetResult(
   sheetId: bigint,
   result: SheetJobResult,
 ): Promise<void> {
+  const prev = await prisma.stickerSheet.findUnique({
+    where: { id: sheetId },
+    select: {
+      pngGlassObjectId: true,
+      pngGlassPrismId: true,
+      pdfGlassObjectId: true,
+      pdfGlassPrismId: true,
+    },
+  });
+  if (prev) {
+    await replaceGlassObjectRef(
+      { objectId: prev.pngGlassObjectId, prismId: prev.pngGlassPrismId },
+      result.pngGlassObjectId,
+    );
+    await replaceGlassObjectRef(
+      { objectId: prev.pdfGlassObjectId, prismId: prev.pdfGlassPrismId },
+      result.pdfGlassObjectId,
+    );
+  }
   await prisma.stickerSheet.update({
     where: { id: sheetId },
     data: {
@@ -328,6 +352,25 @@ async function applyPackResult(
     !result.pdfGlassPrismId
   ) {
     throw new Error("Invalid pack result");
+  }
+  const prev = await prisma.stickerPack.findUnique({
+    where: { id: packId },
+    select: {
+      pngGlassObjectId: true,
+      pngGlassPrismId: true,
+      pdfGlassObjectId: true,
+      pdfGlassPrismId: true,
+    },
+  });
+  if (prev) {
+    await replaceGlassObjectRef(
+      { objectId: prev.pngGlassObjectId, prismId: prev.pngGlassPrismId },
+      result.pngGlassObjectId,
+    );
+    await replaceGlassObjectRef(
+      { objectId: prev.pdfGlassObjectId, prismId: prev.pdfGlassPrismId },
+      result.pdfGlassObjectId,
+    );
   }
   await prisma.stickerPack.update({
     where: { id: packId },

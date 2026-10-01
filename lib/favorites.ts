@@ -1,8 +1,11 @@
 /** Polymorphic favourites. UI: sticker | collection | sticker_sheet | sticker_pack. */
 
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { refreshStickerPopularityFromLikes } from "@/lib/search/popularity";
 import { syncCollectionSearch, syncPrintSearch } from "@/lib/search/sync";
+
+type Db = Prisma.TransactionClient | typeof prisma;
 
 export const FAVORITE_SUBJECT = {
   sticker: "sticker",
@@ -64,115 +67,24 @@ export async function bumpLikesCount(
   subjectType: FavoriteUiType,
   subjectId: bigint,
   delta: 1 | -1,
+  db: Db = prisma,
 ): Promise<bigint> {
   if (subjectType === FAVORITE_SUBJECT.sticker) {
-    const likes = await bumpModelLikes(
-      () =>
-        prisma.sticker.update({
-          where: { id: subjectId },
-          data: { likesCount: { increment: 1 } },
-          select: { likesCount: true },
-        }),
-      async () => {
-        const current = await prisma.sticker.findUnique({
-          where: { id: subjectId },
-          select: { likesCount: true },
-        });
-        const next =
-          current && current.likesCount > BigInt(0)
-            ? current.likesCount - BigInt(1)
-            : BigInt(0);
-        return prisma.sticker.update({
-          where: { id: subjectId },
-          data: { likesCount: next },
-          select: { likesCount: true },
-        });
-      },
-      delta,
-    );
+    const likes = await bumpTableLikes("stickers", subjectId, delta, db);
     void refreshStickerPopularityFromLikes(subjectId);
     return likes;
   }
   if (subjectType === FAVORITE_SUBJECT.collection) {
-    const likes = await bumpModelLikes(
-      () =>
-        prisma.collection.update({
-          where: { id: subjectId },
-          data: { likesCount: { increment: 1 } },
-          select: { likesCount: true },
-        }),
-      async () => {
-        const current = await prisma.collection.findUnique({
-          where: { id: subjectId },
-          select: { likesCount: true },
-        });
-        const next =
-          current && current.likesCount > BigInt(0)
-            ? current.likesCount - BigInt(1)
-            : BigInt(0);
-        return prisma.collection.update({
-          where: { id: subjectId },
-          data: { likesCount: next },
-          select: { likesCount: true },
-        });
-      },
-      delta,
-    );
+    const likes = await bumpTableLikes("collections", subjectId, delta, db);
     syncCollectionSearch(subjectId);
     return likes;
   }
   if (subjectType === FAVORITE_SUBJECT.stickerSheet) {
-    const likes = await bumpModelLikes(
-      () =>
-        prisma.stickerSheet.update({
-          where: { id: subjectId },
-          data: { likesCount: { increment: 1 } },
-          select: { likesCount: true },
-        }),
-      async () => {
-        const current = await prisma.stickerSheet.findUnique({
-          where: { id: subjectId },
-          select: { likesCount: true },
-        });
-        const next =
-          current && current.likesCount > BigInt(0)
-            ? current.likesCount - BigInt(1)
-            : BigInt(0);
-        return prisma.stickerSheet.update({
-          where: { id: subjectId },
-          data: { likesCount: next },
-          select: { likesCount: true },
-        });
-      },
-      delta,
-    );
+    const likes = await bumpTableLikes("sticker_sheets", subjectId, delta, db);
     syncPrintSearch("sheet", subjectId);
     return likes;
   }
-  const likes = await bumpModelLikes(
-    () =>
-      prisma.stickerPack.update({
-        where: { id: subjectId },
-        data: { likesCount: { increment: 1 } },
-        select: { likesCount: true },
-      }),
-    async () => {
-      const current = await prisma.stickerPack.findUnique({
-        where: { id: subjectId },
-        select: { likesCount: true },
-      });
-      const next =
-        current && current.likesCount > BigInt(0)
-          ? current.likesCount - BigInt(1)
-          : BigInt(0);
-      return prisma.stickerPack.update({
-        where: { id: subjectId },
-        data: { likesCount: next },
-        select: { likesCount: true },
-      });
-    },
-    delta,
-  );
+  const likes = await bumpTableLikes("sticker_packs", subjectId, delta, db);
   syncPrintSearch("pack", subjectId);
   return likes;
 }
@@ -185,13 +97,75 @@ export async function bumpStickerLikesCount(
   return bumpLikesCount(FAVORITE_SUBJECT.sticker, stickerId, delta);
 }
 
-async function bumpModelLikes(
-  increment: () => Promise<{ likesCount: bigint }>,
-  decrement: () => Promise<{ likesCount: bigint }>,
+/** Atomic increment / GREATEST(decrement, 0). */
+async function bumpTableLikes(
+  table:
+    | "stickers"
+    | "collections"
+    | "sticker_sheets"
+    | "sticker_packs",
+  subjectId: bigint,
   delta: 1 | -1,
+  db: Db,
 ): Promise<bigint> {
-  const row = delta === 1 ? await increment() : await decrement();
-  return row.likesCount;
+  if (table === "stickers") {
+    if (delta === 1) {
+      await db.$executeRaw`
+        UPDATE stickers SET likes_count = likes_count + 1, updated_at = now() WHERE id = ${subjectId}
+      `;
+    } else {
+      await db.$executeRaw`
+        UPDATE stickers SET likes_count = GREATEST(likes_count - 1, 0), updated_at = now() WHERE id = ${subjectId}
+      `;
+    }
+    const rows = await db.$queryRaw<Array<{ likes_count: bigint }>>`
+      SELECT likes_count FROM stickers WHERE id = ${subjectId}
+    `;
+    return rows[0]?.likes_count ?? BigInt(0);
+  }
+  if (table === "collections") {
+    if (delta === 1) {
+      await db.$executeRaw`
+        UPDATE collections SET likes_count = likes_count + 1, updated_at = now() WHERE id = ${subjectId}
+      `;
+    } else {
+      await db.$executeRaw`
+        UPDATE collections SET likes_count = GREATEST(likes_count - 1, 0), updated_at = now() WHERE id = ${subjectId}
+      `;
+    }
+    const rows = await db.$queryRaw<Array<{ likes_count: bigint }>>`
+      SELECT likes_count FROM collections WHERE id = ${subjectId}
+    `;
+    return rows[0]?.likes_count ?? BigInt(0);
+  }
+  if (table === "sticker_sheets") {
+    if (delta === 1) {
+      await db.$executeRaw`
+        UPDATE sticker_sheets SET likes_count = likes_count + 1, updated_at = now() WHERE id = ${subjectId}
+      `;
+    } else {
+      await db.$executeRaw`
+        UPDATE sticker_sheets SET likes_count = GREATEST(likes_count - 1, 0), updated_at = now() WHERE id = ${subjectId}
+      `;
+    }
+    const rows = await db.$queryRaw<Array<{ likes_count: bigint }>>`
+      SELECT likes_count FROM sticker_sheets WHERE id = ${subjectId}
+    `;
+    return rows[0]?.likes_count ?? BigInt(0);
+  }
+  if (delta === 1) {
+    await db.$executeRaw`
+      UPDATE sticker_packs SET likes_count = likes_count + 1, updated_at = now() WHERE id = ${subjectId}
+    `;
+  } else {
+    await db.$executeRaw`
+      UPDATE sticker_packs SET likes_count = GREATEST(likes_count - 1, 0), updated_at = now() WHERE id = ${subjectId}
+    `;
+  }
+  const rows = await db.$queryRaw<Array<{ likes_count: bigint }>>`
+    SELECT likes_count FROM sticker_packs WHERE id = ${subjectId}
+  `;
+  return rows[0]?.likes_count ?? BigInt(0);
 }
 
 export async function readLikesCount(

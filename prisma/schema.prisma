@@ -43,11 +43,14 @@ model User {
   @@map("users")
 }
 
-/// Public credit identity. Linked (user_id set) or unlinked (external). display_name unique CI in DB.
+/// Public credit identity. Linked (user_id set) or unlinked (external).
+/// CI uniqueness via display_name_key (= lower(trim(display_name))).
 model Blobber {
   id                   BigInt    @id @default(autoincrement())
   userId               BigInt?   @unique @map("user_id")
   displayName          String    @map("display_name") @db.VarChar(200)
+  /// lower(trim(display_name)) — Prisma-visible unique for CI lookups.
+  displayNameKey       String    @unique @map("display_name_key") @db.VarChar(200)
   /// URL slug from displayName; unique. Permanent link stays /blobbers/id/{id}.
   slug                 String    @unique @db.VarChar(220)
   description          String?
@@ -340,6 +343,9 @@ model Sticker {
   @@index([categoryId])
   @@index([remixedFromStickerId])
   @@index([blobberId])
+  /// Partial public-browse index lives in SQL only:
+  /// stickers_public_browse_popularity_idx (popularity_score DESC, published_at DESC)
+  /// WHERE visibility=public AND moderation_status=approved
   @@map("stickers")
 }
 
@@ -488,6 +494,7 @@ model Favorite {
 
   @@unique([userId, subjectType, subjectId])
   @@index([userId, createdAt(sort: Desc)])
+  @@index([subjectType, subjectId])
   @@map("favorites")
 }
 
@@ -672,6 +679,7 @@ model Job {
 
   @@index([status, leaseExpiresAt])
   @@index([type, status])
+  @@index([status, type, createdAt])
   @@index([subjectType, subjectId])
   @@map("jobs")
 }

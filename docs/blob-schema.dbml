@@ -1,7 +1,9 @@
 # BLOB Sticker Library — locked v1 schema (dbdiagram.io)
 # Import at https://dbdiagram.io
 # Target: Next.js + Auth.js (Zitadel OIDC) + PostgreSQL (+ Prisma)
-# Revision: Composition editor unlock — assets + compositions; fit_mode removed
+# Revision: Schema hardening — display_name_key, llm_prompts, ai_meta_draft,
+#   partial unique pending indexes, public-browse / favorites / jobs indexes;
+#   removed tag_aliases + search_vector
 #
 # Enums are documented as notes; store as text/varchar + app validation
 # (or PostgreSQL ENUM / CHECK in migrations).
@@ -11,8 +13,9 @@ account_status: active | pending | suspended | banned
 visibility: public | unlisted | private
 moderation_status: draft | pending_review | needs_edit | approved | rejected | hidden | deleted
 moderation_action: submitted | approved | rejected | edit_requested | resubmitted | edited | hidden | deleted | claim_submitted | claim_approved | claim_rejected
-moderation_subject_type: sticker | collection | attribution_claim | blobber_edit_request | blobber_association_request
+moderation_subject_type: sticker | collection | attribution_claim | blobber_edit_request | blobber_association_request | blobber
 processing_status: processing | ready | failed
+search_meta_status: none | enriching | pending_search_meta | approved | stale
 media_kind: image | chat | thumbnail | mask | gif | video
 media_asset_status: pending | ready | failed
 attribution_claim_reason: missing | mislabeled
@@ -23,6 +26,9 @@ print_format: pdf | png
 print_status: pending | ready | failed
 collection_item_type: sticker | sticker_sheet | sticker_pack
 favorite_subject_type: sticker | collection | sticker_sheet | sticker_pack
+job_type: composition_encode | sheet_encode | pack_encode
+job_status: pending | leased | running | succeeded | failed
+worker_status: online | offline
 
 # ---------------------------------------------------------------------------
 # Identity
@@ -44,9 +50,9 @@ Table users {
   Note: 'Zitadel is the sole IdP (Auth.js OIDC + PKCE). Roles SoT = Zitadel project roles; users.role is a mirror. First local signup (and one-shot lowest-id admin if none) becomes superadmin; further superadmin grants are Zitadel-only (not via BLOB UI/API). Profile name/email SoT = Zitadel (editable via Management API from BLOB). username local (blobatar). account_status local. No password, no avatar_url. Session is Auth.js JWT — no app sessions table.'
 }
 
-// ---------------------------------------------------------------------------
-// GLASS: app public PRISM (singleton) + temporary upload tracker
-// ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# GLASS: app public PRISM (singleton) + temporary upload tracker
+# ---------------------------------------------------------------------------
 
 Table public_prism {
   id bigserial [pk]
@@ -56,6 +62,15 @@ Table public_prism {
   created_at timestamptz [not null]
 
   Note: 'LOCKED: App-owned public PRISM. Not configured via env. On first need, BLOB calls Glass prisms.create(is_public=true), inserts here, caches glass_prism_id in-process. Restarts load from this table. Disjoint from users/stickers/media_assets.'
+}
+
+Table llm_prompts {
+  key varchar(64) [pk, note: 'e.g. search_metadata | search_agent']
+  body text [not null]
+  updated_at timestamptz [not null]
+  updated_by_id bigint [null, note: 'Superadmin who last saved']
+
+  Note: 'Superadmin-tunable LLM prompt bodies (search metadata + search agent).'
 }
 
 Table landing_config {
@@ -71,7 +86,7 @@ Table landing_config {
 
 Table glass_uploads {
   id bigserial [pk]
-  user_id bigint [not null, ref: > users.id]
+  user_id bigint [not null]
   object_id uuid [not null, note: 'GLASS object UUID']
   prism_id uuid [not null, note: 'Current PRISM (private until approved)']
   title varchar(200) [not null]
@@ -81,8 +96,14 @@ Table glass_uploads {
   created_at timestamptz [not null]
   updated_at timestamptz [not null]
 
-  Note: 'Temporary Glass upload tracker for profile upload/view before full stickers/media_assets. On admin approve: link object to public_prism.glass_prism_id, unlink from user private prism.'
+  indexes {
+    user_id [name: 'glass_uploads_user_id_idx']
+  }
+
+  Note: 'Temporary Glass upload tracker for profile upload/view before full stickers/media_assets. Prefer stickers. On admin approve: link object to public_prism.glass_prism_id, unlink from user private prism.'
 }
+
+Ref: glass_uploads.user_id > users.id [delete: Cascade]
 
 # ---------------------------------------------------------------------------
 # Catalog: categories & tags
@@ -108,7 +129,7 @@ Table tags {
   created_at timestamptz [not null]
   updated_at timestamptz [not null]
 
-  Note: 'Free-form descriptive metadata. name = ALL CAPS; slug = lowercase. Meilisearch (planned) indexes case-insensitively.'
+  Note: 'Free-form descriptive metadata. name = ALL CAPS; slug = lowercase. Meilisearch indexes case-insensitively. (tag_aliases removed — dead.)'
 }
 
 # ---------------------------------------------------------------------------
@@ -117,8 +138,9 @@ Table tags {
 
 Table blobbers {
   id bigserial [pk]
-  user_id bigint [null, unique, ref: > users.id, note: 'Linked account; null = unlinked external Blobber']
-  display_name varchar(200) [not null, note: 'Unique case-insensitive (lower(display_name) unique index)']
+  user_id bigint [null, unique, note: 'Linked account; null = unlinked external Blobber']
+  display_name varchar(200) [not null]
+  display_name_key varchar(200) [unique, not null, note: 'lower(trim(display_name)) — Prisma-visible CI unique']
   slug varchar(220) [unique, not null, note: 'From display_name via slugify; pretty URL /blobbers/{slug}']
   description text [null]
   banner_glass_object_id uuid [null]
@@ -129,12 +151,14 @@ Table blobbers {
   created_at timestamptz [not null]
   updated_at timestamptz [not null]
 
-  Note: 'Public profile at /blobbers/{slug}. Permanent link /blobbers/id/{id}. Live row = approved CMS state. Edits go through blobber_edit_requests. display_name CI-unique; slug unique (disambiguated if slugify collides).'
+  Note: 'Public profile at /blobbers/{slug}. Permanent link /blobbers/id/{id}. Live row = approved CMS state. Edits go through blobber_edit_requests. CI uniqueness via display_name_key (replaces expression index blobbers_display_name_ci).'
 }
+
+Ref: blobbers.user_id > users.id [delete: SetNull]
 
 Table social_links {
   id bigserial [pk]
-  link_type varchar(20) [not null, note: 'youtube | instagram | internet | other']
+  link_type varchar(20) [not null, note: 'youtube | instagram | internet | merch | other']
   handle varchar(200) [not null]
   url varchar(2048) [not null]
   created_at timestamptz [not null]
@@ -142,17 +166,20 @@ Table social_links {
 }
 
 Table blobber_social_links {
-  blobber_id bigint [not null, ref: > blobbers.id]
-  social_link_id bigint [not null, ref: > social_links.id]
+  blobber_id bigint [not null]
+  social_link_id bigint [not null]
 
   indexes {
     (blobber_id, social_link_id) [pk]
   }
 }
 
+Ref: blobber_social_links.blobber_id > blobbers.id [delete: Cascade]
+Ref: blobber_social_links.social_link_id > social_links.id [delete: Cascade]
+
 Table blobber_edit_requests {
   id bigserial [pk]
-  blobber_id bigint [not null, ref: > blobbers.id]
+  blobber_id bigint [not null]
   requester_id bigint [not null, ref: > users.id]
   proposed_payload jsonb [not null, note: 'display_name, description, banner/avatar, section bools, social_links[]']
   status varchar(20) [not null, default: 'pending', note: 'pending | approved | rejected | needs_edit']
@@ -163,17 +190,21 @@ Table blobber_edit_requests {
   updated_at timestamptz [not null]
 
   indexes {
-    (status, created_at) [name: 'idx_blobber_edit_requests_queue']
-    blobber_id [name: 'idx_blobber_edit_requests_blobber']
+    (status, created_at) [name: 'blobber_edit_requests_status_created_at_idx']
+    blobber_id [name: 'blobber_edit_requests_blobber_id_idx']
+    // SQL-only partial unique (hardening): one pending edit per blobber
+    blobber_id [unique, name: 'blobber_edit_requests_pending_blobber_uidx', note: 'PARTIAL WHERE status = pending']
   }
 
-  Note: 'Public profile unchanged until approve. Admin UI shows live vs proposed side-by-side.'
+  Note: 'Public profile unchanged until approve. Admin UI shows live vs proposed side-by-side. Partial unique pending index is SQL-only.'
 }
+
+Ref: blobber_edit_requests.blobber_id > blobbers.id [delete: Cascade]
 
 Table blobber_association_requests {
   id bigserial [pk]
   requester_id bigint [not null, ref: > users.id]
-  target_blobber_id bigint [not null, ref: > blobbers.id]
+  target_blobber_id bigint [not null]
   message text [null]
   status varchar(20) [not null, default: 'pending', note: 'pending | approved | rejected']
   admin_note text [null]
@@ -183,21 +214,25 @@ Table blobber_association_requests {
   updated_at timestamptz [not null]
 
   indexes {
-    (status, created_at) [name: 'idx_blobber_association_requests_queue']
-    (requester_id, target_blobber_id, status) [name: 'idx_blobber_association_requests_requester']
+    (status, created_at) [name: 'blobber_association_requests_status_created_at_idx']
+    (requester_id, target_blobber_id, status) [name: 'blobber_association_requests_requester_id_target_blobber_id_status_idx']
+    // SQL-only partial unique (hardening): one pending assoc per requester+target
+    (requester_id, target_blobber_id) [unique, name: 'blobber_association_requests_pending_uidx', note: 'PARTIAL WHERE status = pending']
   }
 
-  Note: 'On approve: clear old linked blobber.user_id (row kept), set target.user_id, re-point stickers from old → target.'
+  Note: 'On approve: clear old linked blobber.user_id (row kept), set target.user_id, re-point stickers from old → target. Partial unique pending index is SQL-only.'
 }
 
+Ref: blobber_association_requests.target_blobber_id > blobbers.id [delete: Cascade]
+
 # ---------------------------------------------------------------------------
-# Shared moderation audit (stickers now; collections / packs / layouts later)
+# Shared moderation audit + processing logs
 # ---------------------------------------------------------------------------
 
 Table moderation_events {
   id bigserial [pk]
-  subject_type varchar(40) [not null, note: 'sticker | collection | sticker_pack | print_layout | attribution_claim | blobber_edit_request | blobber_association_request']
-  subject_id bigint [not null, note: 'No FK — survives hard delete of subject']
+  subject_type varchar(40) [not null, note: 'sticker | collection | attribution_claim | blobber_edit_request | blobber_association_request | blobber']
+  subject_id bigint [not null, note: 'Polymorphic — NO FK; survives hard delete of subject']
   subject_title varchar(220) [not null, note: 'Snapshot title for history after purge']
   action varchar(40) [not null, note: 'submitted | approved | rejected | edit_requested | resubmitted | edited | hidden | deleted | claim_submitted | claim_approved | claim_rejected']
   actor_id bigint [not null, ref: > users.id]
@@ -205,37 +240,28 @@ Table moderation_events {
   created_at timestamptz [not null]
 
   indexes {
-    (subject_type, subject_id, created_at) [name: 'idx_moderation_events_subject']
-    created_at [name: 'idx_moderation_events_created']
-    actor_id [name: 'idx_moderation_events_actor']
+    (subject_type, subject_id, created_at) [name: 'moderation_events_subject_type_subject_id_created_at_idx']
+    created_at [name: 'moderation_events_created_at_idx']
+    actor_id [name: 'moderation_events_actor_id_idx']
   }
 
-  Note: 'Polymorphic moderation history. Reuse for collections, sticker packs, print layouts when those domains gain moderation. Reject on stickers = purge GLASS then delete row; event retained.'
+  Note: 'Polymorphic moderation history. No subject FK. Reject on stickers = purge GLASS then delete row; event retained.'
 }
 
 Table processing_logs {
   id bigserial [pk]
-  subject_type varchar(40) [not null, note: 'sticker | sticker_sheet | sticker_pack']
-  subject_id bigint [not null]
+  subject_type varchar(40) [not null, note: 'sticker | sticker_sheet | sticker_pack — polymorphic, NO FK']
+  subject_id bigint [not null, note: 'Polymorphic — NO FK']
   subject_title varchar(220) [not null]
   message text [not null]
   created_at timestamptz [not null]
 
   indexes {
-    created_at [name: 'idx_processing_logs_created']
-    (subject_type, subject_id, created_at) [name: 'idx_processing_logs_subject']
+    created_at [name: 'processing_logs_created_at_idx']
+    (subject_type, subject_id, created_at) [name: 'processing_logs_subject_type_subject_id_created_at_idx']
   }
 
   Note: 'Append-only encode/process failure log. Survives clearing of processing_error / error_message on retry. Superadmin profile UI.'
-}
-
-Table tag_aliases {
-  id bigserial [pk]
-  tag_id bigint [not null, ref: > tags.id]
-  alias varchar(80) [unique, not null, note: 'Normalized alias string, e.g. kitty → cat']
-  created_at timestamptz [not null]
-
-  Note: 'Schema ready in v1; alias expansion in search is Should-have.'
 }
 
 # ---------------------------------------------------------------------------
@@ -261,11 +287,11 @@ Table assets {
   updated_at timestamptz [not null]
 
   indexes {
-    sha256 [name: 'idx_assets_sha256']
-    glass_object_id [name: 'idx_assets_glass_object']
+    sha256 [name: 'assets_sha256_idx']
+    glass_object_id [name: 'assets_glass_object_id_idx']
   }
 
-  Note: 'Immutable original media. Composition documents reference asset id. Remixes reuse the same asset rows (no byte copy). Never mutate after create.'
+  Note: 'Immutable original media. Composition documents reference asset id. Remixes bake a new row on save. Never mutate after create.'
 }
 
 # ---------------------------------------------------------------------------
@@ -280,11 +306,11 @@ Table stickers {
 
   created_by bigint [not null, ref: > users.id, note: 'Original creator / artist / remixer']
   uploaded_by bigint [not null, ref: > users.id, note: 'Account that uploaded primary original(s) or initiated remix']
-  remixed_from_sticker_id bigint [null, ref: > stickers.id, note: 'Nullable self-FK: set when this sticker was remixed from another. Complements composition_parents.']
+  remixed_from_sticker_id bigint [null, note: 'Nullable self-FK: set when remixed from another. Complements composition_parents.']
 
   category_id bigint [null, ref: > categories.id, note: 'Single primary category']
 
-  blobber_id bigint [null, ref: > blobbers.id, note: 'Credit Blobber; null = unknown / no credit']
+  blobber_id bigint [null, note: 'Credit Blobber; null = unknown / no credit']
   source_url varchar(2048) [null, note: 'External source link; null = muted credit (link to /blobbers/{id} only)']
   license varchar(100) [null]
   copyright_status varchar(50) [null]
@@ -300,61 +326,72 @@ Table stickers {
 
   views_count bigint [not null, default: 0]
   downloads_count bigint [not null, default: 0]
-  likes_count bigint [not null, default: 0, note: 'Denormalized favourite count for this sticker (favorites where subject_type=sticker). Updated when users favourite/unfavourite.']
-  collection_membership_count bigint [not null, default: 0, note: 'How many collections include this sticker']
+  likes_count bigint [not null, default: 0, note: 'Denormalized favourite count (favorites where subject_type=sticker)']
+  collection_membership_count bigint [not null, default: 0, note: 'Collections that include this sticker']
   print_membership_count bigint [not null, default: 0, note: 'Sheets + packs that include this sticker']
-  popularity_score bigint [not null, default: 0, note: 'likes + collection_membership + print_membership; Meili sortable']
+  popularity_score bigint [not null, default: 0, note: 'likes + collection_membership + print_membership']
   shares_count bigint [not null, default: 0]
   search_appearances_count bigint [not null, default: 0]
-  search_meta_status varchar(30) [not null, default: 'none', note: 'none|enriching|pending_search_meta|approved|stale']
+  search_meta_status varchar(30) [not null, default: 'none', note: 'none | enriching | pending_search_meta | approved | stale']
   ai_caption text [null]
   ai_scenario text [null]
   ai_visual_tags text [null, note: 'JSON string array from vision caption']
+  ai_meta_draft jsonb [null, note: 'Pending enrich draft { caption, scenario, tags, updatedAt }; live ai* unchanged until approve']
   search_indexed_at timestamptz [null]
-
-  search_vector text [null, note: 'Legacy PG FTS placeholder; live search is Meilisearch']
 
   published_at timestamptz [null, note: 'Set when first approved + public']
   created_at timestamptz [not null]
   updated_at timestamptz [not null]
 
   indexes {
-    remixed_from_sticker_id [name: 'idx_stickers_remixed_from']
-    blobber_id [name: 'idx_stickers_blobber']
+    (moderation_status, processing_status, visibility) [name: 'stickers_moderation_status_processing_status_visibility_idx']
+    uploaded_by [name: 'stickers_uploaded_by_idx']
+    category_id [name: 'stickers_category_id_idx']
+    remixed_from_sticker_id [name: 'stickers_remixed_from_sticker_id_idx']
+    blobber_id [name: 'stickers_blobber_id_idx']
+    // SQL-only partial (hardening): public browse sort
+    (popularity_score, published_at) [name: 'stickers_public_browse_popularity_idx', note: 'PARTIAL WHERE visibility=public AND moderation_status=approved; popularity_score DESC, published_at DESC']
   }
 
-  Note: 'Primary library object. Framing/edits live in compositions.document_json (1024²). fit_mode/pad_background removed. Published face = media_assets from current composition revision. Remix dual provenance: remixed_from_sticker_id (UI) + composition_parents (composition lineage). Reject = hard purge sticker (+ composition cascade); shared assets retained if still referenced. On approve, discard media_assets whose composition_revision_id ≠ current revision. Credit via blobber_id + source_url.'
+  Note: 'Primary library object. Framing/edits live in compositions.document_json (1024²). Published face = media_assets from current composition revision. Remix dual provenance: remixed_from_sticker_id (UI) + composition_parents (composition lineage). Reject = hard purge sticker (+ composition cascade); shared assets retained if still referenced. Credit via blobber_id + source_url. search_vector removed — live search is Meilisearch.'
 }
+
+Ref: stickers.remixed_from_sticker_id > stickers.id [delete: SetNull]
+Ref: stickers.blobber_id > blobbers.id [delete: SetNull]
 
 Table compositions {
   id bigserial [pk]
-  sticker_id bigint [unique, not null, ref: > stickers.id, note: '1:1 with sticker']
+  sticker_id bigint [unique, not null]
   owner_id bigint [not null, ref: > users.id]
-  current_revision_id bigint [null, note: 'FK to composition_revisions.id; set after first save']
+  current_revision_id bigint [null, note: 'Soft circular pointer to composition_revisions.id — NO Ref (avoids cycle); enforce in app']
   created_at timestamptz [not null]
   updated_at timestamptz [not null]
 
-  Note: 'Editable recipe behind a sticker. current_revision_id points at latest saved document. Soft circular FK to revisions — enforce in app/migration.'
+  Note: 'Editable recipe behind a sticker. current_revision_id points at latest saved document. Soft circular — NO FK Ref to composition_revisions.'
 }
+
+Ref: compositions.sticker_id > stickers.id [delete: Cascade]
 
 Table composition_revisions {
   id bigserial [pk]
-  composition_id bigint [not null, ref: > compositions.id]
+  composition_id bigint [not null]
   revision integer [not null, note: 'Monotonic per composition; starts at 1']
   document_json jsonb [not null, note: 'BLOB Composition JSON (version, canvas 1024², objects). Never Konva/Fabric JSON.']
   created_by bigint [not null, ref: > users.id]
   created_at timestamptz [not null]
 
   indexes {
-    (composition_id, revision) [unique, name: 'uq_composition_revisions']
+    (composition_id, revision) [unique, name: 'composition_revisions_composition_id_revision_key']
   }
 
   Note: 'Immutable saved documents. Save = insert new revision. Local undo stays in the client.'
 }
 
+Ref: composition_revisions.composition_id > compositions.id [delete: Cascade]
+
 Table composition_parents {
-  composition_id bigint [not null, ref: > compositions.id]
-  parent_composition_id bigint [not null, ref: > compositions.id]
+  composition_id bigint [not null]
+  parent_composition_id bigint [not null]
   sort_order integer [not null, default: 0]
 
   indexes {
@@ -364,15 +401,18 @@ Table composition_parents {
   Note: 'Composition remix lineage (deep-copy provenance). Complement to stickers.remixed_from_sticker_id for UI. Not live layer binding; parent edits do not affect children.'
 }
 
+Ref: composition_parents.composition_id > compositions.id [delete: Cascade]
+Ref: composition_parents.parent_composition_id > compositions.id [delete: Cascade]
+
 Table attribution_claims {
   id bigserial [pk]
-  sticker_id bigint [not null, ref: > stickers.id]
+  sticker_id bigint [not null]
   claimant_id bigint [not null, ref: > users.id, note: 'Signed-in user only']
   reason varchar(20) [not null, note: 'missing | mislabeled']
   contact_name varchar(200) [not null]
   contact_email varchar(255) [not null]
   message text [null]
-  proposed_blobber_id bigint [null, ref: > blobbers.id, note: 'Existing Blobber pick']
+  proposed_blobber_id bigint [null, note: 'Existing Blobber pick']
   proposed_blobber_display_name varchar(200) [null, note: 'Create/find-or-merge unlinked on approve when id null']
   proposed_source_url varchar(2048) [null]
   status varchar(20) [not null, default: 'pending', note: 'pending | approved | rejected']
@@ -383,27 +423,35 @@ Table attribution_claims {
   updated_at timestamptz [not null]
 
   indexes {
-    (status, created_at) [name: 'idx_attribution_claims_queue']
-    sticker_id [name: 'idx_attribution_claims_sticker']
-    (claimant_id, sticker_id, status) [name: 'idx_attribution_claims_claimant']
+    (status, created_at) [name: 'attribution_claims_status_created_at_idx']
+    sticker_id [name: 'attribution_claims_sticker_id_idx']
+    (claimant_id, sticker_id, status) [name: 'attribution_claims_claimant_id_sticker_id_status_idx']
+    // SQL-only partial unique (hardening): one pending claim per claimant+sticker
+    (claimant_id, sticker_id) [unique, name: 'attribution_claims_pending_claimant_sticker_uidx', note: 'PARTIAL WHERE status = pending']
   }
 
-  Note: 'Signed-in claim that source is missing or mislabeled. Approve resolves Blobber (id or find-or-merge by display name) and applies blobber_id + source_url on the sticker. Events also land in moderation_events (subject_type=attribution_claim).'
+  Note: 'Signed-in claim that source is missing or mislabeled. Approve resolves Blobber and applies blobber_id + source_url. Events also land in moderation_events. Partial unique pending index is SQL-only.'
 }
 
+Ref: attribution_claims.sticker_id > stickers.id [delete: Cascade]
+Ref: attribution_claims.proposed_blobber_id > blobbers.id [delete: SetNull]
+
 Table sticker_tags {
-  sticker_id bigint [not null, ref: > stickers.id]
-  tag_id bigint [not null, ref: > tags.id]
+  sticker_id bigint [not null]
+  tag_id bigint [not null]
 
   indexes {
     (sticker_id, tag_id) [pk]
   }
 }
 
+Ref: sticker_tags.sticker_id > stickers.id [delete: Cascade]
+Ref: sticker_tags.tag_id > tags.id [delete: Cascade]
+
 Table media_assets {
   id bigserial [pk]
-  sticker_id bigint [not null, ref: > stickers.id]
-  composition_revision_id bigint [null, ref: > composition_revisions.id, note: 'Revision that produced this derivative; null for legacy/orphan']
+  sticker_id bigint [not null]
+  composition_revision_id bigint [null, note: 'Revision that produced this derivative; null for legacy/orphan']
 
   kind varchar(20) [not null, note: 'image | chat | thumbnail | mask | gif | video — sizes: image=1024, chat=128, thumbnail=256']
   mime_type varchar(100) [not null]
@@ -425,26 +473,33 @@ Table media_assets {
   updated_at timestamptz [not null]
 
   indexes {
-    (sticker_id, kind) [unique, note: 'One current asset per kind per sticker']
+    (sticker_id, kind) [unique, name: 'media_assets_sticker_id_kind_key', note: 'One current asset per kind per sticker']
+    composition_revision_id [name: 'media_assets_composition_revision_id_idx']
   }
 
   Note: 'Derivatives / cache only. Originals live in assets. Regenerated from current composition revision. Public outputs strip EXIF. mask = smart-cutout alpha.'
 }
 
+Ref: media_assets.sticker_id > stickers.id [delete: Cascade]
+Ref: media_assets.composition_revision_id > composition_revisions.id [delete: SetNull]
+
 Table favorites {
   id bigserial [pk]
-  user_id bigint [not null, ref: > users.id]
-  subject_type varchar(40) [not null, note: 'sticker | collection | sticker_sheet | sticker_pack']
-  subject_id bigint [not null]
+  user_id bigint [not null]
+  subject_type varchar(40) [not null, note: 'sticker | collection | sticker_sheet | sticker_pack — polymorphic, NO FK']
+  subject_id bigint [not null, note: 'Polymorphic — NO FK']
   created_at timestamptz [not null]
 
   indexes {
-    (user_id, subject_type, subject_id) [unique]
-    (user_id, created_at)
+    (user_id, subject_type, subject_id) [unique, name: 'favorites_user_id_subject_type_subject_id_key']
+    (user_id, created_at) [name: 'favorites_user_id_created_at_idx']
+    (subject_type, subject_id) [name: 'favorites_subject_type_subject_id_idx']
   }
 
-  Note: 'Private polymorphic bookmark. No subject FK. For stickers, toggling favourite also maintains stickers.likes_count (public like tally).'
+  Note: 'Private polymorphic bookmark. No subject FK. For stickers, toggling favourite also maintains stickers.likes_count.'
 }
+
+Ref: favorites.user_id > users.id [delete: Cascade]
 
 # ---------------------------------------------------------------------------
 # Collections (always public; unique name+slug globally)
@@ -452,40 +507,51 @@ Table favorites {
 
 Table collections {
   id bigserial [pk]
-  user_id bigint [not null, ref: > users.id]
+  user_id bigint [not null]
   name varchar(120) [unique, not null]
   slug varchar(140) [unique, not null]
   description text [null]
-  likes_count bigint [not null, default: 0, note: 'Denormalized favourite count (favorites where subject_type=collection).']
+  likes_count bigint [not null, default: 0, note: 'Denormalized favourite count (favorites where subject_type=collection)']
   created_at timestamptz [not null]
   updated_at timestamptz [not null]
+
+  indexes {
+    user_id [name: 'collections_user_id_idx']
+  }
 
   Note: 'Always public. Globally unique name and slug. Not deletable by users. Holds stickers, sheets, packs (1–60 items).'
 }
 
+Ref: collections.user_id > users.id [delete: Cascade]
+
 Table collection_items {
-  collection_id bigint [not null, ref: > collections.id]
-  subject_type varchar(40) [not null, note: 'sticker | sticker_sheet | sticker_pack']
-  subject_id bigint [not null]
+  collection_id bigint [not null]
+  subject_type varchar(40) [not null, note: 'sticker | sticker_sheet | sticker_pack — polymorphic, NO FK']
+  subject_id bigint [not null, note: 'Polymorphic — NO FK']
   sort_order integer [not null, default: 0]
   added_at timestamptz [not null]
 
   indexes {
     (collection_id, subject_type, subject_id) [pk]
-    (subject_type, subject_id)
+    (subject_type, subject_id) [name: 'collection_items_subject_type_subject_id_idx']
   }
 
   Note: 'Polymorphic membership. Max 60 items enforced in app. Cannot remove the last item.'
 }
 
+Ref: collection_items.collection_id > collections.id [delete: Cascade]
+
 Table collection_tags {
-  collection_id bigint [not null, ref: > collections.id]
-  tag_id bigint [not null, ref: > tags.id]
+  collection_id bigint [not null]
+  tag_id bigint [not null]
 
   indexes {
     (collection_id, tag_id) [pk]
   }
 }
+
+Ref: collection_tags.collection_id > collections.id [delete: Cascade]
+Ref: collection_tags.tag_id > tags.id [delete: Cascade]
 
 # ---------------------------------------------------------------------------
 # Prints domain (sheets-first)
@@ -497,7 +563,7 @@ Table sticker_sheets {
   slug varchar(220) [unique, not null]
   description text [null]
   created_by bigint [not null, ref: > users.id]
-  print_document_json json [not null, note: 'PrintDocument v1 (mm page + asset_id refs)']
+  print_document_json jsonb [not null, note: 'PrintDocument v1 (mm page + asset_id refs)']
   status varchar(20) [not null, default: 'pending', note: 'pending | ready | failed']
   error_message text [null]
   png_glass_object_id uuid [null]
@@ -506,24 +572,33 @@ Table sticker_sheets {
   pdf_glass_prism_id uuid [null]
   png_size_bytes bigint [null]
   pdf_size_bytes bigint [null]
-  likes_count bigint [not null, default: 0, note: 'Denormalized favourite count (favorites where subject_type=sticker_sheet).']
+  likes_count bigint [not null, default: 0, note: 'Denormalized favourite count (favorites where subject_type=sticker_sheet)']
   created_at timestamptz [not null]
   updated_at timestamptz [not null]
+
+  indexes {
+    (status, created_at) [name: 'sticker_sheets_status_created_at_idx']
+    created_by [name: 'sticker_sheets_created_by_idx']
+  }
 
   Note: 'Sticker Sheet = single printable page. Always public. Not deletable. Page presets (A4/A5) live in blob-editor/print, not DB.'
 }
 
 Table sheet_stickers {
-  sheet_id bigint [not null, ref: > sticker_sheets.id]
-  sticker_id bigint [not null, ref: > stickers.id]
+  sheet_id bigint [not null]
+  sticker_id bigint [not null]
   sort_order integer [not null, default: 0]
 
   indexes {
     (sheet_id, sticker_id) [pk]
+    sticker_id [name: 'sheet_stickers_sticker_id_idx']
   }
 
   Note: 'Source stickers on a sheet (max 20). asset_id in PrintDocument = sticker id string.'
 }
+
+Ref: sheet_stickers.sheet_id > sticker_sheets.id [delete: Cascade]
+Ref: sheet_stickers.sticker_id > stickers.id [delete: Restrict]
 
 Table sticker_packs {
   id bigserial [pk]
@@ -539,26 +614,41 @@ Table sticker_packs {
   pdf_glass_prism_id uuid [null]
   png_size_bytes bigint [null]
   pdf_size_bytes bigint [null]
-  likes_count bigint [not null, default: 0, note: 'Denormalized favourite count (favorites where subject_type=sticker_pack).']
+  likes_count bigint [not null, default: 0, note: 'Denormalized favourite count (favorites where subject_type=sticker_pack)']
   sheets_hash varchar(64) [unique, not null, note: 'sha256 hex of sorted sheet ids ("1,2,3"); order-insensitive pack membership fingerprint']
-  source_collection_id bigint [unique, null, ref: - collections.id, note: '1:1: pack combined from this collection; create once, update membership on recombine']
+  source_collection_id bigint [unique, null, note: '1:1: pack combined from this collection; create once, update membership on recombine']
   created_at timestamptz [not null]
   updated_at timestamptz [not null]
 
-  Note: 'Sticker Pack = bundle of ≥2 sheets (combined PDF + contact-sheet PNG). Always public. Not deletable. Stores sheet FKs. Duplicate sheet sets rejected via sheets_hash. Optional source_collection_id links the collection-combined pack (membership excludes that pack when expanding).'
+  indexes {
+    (status, created_at) [name: 'sticker_packs_status_created_at_idx']
+    created_by [name: 'sticker_packs_created_by_idx']
+  }
+
+  Note: 'Sticker Pack = bundle of ≥2 sheets (combined PDF + contact-sheet PNG). Always public. Not deletable. Stores sheet FKs. Duplicate sheet sets rejected via sheets_hash. Optional source_collection_id links the collection-combined pack.'
 }
 
+Ref: sticker_packs.source_collection_id > collections.id [delete: SetNull]
+
 Table pack_sheets {
-  pack_id bigint [not null, ref: > sticker_packs.id]
-  sheet_id bigint [not null, ref: > sticker_sheets.id]
+  pack_id bigint [not null]
+  sheet_id bigint [not null]
   sort_order integer [not null, default: 0]
 
   indexes {
     (pack_id, sheet_id) [pk]
+    sheet_id [name: 'pack_sheets_sheet_id_idx']
   }
 
   Note: 'Ordered sheet references inside a pack. Min 2 sheets enforced in app.'
 }
+
+Ref: pack_sheets.pack_id > sticker_packs.id [delete: Cascade]
+Ref: pack_sheets.sheet_id > sticker_sheets.id [delete: Restrict]
+
+# ---------------------------------------------------------------------------
+# Workers + jobs
+# ---------------------------------------------------------------------------
 
 Table worker_api_keys {
   id bigserial [pk]
@@ -569,12 +659,12 @@ Table worker_api_keys {
   created_at timestamptz [not null]
   updated_at timestamptz [not null]
 
-  Note: 'Superadmin-minted bearer keys for remote encode workers.'
+  Note: 'Superadmin-minted bearer keys for remote encode workers. Store hash only.'
 }
 
 Table workers {
   id bigserial [pk]
-  api_key_id bigint [not null, ref: > worker_api_keys.id]
+  api_key_id bigint [not null]
   instance_id varchar(64) [not null]
   version varchar(40) [not null, default: '0']
   capabilities text [not null, default: '[]', note: 'JSON string array of job types']
@@ -587,23 +677,25 @@ Table workers {
   updated_at timestamptz [not null]
 
   indexes {
-    (api_key_id, instance_id) [unique]
-    (status, last_heartbeat_at)
+    (api_key_id, instance_id) [unique, name: 'workers_api_key_id_instance_id_key']
+    (status, last_heartbeat_at) [name: 'workers_status_last_heartbeat_at_idx']
   }
 
   Note: 'Fleet row updated by WSS register/heartbeat. Control plane sole DB owner.'
 }
 
+Ref: workers.api_key_id > worker_api_keys.id [delete: Cascade]
+
 Table jobs {
   id bigserial [pk]
   type varchar(40) [not null, note: 'composition_encode | sheet_encode | pack_encode']
-  subject_type varchar(40) [not null, note: 'sticker | sticker_sheet | sticker_pack']
-  subject_id bigint [not null]
+  subject_type varchar(40) [not null, note: 'sticker | sticker_sheet | sticker_pack — polymorphic, NO FK']
+  subject_id bigint [not null, note: 'Polymorphic — NO FK']
   status varchar(20) [not null, default: 'pending', note: 'pending | leased | running | succeeded | failed']
   idempotency_key varchar(120) [unique, not null]
   payload jsonb [null]
   result jsonb [null]
-  worker_id bigint [null, ref: > workers.id]
+  worker_id bigint [null]
   lease_expires_at timestamptz [null]
   attempts integer [not null, default: 0]
   last_error text [null]
@@ -611,10 +703,13 @@ Table jobs {
   updated_at timestamptz [not null]
 
   indexes {
-    (status, lease_expires_at)
-    (type, status)
-    (subject_type, subject_id)
+    (status, lease_expires_at) [name: 'jobs_status_lease_expires_at_idx']
+    (type, status) [name: 'jobs_type_status_idx']
+    (status, type, created_at) [name: 'jobs_status_type_created_at_idx']
+    (subject_type, subject_id) [name: 'jobs_subject_type_subject_id_idx']
   }
 
-  Note: 'Durable encode work. WSS notifies workers; expired leases reclaim to pending. Local fallback when no capable online worker.'
+  Note: 'Durable encode work. Postgres SoT; WSS wakes workers. Expired leases reclaim to pending. Local fallback when no capable online worker.'
 }
+
+Ref: jobs.worker_id > workers.id [delete: SetNull]

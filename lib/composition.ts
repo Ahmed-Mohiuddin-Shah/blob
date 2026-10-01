@@ -4,7 +4,7 @@ import {
   validateDocument,
   type CompositionDocument,
 } from "blob-editor/core";
-import { getGlass } from "@/lib/glass";
+import { getGlass, discardReplacedMediaGlass } from "@/lib/glass";
 import { prisma } from "@/lib/prisma";
 import { ensurePrivatePrism } from "@/lib/private-prism";
 import {
@@ -154,6 +154,7 @@ export async function upsertStillExports(opts: {
       filename: `${opts.slug}-${item.kind}.png`,
       fileExtension: "png",
     });
+    await discardReplacedMediaGlass(opts.stickerId, item.kind, up.object_id);
     await prisma.mediaAsset.upsert({
       where: {
         stickerId_kind: { stickerId: opts.stickerId, kind: item.kind },
@@ -193,6 +194,7 @@ export async function upsertStillExports(opts: {
     filename: `${opts.slug}-og.${og.ext}`,
     fileExtension: og.ext,
   });
+  await discardReplacedMediaGlass(opts.stickerId, MEDIA_KIND.og, ogUp.object_id);
   await prisma.mediaAsset.upsert({
     where: {
       stickerId_kind: { stickerId: opts.stickerId, kind: MEDIA_KIND.og },

@@ -25,10 +25,10 @@ const LINKS: { href: string; label: string; icon: LucideIcon; match: string }[] 
     { href: "/search", label: "Search", icon: Search, match: "/search" },
   ];
 
-/** Persistent bottom section nav for compact widths (browse hubs). */
+/** Persistent bottom section nav for compact widths. */
 export function MobileBrowseNav() {
   const pathname = usePathname();
-  if (pathname.startsWith("/profile") || pathname.startsWith("/auth")) {
+  if (pathname.startsWith("/auth")) {
     return null;
   }
 

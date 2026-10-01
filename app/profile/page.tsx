@@ -1,30 +1,12 @@
 import Link from "next/link";
 import { SignOutTextButton } from "@/components/auth-buttons";
 import { UserBlobatar } from "@/components/user-blobatar";
-import { canManageUsers, canUpload } from "@/lib/capabilities";
-import { MODERATION_STATUS } from "@/lib/moderation";
-import { prisma } from "@/lib/prisma";
+import { canUpload } from "@/lib/capabilities";
 import { requireSessionUser } from "@/lib/require-user";
 
 export default async function ProfileOverviewPage() {
   const { user } = await requireSessionUser();
   const caps = { role: user.role, accountStatus: user.accountStatus };
-
-  const [uploadCount, pendingCount, needsEditCount] = await Promise.all([
-    prisma.sticker.count({ where: { uploadedById: user.id } }),
-    prisma.sticker.count({
-      where: {
-        moderationStatus: MODERATION_STATUS.pendingReview,
-        ...(canManageUsers(caps) ? {} : { uploadedById: user.id }),
-      },
-    }),
-    prisma.sticker.count({
-      where: {
-        moderationStatus: MODERATION_STATUS.needsEdit,
-        uploadedById: user.id,
-      },
-    }),
-  ]);
 
   return (
     <div>
@@ -39,48 +21,16 @@ export default async function ProfileOverviewPage() {
             {user.displayName}
           </h1>
           <p className="mt-1 text-sm text-secondary">@{user.username}</p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            {canUpload(caps) ? (
+          {canUpload(caps) ? (
+            <div className="mt-4">
               <Link
                 href="/upload"
-                className="rounded-full bg-accent-gradient px-5 py-2 text-sm font-semibold text-white"
+                className="inline-flex rounded-full bg-accent-gradient px-5 py-2 text-sm font-semibold text-white"
               >
                 Upload sticker
               </Link>
-            ) : null}
-            <Link
-              href="/profile/uploads"
-              className="rounded-full border border-divider bg-surface px-5 py-2 text-sm font-semibold"
-            >
-              Uploads ({uploadCount})
-            </Link>
-            <Link
-              href="/profile/prints"
-              className="rounded-full border border-divider bg-surface px-5 py-2 text-sm font-semibold"
-            >
-              Prints
-            </Link>
-            <Link
-              href="/profile/pending"
-              className="rounded-full border border-divider bg-surface px-5 py-2 text-sm font-semibold"
-            >
-              Pending
-              {pendingCount > 0 ? ` (${pendingCount})` : ""}
-            </Link>
-            <Link
-              href="/profile/edits"
-              className="rounded-full border border-divider bg-surface px-5 py-2 text-sm font-semibold"
-            >
-              Edits
-              {needsEditCount > 0 ? ` (${needsEditCount})` : ""}
-            </Link>
-            <Link
-              href="/profile/settings"
-              className="rounded-full border border-divider bg-surface px-5 py-2 text-sm font-semibold"
-            >
-              Settings
-            </Link>
-          </div>
+            </div>
+          ) : null}
         </div>
       </div>
 

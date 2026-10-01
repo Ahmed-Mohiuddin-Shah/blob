@@ -1,4 +1,4 @@
-import { Glass } from "glass-ts";
+import { Glass, GlassError } from "glass-ts";
 import { MODERATION_STATUS } from "@/lib/moderation";
 import { prisma } from "@/lib/prisma";
 import { VISIBILITY } from "@/lib/stickers";
@@ -19,6 +19,54 @@ export function getGlass(): Glass {
     throw new Error("Missing GLASS_API_URL or GLASS_API_KEY");
   }
   return new Glass({ baseUrl, apiKey });
+}
+
+/** Best-effort unlink + delete a Glass object (404 ok). */
+export async function deleteGlassObjectBestEffort(
+  objectId: string,
+  prismId?: string | null,
+): Promise<void> {
+  const glass = getGlass();
+  if (prismId) {
+    try {
+      await glass.prisms.unlinkObject(prismId, objectId);
+    } catch {
+      /* best-effort */
+    }
+  }
+  try {
+    await glass.objects.delete(objectId);
+  } catch (err) {
+    if (err instanceof GlassError && err.status === 404) return;
+    console.warn("glass object delete failed:", objectId, err);
+  }
+}
+
+/** If the stored object id is being replaced, delete the old Glass object. */
+export async function replaceGlassObjectRef(
+  old: { objectId?: string | null; prismId?: string | null },
+  newObjectId: string,
+): Promise<void> {
+  if (old.objectId && old.objectId !== newObjectId) {
+    await deleteGlassObjectBestEffort(old.objectId, old.prismId);
+  }
+}
+
+/** Before media_assets upsert: drop previous Glass object when UUID changes. */
+export async function discardReplacedMediaGlass(
+  stickerId: bigint,
+  kind: string,
+  newObjectId: string,
+): Promise<void> {
+  const existing = await prisma.mediaAsset.findUnique({
+    where: { stickerId_kind: { stickerId, kind } },
+    select: { glassObjectId: true, glassPrismId: true },
+  });
+  if (!existing) return;
+  await replaceGlassObjectRef(
+    { objectId: existing.glassObjectId, prismId: existing.glassPrismId },
+    newObjectId,
+  );
 }
 
 /** Public anonymous download URL for an object in a public PRISM. */

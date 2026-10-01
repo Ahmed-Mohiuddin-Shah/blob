@@ -161,6 +161,14 @@ export async function DELETE(_request: Request, ctx: Ctx) {
     );
   }
 
+  const stickerIds = (
+    await prisma.sheetSticker.findMany({
+      where: { sheet: { packs: { some: { packId } } } },
+      select: { stickerId: true },
+      distinct: ["stickerId"],
+    })
+  ).map((r) => r.stickerId);
+
   await prisma.$transaction([
     prisma.favorite.deleteMany({
       where: {
@@ -174,8 +182,20 @@ export async function DELETE(_request: Request, ctx: Ctx) {
         subjectId: packId,
       },
     }),
+    prisma.job.deleteMany({
+      where: { subjectType: "sticker_pack", subjectId: packId },
+    }),
     prisma.stickerPack.delete({ where: { id: packId } }),
   ]);
+
+  if (stickerIds.length > 0) {
+    const { recomputeStickerPopularity } = await import(
+      "@/lib/search/popularity"
+    );
+    for (const stickerId of stickerIds) {
+      void recomputeStickerPopularity(stickerId);
+    }
+  }
 
   return NextResponse.json({ ok: true });
 }

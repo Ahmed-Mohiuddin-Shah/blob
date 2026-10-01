@@ -1,26 +1,12 @@
-import { GlassError } from "glass-ts";
 import { enqueueCompositionEncode } from "@/lib/composition-encode";
-import { getGlass } from "@/lib/glass";
+import { deleteGlassObjectBestEffort } from "@/lib/glass";
+import { COLLECTION_ITEM } from "@/lib/collections";
+import { FAVORITE_SUBJECT } from "@/lib/favorites";
 import { prisma } from "@/lib/prisma";
 import { MEDIA_KIND, PROCESSING_STATUS } from "@/lib/stickers";
 import { MODERATION_STATUS } from "@/lib/moderation";
 
-async function deleteGlassObject(objectId: string, prismId: string) {
-  const glass = getGlass();
-  try {
-    await glass.prisms.unlinkObject(prismId, objectId);
-  } catch {
-    /* best-effort */
-  }
-  try {
-    await glass.objects.delete(objectId);
-  } catch (err) {
-    if (err instanceof GlassError && err.status === 404) return;
-    throw err;
-  }
-}
-
-/** Hard purge sticker + all media objects (first-submit reject). */
+/** Hard purge sticker + media + polymorphic rows (first-submit reject). */
 export async function purgeSticker(stickerId: bigint): Promise<void> {
   const sticker = await prisma.sticker.findUnique({
     where: { id: stickerId },
@@ -28,14 +14,37 @@ export async function purgeSticker(stickerId: bigint): Promise<void> {
   });
   if (!sticker) return;
 
+  const onSheet = await prisma.sheetSticker.count({ where: { stickerId } });
+  if (onSheet > 0) {
+    throw new Error(
+      "Cannot purge: sticker is on a sticker sheet. Remove it from prints first.",
+    );
+  }
+
   const objects = new Map<string, string>();
   for (const asset of sticker.media) {
     objects.set(asset.glassObjectId, asset.glassPrismId);
   }
   for (const [objectId, prismId] of objects) {
-    await deleteGlassObject(objectId, prismId);
+    await deleteGlassObjectBestEffort(objectId, prismId);
   }
-  await prisma.sticker.delete({ where: { id: stickerId } });
+
+  await prisma.$transaction([
+    prisma.favorite.deleteMany({
+      where: { subjectType: FAVORITE_SUBJECT.sticker, subjectId: stickerId },
+    }),
+    prisma.collectionItem.deleteMany({
+      where: { subjectType: COLLECTION_ITEM.sticker, subjectId: stickerId },
+    }),
+    prisma.job.deleteMany({
+      where: { subjectType: "sticker", subjectId: stickerId },
+    }),
+    prisma.$executeRaw`
+      UPDATE landing_config
+      SET featured_sticker_ids = array_remove(featured_sticker_ids, ${stickerId})
+    `,
+    prisma.sticker.delete({ where: { id: stickerId } }),
+  ]);
 }
 
 /**
@@ -97,7 +106,7 @@ export async function restoreStickerAfterRejectedEdit(
   );
   for (const asset of rejectedMedia) {
     if (!keepIds.has(asset.glassObjectId)) {
-      await deleteGlassObject(asset.glassObjectId, asset.glassPrismId);
+      await deleteGlassObjectBestEffort(asset.glassObjectId, asset.glassPrismId);
     }
     await prisma.mediaAsset.delete({ where: { id: asset.id } });
   }
@@ -114,7 +123,7 @@ export async function restoreStickerAfterRejectedEdit(
     });
     if (existingThumb) {
       if (!keepIds.has(existingThumb.glassObjectId)) {
-        await deleteGlassObject(
+        await deleteGlassObjectBestEffort(
           existingThumb.glassObjectId,
           existingThumb.glassPrismId,
         );

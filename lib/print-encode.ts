@@ -4,7 +4,7 @@ import {
   encodePrint,
 } from "blob-editor/encode";
 import { validatePrintDocument } from "blob-editor/print";
-import { getGlass, getPublicPrismId } from "@/lib/glass";
+import { getGlass, getPublicPrismId, replaceGlassObjectRef } from "@/lib/glass";
 import { enqueueJob, enqueueJobAsync } from "@/lib/jobs/enqueue";
 import { JOB_TYPE } from "@/lib/jobs/types";
 import { ensureNodeCanvas } from "@/lib/node-canvas";
@@ -115,6 +115,15 @@ async function processSheet(sheetId: bigint): Promise<void> {
       fileExtension: "pdf",
     });
 
+    await replaceGlassObjectRef(
+      { objectId: sheet.pngGlassObjectId, prismId: sheet.pngGlassPrismId },
+      pngUp.object_id,
+    );
+    await replaceGlassObjectRef(
+      { objectId: sheet.pdfGlassObjectId, prismId: sheet.pdfGlassPrismId },
+      pdfUp.object_id,
+    );
+
     await prisma.stickerSheet.update({
       where: { id: sheetId },
       data: {
@@ -213,6 +222,15 @@ async function processPack(packId: bigint): Promise<void> {
       filename: `${pack.slug}.pdf`,
       fileExtension: "pdf",
     });
+
+    await replaceGlassObjectRef(
+      { objectId: pack.pngGlassObjectId, prismId: pack.pngGlassPrismId },
+      pngUp.object_id,
+    );
+    await replaceGlassObjectRef(
+      { objectId: pack.pdfGlassObjectId, prismId: pack.pdfGlassPrismId },
+      pdfUp.object_id,
+    );
 
     await prisma.stickerPack.update({
       where: { id: packId },
