@@ -52,3 +52,5 @@ next-env.d.ts
 
 # local scaffold leftovers
 /next-scaffold
+
+.pnpm-store
