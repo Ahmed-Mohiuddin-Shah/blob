@@ -39,11 +39,9 @@ import {
 } from "../lib/ollama/client";
 import { encodeWhatsAppOg } from "../lib/whatsapp-og-encode";
 import {
-  MAX_GIF_BYTES,
-  MAX_IMAGE_BYTES,
   MAX_OG_BYTES,
-  MAX_VIDEO_BYTES,
   MEDIA_KIND,
+  maxBytesForMime,
   mimeToExt,
 } from "./media";
 
@@ -324,14 +322,22 @@ async function runComposition(
   );
 
   const mimes = encoded.meta.mimeTypes;
-  assertBudget("image", encoded.exports.full, MAX_IMAGE_BYTES);
-  assertBudget("chat", encoded.exports.chat, MAX_IMAGE_BYTES);
-  assertBudget("thumbnail", encoded.exports.thumbnail, MAX_IMAGE_BYTES);
+  assertBudget("image", encoded.exports.full, maxBytesForMime(mimes.full));
+  assertBudget("chat", encoded.exports.chat, maxBytesForMime(mimes.chat));
+  assertBudget(
+    "thumbnail",
+    encoded.exports.thumbnail,
+    maxBytesForMime(mimes.thumbnail),
+  );
   if (encoded.exports.gif) {
-    assertBudget("gif", encoded.exports.gif, MAX_GIF_BYTES);
+    assertBudget("gif", encoded.exports.gif, maxBytesForMime(mimes.gif ?? "image/gif"));
   }
   if (encoded.exports.video) {
-    assertBudget("video", encoded.exports.video, MAX_VIDEO_BYTES);
+    assertBudget(
+      "video",
+      encoded.exports.video,
+      maxBytesForMime(mimes.video ?? "video/mp4"),
+    );
   }
 
   const kinds: {
@@ -394,7 +400,15 @@ async function runComposition(
     });
   }
 
-  const og = await encodeWhatsAppOg(encoded.exports.full);
+  const ogStill =
+    encoded.meta.firstFramePng ??
+    (mimes.full.startsWith("image/") && mimes.full !== "image/gif"
+      ? encoded.exports.full
+      : null);
+  if (!ogStill) {
+    throw new Error("Missing first-frame still for WhatsApp OG");
+  }
+  const og = await encodeWhatsAppOg(ogStill);
   assertBudget("og", og.bytes, MAX_OG_BYTES);
   kinds.push({
     kind: MEDIA_KIND.og,

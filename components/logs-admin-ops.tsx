@@ -5,13 +5,14 @@ import { createPortal } from "react-dom";
 import {
   backfillWhatsAppOgAction,
   enrichMissingSearchMetaAction,
+  reencodeAnimatedMediaAction,
   reindexCatalogAction,
   type LogsOpState,
 } from "@/app/actions/admin-logs-ops";
 import { BusyButton } from "./busy-button";
 import { useDialogA11y } from "./use-dialog-a11y";
 
-type OpId = "reindex" | "og" | "enrich";
+type OpId = "reindex" | "og" | "enrich" | "reencode";
 
 const OP_COPY: Record<
   OpId,
@@ -32,6 +33,11 @@ const OP_COPY: Record<
     body: "Queue AI caption enrich for stickers with no or stale search meta. This is a heavy operation and may hog workers / vision API. Prefer off-peak.",
     confirmLabel: "Queue search enrich",
   },
+  reencode: {
+    title: "Re-encode media",
+    body: "Queue full composition encode for all GIF and VIDEO stickers so chat / thumbnail / full match the format matrix. This is a heavy process (CPU, workers, Glass) — prefer off-peak.",
+    confirmLabel: "Queue media re-encodes",
+  },
 };
 
 const initial: LogsOpState = {};
@@ -40,9 +46,11 @@ const initial: LogsOpState = {};
 export function LogsAdminOps({
   missingOgCount,
   missingSearchMetaCount,
+  animatedMediaCount,
 }: {
   missingOgCount: number;
   missingSearchMetaCount: number;
+  animatedMediaCount: number;
 }) {
   const [reindexState, reindexAction, reindexPending] = useActionState(
     reindexCatalogAction,
@@ -56,13 +64,18 @@ export function LogsAdminOps({
     enrichMissingSearchMetaAction,
     initial,
   );
+  const [reencodeState, reencodeAction, reencodePending] = useActionState(
+    reencodeAnimatedMediaAction,
+    initial,
+  );
 
   const [pendingOp, setPendingOp] = useState<OpId | null>(null);
   const [understood, setUnderstood] = useState(false);
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
-  const busy = reindexPending || ogPending || enrichPending;
+  const busy =
+    reindexPending || ogPending || enrichPending || reencodePending;
 
   function openConfirm(op: OpId) {
     setUnderstood(false);
@@ -82,7 +95,9 @@ export function LogsAdminOps({
       ? `${missingOgCount} sticker${missingOgCount === 1 ? "" : "s"}`
       : pendingOp === "enrich"
         ? `${missingSearchMetaCount} sticker${missingSearchMetaCount === 1 ? "" : "s"}`
-        : "full catalog";
+        : pendingOp === "reencode"
+          ? `${animatedMediaCount} GIF/VIDEO sticker${animatedMediaCount === 1 ? "" : "s"}`
+          : "full catalog";
 
   return (
     <div className="rounded-[28px] border border-divider bg-surface p-5">
@@ -90,8 +105,8 @@ export function LogsAdminOps({
         Heavy admin ops
       </h2>
       <p className="mt-2 text-sm text-secondary">
-        Reindex Meili, backfill WhatsApp OG JPEGs, or queue AI search enrich.
-        Each action asks for confirmation first.
+        Reindex Meili, backfill WhatsApp OG JPEGs, queue AI search enrich, or
+        re-encode GIF/VIDEO media. Each action asks for confirmation first.
       </p>
 
       <div className="mt-4 flex flex-wrap gap-3">
@@ -124,11 +139,22 @@ export function LogsAdminOps({
           Generate search metadata
           {missingSearchMetaCount > 0 ? ` (${missingSearchMetaCount})` : ""}
         </BusyButton>
+        <BusyButton
+          type="button"
+          busy={reencodePending}
+          disabled={busy && !reencodePending}
+          onClick={() => openConfirm("reencode")}
+          className="rounded-full border border-divider bg-surface px-5 py-2 text-sm font-semibold hover:border-accent-pink/40"
+        >
+          Re-encode media
+          {animatedMediaCount > 0 ? ` (${animatedMediaCount})` : ""}
+        </BusyButton>
       </div>
 
       <OpResult state={reindexState} label="Queued catalog reindex" />
       <OpResult state={ogState} label="Queued OG re-encodes" />
       <OpResult state={enrichState} label="Queued search enrich jobs" />
+      <OpResult state={reencodeState} label="Queued media re-encodes" />
 
       {mounted && pendingOp
         ? createPortal(
@@ -172,7 +198,9 @@ export function LogsAdminOps({
                         ? reindexAction
                         : pendingOp === "og"
                           ? ogAction
-                          : enrichAction
+                          : pendingOp === "enrich"
+                            ? enrichAction
+                            : reencodeAction
                     }
                     onSubmit={() => {
                       setPendingOp(null);

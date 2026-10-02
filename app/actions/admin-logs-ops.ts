@@ -83,6 +83,24 @@ export async function countMissingSearchMeta(): Promise<number> {
   });
 }
 
+/** Stickers with ready gif or video media (format-matrix re-encode scope). */
+function animatedMediaWhere() {
+  return {
+    media: {
+      some: {
+        kind: { in: [MEDIA_KIND.gif, MEDIA_KIND.video] },
+        status: MEDIA_ASSET_STATUS.ready,
+      },
+    },
+  };
+}
+
+export async function countAnimatedMediaStickers(): Promise<number> {
+  const user = await requireSuperadminUser();
+  if (!user) return 0;
+  return prisma.sticker.count({ where: animatedMediaWhere() });
+}
+
 export async function reindexCatalogAction(
   _prev: LogsOpState,
   _formData: FormData,
@@ -169,6 +187,46 @@ export async function enrichMissingSearchMetaAction(
         data: { searchMetaStatus: SEARCH_META_STATUS.enriching },
       });
       enqueueJob(JOB_TYPE.searchEnrich, row.id);
+      queued += 1;
+    }
+    cursor = rows[rows.length - 1]!.id;
+  }
+
+  return { ok: true, queued };
+}
+
+export async function reencodeAnimatedMediaAction(
+  _prev: LogsOpState,
+  _formData: FormData,
+): Promise<LogsOpState> {
+  const user = await requireSuperadminUser();
+  if (!user) return { error: "Forbidden" };
+
+  const batch = 200;
+  let queued = 0;
+  let cursor: bigint | undefined;
+
+  for (;;) {
+    const rows = await prisma.sticker.findMany({
+      where: {
+        ...animatedMediaWhere(),
+        ...(cursor ? { id: { gt: cursor } } : {}),
+      },
+      orderBy: { id: "asc" },
+      take: batch,
+      select: { id: true },
+    });
+    if (rows.length === 0) break;
+
+    for (const row of rows) {
+      await prisma.sticker.update({
+        where: { id: row.id },
+        data: {
+          processingStatus: PROCESSING_STATUS.processing,
+          processingError: null,
+        },
+      });
+      enqueueCompositionEncode(row.id);
       queued += 1;
     }
     cursor = rows[rows.length - 1]!.id;

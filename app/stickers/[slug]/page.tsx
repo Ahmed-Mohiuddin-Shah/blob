@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
-import { Blender, Volume2, VolumeX } from "lucide-react";
+import { Blender, VolumeX } from "lucide-react";
 import { AddToCollectionButton } from "@/components/add-to-collection-button";
 import { AttributionClaimForm } from "@/components/attribution-claim-form";
 import { AttributionCredit } from "@/components/attribution-credit";
@@ -209,7 +209,6 @@ export default async function StickerDetailPage({
   const type = stickerTypeFromKinds(sticker.media.map((m) => m.kind));
   const displayKind = previewMediaKind(sticker.media);
   const hasAudio = videoHasAudio(sticker.media);
-  const SoundIcon = hasAudio ? Volume2 : VolumeX;
 
   const creditLabel = sticker.blobber?.displayName ?? "";
   const blobberHref = sticker.blobber
@@ -277,6 +276,8 @@ export default async function StickerDetailPage({
             src={`/api/stickers/${sticker.id}/media/${displayKind}`}
             seed={sticker.title}
             alt={sticker.title}
+            video={displayKind === "video"}
+            soundToggle={!!hasAudio}
           />
         </div>
 
@@ -286,10 +287,10 @@ export default async function StickerDetailPage({
               {type}
               {sticker.category ? ` · ${sticker.category.name}` : ""}
             </p>
-            {hasAudio !== null ? (
+            {hasAudio === false ? (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-divider bg-surface px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-secondary">
-                <SoundIcon className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
-                {hasAudio ? "Sound" : "No sound"}
+                <VolumeX className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
+                No sound
               </span>
             ) : null}
           </div>
@@ -347,6 +348,7 @@ export default async function StickerDetailPage({
             media={sticker.media.map((m) => ({
               kind: m.kind,
               status: m.status,
+              mimeType: m.mimeType,
               glassObjectId: m.glassObjectId,
             }))}
           />

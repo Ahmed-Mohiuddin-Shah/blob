@@ -237,7 +237,7 @@ Sticker
         └── video      (≤20s square mp4 when applicable)
 ```
 
-Schema kinds via `media_assets.kind`: `image` | `chat` | `thumbnail` | `mask` | `gif` | `video`. Immutable originals live in `assets` (not duplicated as SoT in `media_assets`). Which derived kinds are produced depends on the composition (static → image+chat+thumbnail; **gif source → gif**; **video source → video + gif** lightweight silent derivative + still previews).
+Schema kinds via `media_assets.kind`: `image` | `chat` | `thumbnail` | `mask` | `gif` | `video` | `og` | `storyboard`. Immutable originals live in `assets` (not duplicated as SoT in `media_assets`). Format of chat/thumbnail/image depends on source: **image → stills**; **gif → GIF in all three sizes**; **video → GIF thumbnail + MP4 chat/full**. Dedicated `gif`/`video` kinds alias motion deliverables for type detection; `og` is WhatsApp-only (hidden).
 
 ---
 
@@ -449,8 +449,10 @@ Composition save: client → API → `composition_revisions` + enqueue render. W
 - Max prepared / derivative size: **12 MiB** (mp4)
 - Audio: optional; **preserve when present**
 - Square output; standardized codec/container (**mp4**)
-- Always generate still previews (`thumbnail` / `chat` / `image` as applicable) for cards
-- Also emit a **silent GIF** lightweight derivative for video sources; **site card + detail preview uses that GIF** (faster load). Downloadable / API `video` (mp4) remains available; sound affordance on site reflects `media_assets.has_audio` on the video row (`Volume2` / `VolumeX`)
+- **Format matrix:** `thumbnail` (256) = silent `image/gif`; `chat` (128) and `image`/full (1024) = `video/mp4`
+- **Cards** use the GIF thumbnail (silent). **Detail** plays the MP4; default **muted**, unmute control when `has_audio`
+- Dedicated `MEDIA_KIND.video` / `gif` aliases remain for type detection / storyboard; user downloads expose the three size slots only
+- WhatsApp `og` JPEG is unchanged (hidden derivative from first-frame still)
 - Client `prepareSourceMedia` compresses before upload; worker `encodeComposition` re-enforces budgets
 
 
@@ -458,7 +460,8 @@ Composition save: client → API → `composition_revisions` + enqueue render. W
 ### 9.2 GIF
 
 - Max prepared / derivative size: **3 MiB**; duration ≤ **10 s**
-- Prefer lightweight preview for browse grids (`thumbnail` / `chat`); retain downloadable GIF when that is the deliverable
+- **Format matrix:** `chat` / `thumbnail` / `image` (full) are all `image/gif` at 128 / 256 / ≤1024 (budget may shrink full edge)
+- Cards use thumbnail GIF; detail uses GIF; downloads are the three size slots
 - Do not load dozens of full-size animated GIFs on a browse page without thumbnails
 
 
@@ -466,6 +469,7 @@ Composition save: client → API → `composition_revisions` + enqueue render. W
 ### 9.2b Still images
 
 - Max prepared / derivative size: **2 MiB** (full / chat / thumbnail encodings)
+- **Format matrix:** all three slots are stills (PNG→WebP/JPEG ladder)
 
 
 

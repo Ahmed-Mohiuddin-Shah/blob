@@ -21,10 +21,8 @@ import {
   PROCESSING_SUBJECT,
 } from "@/lib/processing-log";
 import {
-  MAX_GIF_BYTES,
-  MAX_IMAGE_BYTES,
-  MAX_VIDEO_BYTES,
   WHATSAPP_OG_MAX_BYTES,
+  maxBytesForMime,
   maxDurationMsForKind,
   MEDIA_ASSET_STATUS,
   MEDIA_KIND,
@@ -194,14 +192,26 @@ async function processComposition(stickerId: bigint): Promise<void> {
     );
 
     const mimes = encoded.meta.mimeTypes;
-    assertDerivativeBudget("image", encoded.exports.full, MAX_IMAGE_BYTES);
-    assertDerivativeBudget("chat", encoded.exports.chat, MAX_IMAGE_BYTES);
-    assertDerivativeBudget("thumbnail", encoded.exports.thumbnail, MAX_IMAGE_BYTES);
+    assertDerivativeBudget("image", encoded.exports.full, maxBytesForMime(mimes.full));
+    assertDerivativeBudget("chat", encoded.exports.chat, maxBytesForMime(mimes.chat));
+    assertDerivativeBudget(
+      "thumbnail",
+      encoded.exports.thumbnail,
+      maxBytesForMime(mimes.thumbnail),
+    );
     if (encoded.exports.gif) {
-      assertDerivativeBudget("gif", encoded.exports.gif, MAX_GIF_BYTES);
+      assertDerivativeBudget(
+        "gif",
+        encoded.exports.gif,
+        maxBytesForMime(mimes.gif ?? "image/gif"),
+      );
     }
     if (encoded.exports.video) {
-      assertDerivativeBudget("video", encoded.exports.video, MAX_VIDEO_BYTES);
+      assertDerivativeBudget(
+        "video",
+        encoded.exports.video,
+        maxBytesForMime(mimes.video ?? "video/mp4"),
+      );
     }
 
     const fallbackPrismId =
@@ -289,7 +299,15 @@ async function processComposition(stickerId: bigint): Promise<void> {
       });
     }
 
-    const og = await encodeWhatsAppOg(encoded.exports.full);
+    const ogStill =
+      encoded.meta.firstFramePng ??
+      (mimes.full.startsWith("image/") && mimes.full !== "image/gif"
+        ? encoded.exports.full
+        : null);
+    if (!ogStill) {
+      throw new Error("Missing first-frame still for WhatsApp OG");
+    }
+    const og = await encodeWhatsAppOg(ogStill);
     assertDerivativeBudget("og", og.bytes, WHATSAPP_OG_MAX_BYTES);
     kinds.push({
       kind: MEDIA_KIND.og,

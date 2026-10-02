@@ -1,6 +1,7 @@
 import { LogsAdminOps } from "@/components/logs-admin-ops";
 import { ProcessingLogsList } from "@/components/processing-logs-list";
 import {
+  countAnimatedMediaStickers,
   countMissingSearchMeta,
   countMissingWhatsAppOg,
 } from "@/app/actions/admin-logs-ops";
@@ -13,10 +14,12 @@ export default async function ProfileLogsPage({
 }) {
   await requireSuperadmin();
   const { q } = await searchParams;
-  const [missingOgCount, missingSearchMetaCount] = await Promise.all([
-    countMissingWhatsAppOg(),
-    countMissingSearchMeta(),
-  ]);
+  const [missingOgCount, missingSearchMetaCount, animatedMediaCount] =
+    await Promise.all([
+      countMissingWhatsAppOg(),
+      countMissingSearchMeta(),
+      countAnimatedMediaStickers(),
+    ]);
 
   return (
     <div>
@@ -29,6 +32,7 @@ export default async function ProfileLogsPage({
         <LogsAdminOps
           missingOgCount={missingOgCount}
           missingSearchMetaCount={missingSearchMetaCount}
+          animatedMediaCount={animatedMediaCount}
         />
       </div>
       <div className="mt-8">

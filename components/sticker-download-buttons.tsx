@@ -2,22 +2,42 @@ import { Download } from "lucide-react";
 import { glassPublicObjectUrl } from "@/lib/glass";
 import { MEDIA_ASSET_STATUS, MEDIA_KIND } from "@/lib/stickers";
 
-const DOWNLOAD_KINDS: { kind: string; label: string }[] = [
-  { kind: MEDIA_KIND.image, label: "Full PNG" },
-  { kind: MEDIA_KIND.chat, label: "Chat PNG" },
-  { kind: MEDIA_KIND.thumbnail, label: "Thumbnail" },
-  { kind: MEDIA_KIND.gif, label: "GIF" },
-  { kind: MEDIA_KIND.video, label: "Video" },
-  { kind: MEDIA_KIND.mask, label: "Mask" },
-];
+const SIZE_KINDS = [
+  MEDIA_KIND.image,
+  MEDIA_KIND.chat,
+  MEDIA_KIND.thumbnail,
+] as const;
 
 export type DownloadMedia = {
   kind: string;
   status: string;
+  mimeType?: string | null;
   glassObjectId: string;
 };
 
-/** Download links: public stickers → direct GLASS object URL; else Blob media proxy. */
+function labelFor(kind: string, mime: string | null | undefined): string {
+  const m = (mime ?? "").toLowerCase();
+  const isGif = m === "image/gif";
+  const isVideo = m.startsWith("video/");
+  if (kind === MEDIA_KIND.image) {
+    if (isGif) return "Full GIF";
+    if (isVideo) return "Full Video";
+    return "Full";
+  }
+  if (kind === MEDIA_KIND.chat) {
+    if (isGif) return "Chat GIF";
+    if (isVideo) return "Chat Video";
+    return "Chat";
+  }
+  if (kind === MEDIA_KIND.thumbnail) {
+    if (isGif) return "Thumbnail GIF";
+    if (isVideo) return "Thumbnail Video";
+    return "Thumbnail";
+  }
+  return kind;
+}
+
+/** Download links: matrix size slots only (never og/storyboard). */
 export function StickerDownloadButtons({
   stickerId,
   useGlassDirect,
@@ -33,7 +53,10 @@ export function StickerDownloadButtons({
       .filter((m) => m.status === MEDIA_ASSET_STATUS.ready)
       .map((m) => [m.kind, m]),
   );
-  const items = DOWNLOAD_KINDS.filter((d) => ready.has(d.kind));
+  const items = SIZE_KINDS.filter((k) => ready.has(k)).map((kind) => {
+    const asset = ready.get(kind)!;
+    return { kind, label: labelFor(kind, asset.mimeType), asset };
+  });
   if (items.length === 0) return null;
 
   return (
@@ -42,8 +65,7 @@ export function StickerDownloadButtons({
         Downloads
       </p>
       <ul className="mt-3 flex flex-wrap gap-2">
-        {items.map(({ kind, label }) => {
-          const asset = ready.get(kind)!;
+        {items.map(({ kind, label, asset }) => {
           const href = useGlassDirect
             ? glassPublicObjectUrl(asset.glassObjectId)
             : `/api/stickers/${stickerId}/media/${kind}`;

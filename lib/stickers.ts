@@ -66,6 +66,14 @@ export const MAX_UPLOAD_BYTES = MAX_VIDEO_BYTES;
 /** Host override for video; GIF/image keep blob-editor default (10s). */
 export const MAX_VIDEO_DURATION_MS = 20_000;
 
+/** Budget for a derivative slot from its MIME (matrix encode). */
+export function maxBytesForMime(mime: string): number {
+  const m = mime.toLowerCase().split(";")[0]!.trim();
+  if (m === "image/gif") return MAX_GIF_BYTES;
+  if (m.startsWith("video/")) return MAX_VIDEO_BYTES;
+  return MAX_IMAGE_BYTES;
+}
+
 export function maxDurationMsForKind(
   kind: string | null | undefined,
 ): number | undefined {
@@ -244,21 +252,21 @@ function isReady(m: PreviewMediaRow): boolean {
 }
 
 /**
- * Site detail preview kind: VIDEO → silent gif when ready; GIF → gif; else still.
- * Never returns `video` (MP4 stays download/API-only).
+ * Site detail preview kind: VIDEO → mp4; GIF → gif; else still.
  */
 export function previewMediaKind(media: PreviewMediaRow[]): MediaKind {
   const kinds = media.filter(isReady).map((m) => m.kind);
   const type = stickerTypeFromKinds(kinds);
-  if (type === "VIDEO" && kinds.includes(MEDIA_KIND.gif)) return MEDIA_KIND.gif;
+  if (type === "VIDEO" && kinds.includes(MEDIA_KIND.video)) return MEDIA_KIND.video;
   if (type === "GIF" && kinds.includes(MEDIA_KIND.gif)) return MEDIA_KIND.gif;
+  if (type === "GIF" && kinds.includes(MEDIA_KIND.image)) return MEDIA_KIND.image;
   if (kinds.includes(MEDIA_KIND.thumbnail)) return MEDIA_KIND.thumbnail;
   if (kinds.includes(MEDIA_KIND.image)) return MEDIA_KIND.image;
   if (kinds.includes(MEDIA_KIND.chat)) return MEDIA_KIND.chat;
   return MEDIA_KIND.thumbnail;
 }
 
-/** Card/list preview URL — always still (never GIF/video) for grid payload. */
+/** Card/list preview URL — thumbnail slot (GIF for GIF/VIDEO after matrix encode). */
 export function stickerPreviewUrl(
   stickerId: string | bigint,
   media: PreviewMediaRow[],
@@ -266,11 +274,13 @@ export function stickerPreviewUrl(
   const kinds = media.filter(isReady).map((m) => m.kind);
   const kind = kinds.includes(MEDIA_KIND.thumbnail)
     ? MEDIA_KIND.thumbnail
-    : kinds.includes(MEDIA_KIND.chat)
-      ? MEDIA_KIND.chat
-      : kinds.includes(MEDIA_KIND.image)
-        ? MEDIA_KIND.image
-        : MEDIA_KIND.thumbnail;
+    : kinds.includes(MEDIA_KIND.gif)
+      ? MEDIA_KIND.gif
+      : kinds.includes(MEDIA_KIND.chat)
+        ? MEDIA_KIND.chat
+        : kinds.includes(MEDIA_KIND.image)
+          ? MEDIA_KIND.image
+          : MEDIA_KIND.thumbnail;
   return `/api/stickers/${stickerId}/media/${kind}`;
 }
 
@@ -304,18 +314,21 @@ function meetsWhatsAppOg(m: OgMediaRow): boolean {
 
 /**
  * Pick an existing media kind for WhatsApp og:image.
- * Prefer dedicated `og` (512 JPEG ≤600KB); else image/gif under budget; else over-budget image.
- * Never chat/thumbnail (under 300px) or video.
+ * Prefer dedicated `og` (512 JPEG ≤600KB); else still image/gif under budget.
+ * Never chat/thumbnail (under 300px) or video/mp4 (image slot on VIDEO stickers).
  */
 export function whatsappOgImageKind(media: OgMediaRow[]): MediaKind | null {
   const ready = media.filter(isReady);
   const og = ready.find((m) => m.kind === MEDIA_KIND.og);
   if (og) return MEDIA_KIND.og;
+  const hasVideo = ready.some((m) => m.kind === MEDIA_KIND.video);
   const image = ready.find((m) => m.kind === MEDIA_KIND.image);
   const gif = ready.find((m) => m.kind === MEDIA_KIND.gif);
-  if (image && meetsWhatsAppOg(image)) return MEDIA_KIND.image;
+  // VIDEO matrix: image/chat are mp4 — only gif (or dedicated og) is still-capable.
+  if (!hasVideo && image && meetsWhatsAppOg(image)) return MEDIA_KIND.image;
   if (gif && meetsWhatsAppOg(gif)) return MEDIA_KIND.gif;
-  if (image) return MEDIA_KIND.image;
+  if (!hasVideo && image) return MEDIA_KIND.image;
+  if (gif) return MEDIA_KIND.gif;
   return null;
 }
 

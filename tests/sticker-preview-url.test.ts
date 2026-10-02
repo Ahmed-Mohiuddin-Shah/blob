@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   MEDIA_ASSET_STATUS,
   MEDIA_KIND,
+  previewMediaKind,
   stickerPreviewUrl,
   whatsappOgImageKind,
 } from "@/lib/stickers";
@@ -17,7 +18,7 @@ const ready = (kind: string) => ({
 });
 
 describe("stickerPreviewUrl", () => {
-  it("uses still thumbnail for VIDEO even when gif is ready", () => {
+  it("uses thumbnail for VIDEO (GIF thumb after matrix encode)", () => {
     const url = stickerPreviewUrl(BigInt(42), [
       ready(MEDIA_KIND.thumbnail),
       ready(MEDIA_KIND.gif),
@@ -26,12 +27,38 @@ describe("stickerPreviewUrl", () => {
     expect(url).toBe("/api/stickers/42/media/thumbnail");
   });
 
+  it("falls back to gif when thumbnail missing", () => {
+    const url = stickerPreviewUrl("7", [
+      ready(MEDIA_KIND.gif),
+      ready(MEDIA_KIND.image),
+    ]);
+    expect(url).toBe("/api/stickers/7/media/gif");
+  });
+
   it("falls back to chat before full image when thumbnail missing", () => {
     const url = stickerPreviewUrl("7", [
       ready(MEDIA_KIND.chat),
       ready(MEDIA_KIND.image),
     ]);
     expect(url).toBe("/api/stickers/7/media/chat");
+  });
+});
+
+describe("previewMediaKind", () => {
+  it("returns video for VIDEO stickers", () => {
+    expect(
+      previewMediaKind([
+        ready(MEDIA_KIND.thumbnail),
+        ready(MEDIA_KIND.gif),
+        ready(MEDIA_KIND.video),
+      ]),
+    ).toBe(MEDIA_KIND.video);
+  });
+
+  it("returns gif for GIF stickers", () => {
+    expect(
+      previewMediaKind([ready(MEDIA_KIND.thumbnail), ready(MEDIA_KIND.gif)]),
+    ).toBe(MEDIA_KIND.gif);
   });
 });
 
@@ -74,6 +101,26 @@ describe("whatsappOgImageKind", () => {
         ready(MEDIA_KIND.chat),
       ]),
     ).toBe(MEDIA_KIND.image);
+  });
+
+  it("uses gif (not image) when VIDEO is present — image slot is mp4", () => {
+    expect(
+      whatsappOgImageKind([
+        {
+          kind: MEDIA_KIND.image,
+          status: MEDIA_ASSET_STATUS.ready,
+          width: 1024,
+          sizeBytes: 400_000,
+        },
+        {
+          kind: MEDIA_KIND.gif,
+          status: MEDIA_ASSET_STATUS.ready,
+          width: 512,
+          sizeBytes: 200_000,
+        },
+        ready(MEDIA_KIND.video),
+      ]),
+    ).toBe(MEDIA_KIND.gif);
   });
 
   it("uses gif when image is over budget and gif fits", () => {
