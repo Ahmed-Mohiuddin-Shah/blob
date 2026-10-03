@@ -56,7 +56,7 @@ export function isStillImageMime(mime: string | null | undefined): boolean {
   return !String(mime).toLowerCase().startsWith("video/");
 }
 
-/** Preferred still kinds for grid/search `<img>` previews. */
+/** Preferred still kinds for grid/search `<img>` previews (gif first = looping cards). */
 const STILL_PREVIEW_KIND_ORDER = [
   MEDIA_KIND.gif,
   MEDIA_KIND.thumbnail,

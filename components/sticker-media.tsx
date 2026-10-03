@@ -27,8 +27,10 @@ export function StickerMedia({
 }: Props) {
   // Track which src has painted — survives remount/cache where onLoad may not re-fire.
   const [loadedSrc, setLoadedSrc] = useState<string | null>(null);
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const [muted, setMuted] = useState(true);
   const loaded = !!src && loadedSrc === src;
+  const failed = !!src && failedSrc === src;
 
   const noteLoaded = (el: HTMLImageElement | HTMLVideoElement | null) => {
     if (!src || !el) return;
@@ -43,7 +45,7 @@ export function StickerMedia({
     <div
       className={`relative aspect-square overflow-hidden bg-badge ${className}`}
     >
-      {!loaded || !src ? (
+      {!loaded && !failed ? (
         <div
           className="pointer-events-none absolute inset-0 z-0 animate-pulse bg-badge"
           aria-hidden
@@ -62,6 +64,7 @@ export function StickerMedia({
               autoPlay
               className={`absolute inset-0 z-10 h-full w-full object-cover transition-opacity duration-300 ${loaded ? "opacity-100" : "opacity-0"}`}
               onLoadedData={() => setLoadedSrc(src)}
+              onError={() => setFailedSrc(src)}
             />
             {soundToggle ? (
               <button
@@ -91,6 +94,7 @@ export function StickerMedia({
             fetchPriority={priority ? "high" : "auto"}
             className={`absolute inset-0 z-10 h-full w-full object-cover transition-opacity duration-300 ${loaded ? "opacity-100" : "opacity-0"}`}
             onLoad={() => setLoadedSrc(src)}
+            onError={() => setFailedSrc(src)}
           />
         )
       ) : null}
