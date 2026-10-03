@@ -58,8 +58,8 @@ export function isStillImageMime(mime: string | null | undefined): boolean {
 
 /** Preferred still kinds for grid/search `<img>` previews. */
 const STILL_PREVIEW_KIND_ORDER = [
-  MEDIA_KIND.thumbnail,
   MEDIA_KIND.gif,
+  MEDIA_KIND.thumbnail,
   MEDIA_KIND.og,
   MEDIA_KIND.chat,
   MEDIA_KIND.image,

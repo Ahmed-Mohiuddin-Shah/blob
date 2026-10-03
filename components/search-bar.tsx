@@ -266,7 +266,7 @@ export function SearchBar({
           aria-label={
             preview ? "Refine visual search" : placeholder || "Search stickers"
           }
-          className={`min-w-0 flex-1 bg-transparent outline-none placeholder:text-inactive ${
+          className={`min-w-0 flex-1 appearance-none bg-transparent outline-none ring-0 placeholder:text-inactive [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-decoration]:hidden [&::-webkit-search-results-button]:hidden ${
             compact ? "px-1 text-sm" : "px-2 text-base"
           }`}
           autoComplete="off"

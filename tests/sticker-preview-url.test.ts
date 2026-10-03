@@ -19,13 +19,13 @@ const ready = (kind: string, mimeType?: string) => ({
 });
 
 describe("stickerPreviewUrl", () => {
-  it("uses thumbnail for VIDEO (GIF thumb after matrix encode)", () => {
+  it("uses gif for VIDEO when gif is ready (looping card preview)", () => {
     const url = stickerPreviewUrl(BigInt(42), [
       ready(MEDIA_KIND.thumbnail, "image/png"),
       ready(MEDIA_KIND.gif, "image/gif"),
       ready(MEDIA_KIND.video, "video/mp4"),
     ]);
-    expect(url).toBe("/api/stickers/42/media/thumbnail");
+    expect(url).toBe("/api/stickers/42/media/gif");
   });
 
   it("skips video/mp4 thumbnail and uses gif", () => {
