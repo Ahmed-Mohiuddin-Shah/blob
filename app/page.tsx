@@ -49,7 +49,7 @@ const CATEGORY_ICONS: Record<string, { icon: LucideIcon; className: string }> = 
 const stickerCardSelect = {
   createdBy: { select: { displayName: true, username: true } },
   blobber: { select: { id: true, displayName: true, slug: true } },
-  media: { select: { kind: true, status: true, hasAudio: true } },
+  media: { select: { kind: true, status: true, hasAudio: true, mimeType: true } },
 } as const;
 
 export default async function HomePage() {

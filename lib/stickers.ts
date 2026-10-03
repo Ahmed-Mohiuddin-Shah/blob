@@ -46,6 +46,23 @@ export const CARD_MEDIA_KINDS = [
   MEDIA_KIND.image,
   MEDIA_KIND.gif,
   MEDIA_KIND.video,
+  MEDIA_KIND.chat,
+  MEDIA_KIND.og,
+] as const;
+
+/** True for card `<img>` — anything that isn't video/* (null mime = legacy still). */
+export function isStillImageMime(mime: string | null | undefined): boolean {
+  if (mime == null || mime === "") return true;
+  return !String(mime).toLowerCase().startsWith("video/");
+}
+
+/** Preferred still kinds for grid/search `<img>` previews. */
+const STILL_PREVIEW_KIND_ORDER = [
+  MEDIA_KIND.thumbnail,
+  MEDIA_KIND.gif,
+  MEDIA_KIND.og,
+  MEDIA_KIND.chat,
+  MEDIA_KIND.image,
 ] as const;
 
 export const MEDIA_ASSET_STATUS = {
@@ -245,7 +262,11 @@ export function stickerTypeFromKinds(
   return "IMAGE";
 }
 
-type PreviewMediaRow = { kind: string; status?: string | null };
+type PreviewMediaRow = {
+  kind: string;
+  status?: string | null;
+  mimeType?: string | null;
+};
 
 function isReady(m: PreviewMediaRow): boolean {
   return !m.status || m.status === MEDIA_ASSET_STATUS.ready;
@@ -266,22 +287,25 @@ export function previewMediaKind(media: PreviewMediaRow[]): MediaKind {
   return MEDIA_KIND.thumbnail;
 }
 
-/** Card/list preview URL — thumbnail slot (GIF for GIF/VIDEO after matrix encode). */
+/** Still kind for card/search `<img>` — skips VIDEO-matrix mp4 thumbnail/chat/image. */
+export function stickerPreviewKind(media: PreviewMediaRow[]): MediaKind {
+  const ready = media.filter(isReady);
+  for (const kind of STILL_PREVIEW_KIND_ORDER) {
+    if (
+      ready.some((m) => m.kind === kind && isStillImageMime(m.mimeType))
+    ) {
+      return kind;
+    }
+  }
+  return MEDIA_KIND.thumbnail;
+}
+
+/** Card/list preview URL — still-safe (never video/* into `<img>`). */
 export function stickerPreviewUrl(
   stickerId: string | bigint,
   media: PreviewMediaRow[],
 ): string {
-  const kinds = media.filter(isReady).map((m) => m.kind);
-  const kind = kinds.includes(MEDIA_KIND.thumbnail)
-    ? MEDIA_KIND.thumbnail
-    : kinds.includes(MEDIA_KIND.gif)
-      ? MEDIA_KIND.gif
-      : kinds.includes(MEDIA_KIND.chat)
-        ? MEDIA_KIND.chat
-        : kinds.includes(MEDIA_KIND.image)
-          ? MEDIA_KIND.image
-          : MEDIA_KIND.thumbnail;
-  return `/api/stickers/${stickerId}/media/${kind}`;
+  return `/api/stickers/${stickerId}/media/${stickerPreviewKind(media)}`;
 }
 
 /** WhatsApp link-preview og:image caps (developers.facebook.com). Keep value in sync with lib/whatsapp-og-encode.ts — do not import that module here (sharp must stay server-only). */

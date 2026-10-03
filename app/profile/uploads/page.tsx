@@ -19,7 +19,7 @@ export default async function ProfileUploadsPage() {
     include: {
       createdBy: { select: { displayName: true, username: true } },
       blobber: { select: { id: true, displayName: true, slug: true } },
-      media: { select: { kind: true, status: true, hasAudio: true } },
+      media: { select: { kind: true, status: true, hasAudio: true, mimeType: true } },
     },
   });
 

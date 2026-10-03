@@ -235,7 +235,7 @@ export default async function StickerDetailPage({
           createdBy: { select: { displayName: true, username: true } },
           media: {
             where: { status: MEDIA_ASSET_STATUS.ready },
-            select: { kind: true, hasAudio: true, status: true },
+            select: { kind: true, hasAudio: true, status: true, mimeType: true },
           },
         },
       });

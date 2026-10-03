@@ -53,7 +53,7 @@ export async function GET(
           kind: { in: [...CARD_MEDIA_KINDS] },
           status: MEDIA_ASSET_STATUS.ready,
         },
-        select: { kind: true, hasAudio: true, status: true },
+        select: { kind: true, hasAudio: true, status: true, mimeType: true },
       },
     },
   });

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { bestLibrarySearchMode, canUpload } from "@/lib/capabilities";
-import { parseBlobberAttributionInput, blobberPublicHref } from "@/lib/blobbers";
+import { canUpload } from "@/lib/capabilities";
+import { parseBlobberAttributionInput } from "@/lib/blobbers";
 import {
   parseDocumentJson,
   parseTagNames,
@@ -19,22 +19,8 @@ import {
 import { prisma } from "@/lib/prisma";
 import { ensurePrivatePrism } from "@/lib/private-prism";
 import { sessionUser } from "@/lib/session-user";
-import {
-  COLLECTION_ITEM,
-  subjectsInUserCollections,
-} from "@/lib/collections";
-import { FAVORITE_SUBJECT } from "@/lib/favorites";
-import {
-  CARD_MEDIA_KINDS,
-  MEDIA_ASSET_STATUS,
-  PROCESSING_STATUS,
-  VISIBILITY,
-  stickerPreviewUrl,
-  stickerTypeFromKinds,
-  videoHasAudio,
-} from "@/lib/stickers";
-
-const PAGE = 24;
+import { listBrowseStickers } from "@/lib/stickers-browse";
+import { PROCESSING_STATUS, VISIBILITY } from "@/lib/stickers";
 
 /** Public browse + search (cursor pagination). `mine=1` → own stickers incl. private/unlisted. */
 export async function GET(request: Request) {
@@ -44,180 +30,32 @@ export async function GET(request: Request) {
   const cursor = url.searchParams.get("cursor");
   const mine = url.searchParams.get("mine") === "1";
 
-  const userEarly = mine ? await sessionUser() : null;
-  if (mine && !userEarly) {
+  const user = await sessionUser();
+  if (mine && !user) {
     return NextResponse.json({ error: "Sign in required" }, { status: 401 });
   }
 
-  const where: {
-    visibility?: string;
-    moderationStatus?: string;
-    processingStatus: string;
-    uploadedById?: bigint;
-    OR?: object[];
-    category?: { slug: string };
-  } = mine
-    ? {
-        uploadedById: userEarly!.id,
-        processingStatus: PROCESSING_STATUS.ready,
-      }
-    : {
-        visibility: VISIBILITY.public,
-        moderationStatus: MODERATION_STATUS.approved,
-        processingStatus: PROCESSING_STATUS.ready,
-      };
-
-  if (category) {
-    where.category = { slug: category };
-  }
-
-  // Prefer Meili for public text search (Prisma fallback inside meiliScopedSearch).
-  let meiliIds: bigint[] | null = null;
-  if (q && !mine && !cursor) {
-    try {
-      const { meiliScopedSearch } = await import("@/lib/search/query");
-      const { isMeiliConfigured } = await import("@/lib/meili/client");
-      if (isMeiliConfigured()) {
-        const searchUser =
-          userEarly ??
-          (await sessionUser().then((u) =>
-            u ? { role: u.role, accountStatus: u.accountStatus } : null,
-          ));
-        const filter = category ? `categorySlug = "${category}"` : undefined;
-        const found = await meiliScopedSearch({
-          index: "stickers",
-          q,
-          mode: bestLibrarySearchMode(searchUser),
-          limit: PAGE + 1,
-          filter,
-        });
-        if (found.engine === "meili") {
-          meiliIds = found.hits
-            .map((h) => {
-              try {
-                return BigInt(h.id);
-              } catch {
-                return null;
-              }
-            })
-            .filter((x): x is bigint => x != null);
-        }
-      }
-    } catch {
-      meiliIds = null;
-    }
-  }
-
-  if (q && meiliIds === null) {
-    where.OR = [
-      { title: { contains: q, mode: "insensitive" } },
-      { description: { contains: q, mode: "insensitive" } },
-      { keywords: { contains: q, mode: "insensitive" } },
-      { alternateNames: { contains: q, mode: "insensitive" } },
-      { tags: { some: { tag: { name: { contains: q, mode: "insensitive" } } } } },
-      { category: { name: { contains: q, mode: "insensitive" } } },
-      { createdBy: { username: { contains: q, mode: "insensitive" } } },
-      { createdBy: { displayName: { contains: q, mode: "insensitive" } } },
-      { blobber: { displayName: { contains: q, mode: "insensitive" } } },
-    ];
-  }
-
-  const rows =
-    meiliIds != null
-      ? meiliIds.length
-        ? await prisma.sticker.findMany({
-            where: { ...where, id: { in: meiliIds } },
-            include: {
-              createdBy: { select: { username: true, displayName: true } },
-              blobber: { select: { id: true, displayName: true, slug: true } },
-              category: { select: { slug: true, name: true } },
-              media: {
-                where: {
-                  kind: { in: [...CARD_MEDIA_KINDS] },
-                  status: MEDIA_ASSET_STATUS.ready,
-                },
-                select: { kind: true, hasAudio: true },
-              },
-            },
-          }).then((list) => {
-            const order = new Map(meiliIds!.map((id, i) => [id.toString(), i]));
-            return list.sort(
-              (a, b) =>
-                (order.get(a.id.toString()) ?? 0) -
-                (order.get(b.id.toString()) ?? 0),
-            );
-          })
-        : Promise.resolve([])
-      : prisma.sticker.findMany({
-          where,
-          take: PAGE + 1,
-          ...(cursor ? { cursor: { id: BigInt(cursor) }, skip: 1 } : {}),
-          orderBy: [{ popularityScore: "desc" }, { createdAt: "desc" }, { id: "desc" }],
-          include: {
-            createdBy: { select: { username: true, displayName: true } },
-            blobber: { select: { id: true, displayName: true, slug: true } },
-            category: { select: { slug: true, name: true } },
-            media: {
-              where: {
-                kind: { in: [...CARD_MEDIA_KINDS] },
-                status: MEDIA_ASSET_STATUS.ready,
-              },
-              select: { kind: true, hasAudio: true },
-            },
-          },
-        });
-
-  const resolvedRows = await rows;
-
-  const hasMore = meiliIds != null ? false : resolvedRows.length > PAGE;
-  const page = hasMore ? resolvedRows.slice(0, PAGE) : resolvedRows;
-  const nextCursor =
-    hasMore && page.length ? page[page.length - 1]!.id.toString() : null;
-
-  const user = await sessionUser();
-  let favouritedIds = new Set<string>();
-  let inCollectionIds = new Set<string>();
-  if (user && page.length) {
-    const ids = page.map((s) => s.id);
-    const favs = await prisma.favorite.findMany({
-      where: {
-        userId: user.id,
-        subjectType: FAVORITE_SUBJECT.sticker,
-        subjectId: { in: ids },
-      },
-      select: { subjectId: true },
+  try {
+    const result = await listBrowseStickers({
+      q,
+      category,
+      cursor,
+      mine,
+      user: user
+        ? {
+            id: user.id,
+            role: user.role,
+            accountStatus: user.accountStatus,
+          }
+        : null,
     });
-    favouritedIds = new Set(favs.map((f) => f.subjectId.toString()));
-    inCollectionIds = await subjectsInUserCollections(
-      user.id,
-      COLLECTION_ITEM.sticker,
-      ids,
-    );
+    return NextResponse.json(result);
+  } catch (err) {
+    if (err instanceof Error && err.message === "Sign in required") {
+      return NextResponse.json({ error: "Sign in required" }, { status: 401 });
+    }
+    throw err;
   }
-
-  return NextResponse.json({
-    items: page.map((s) => ({
-      id: s.id.toString(),
-      title: s.title,
-      slug: s.slug,
-      visibility: s.visibility,
-      author: s.blobber?.displayName ?? "",
-      blobberId: s.blobber?.id.toString() ?? null,
-      blobberHref: s.blobber ? blobberPublicHref(s.blobber) : null,
-      sourceUrl: s.sourceUrl,
-      username: s.createdBy.username,
-      category: s.category?.name ?? null,
-      categorySlug: s.category?.slug ?? null,
-      type: stickerTypeFromKinds(s.media.map((m) => m.kind)),
-      href: `/stickers/${s.slug}`,
-      thumbUrl: stickerPreviewUrl(s.id, s.media),
-      hasAudio: videoHasAudio(s.media),
-      remixHref: `/stickers/${s.slug}/remix`,
-      favourited: favouritedIds.has(s.id.toString()),
-      inCollection: inCollectionIds.has(s.id.toString()),
-    })),
-    nextCursor,
-  });
 }
 
 /**

@@ -2,7 +2,7 @@
 
 import { Camera, Search, Sparkles, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { BusyButton } from "@/components/busy-button";
 import {
   fileToSearchMedia,
@@ -85,6 +85,7 @@ export function SearchBar({
   onClearImagePreview,
 }: Props) {
   const router = useRouter();
+  const [navPending, startNavTransition] = useTransition();
   const fileRef = useRef<HTMLInputElement>(null);
   const [internal, setInternal] = useState(defaultValue);
   const [dragging, setDragging] = useState(false);
@@ -95,6 +96,7 @@ export function SearchBar({
   const compact = variant === "library";
   const preview =
     imagePreviewUrl !== undefined ? imagePreviewUrl : localPreview;
+  const isBusy = busy || navPending;
 
   useEffect(() => {
     return () => {
@@ -128,17 +130,19 @@ export function SearchBar({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = q.trim();
-    if (onSubmit) {
-      onSubmit(trimmed);
-      return;
-    }
-    if (navigateTo) {
-      const params = new URLSearchParams();
-      if (trimmed) params.set("q", trimmed);
-      if (defaultMode) params.set("mode", defaultMode);
-      const qs = params.toString();
-      router.push(qs ? `${navigateTo}?${qs}` : navigateTo);
-    }
+    startNavTransition(() => {
+      if (onSubmit) {
+        onSubmit(trimmed);
+        return;
+      }
+      if (navigateTo) {
+        const params = new URLSearchParams();
+        if (trimmed) params.set("q", trimmed);
+        if (defaultMode) params.set("mode", defaultMode);
+        const qs = params.toString();
+        router.push(qs ? `${navigateTo}?${qs}` : navigateTo);
+      }
+    });
   }
 
   async function handleImage(file: File | null) {
@@ -155,7 +159,9 @@ export function SearchBar({
     const params = new URLSearchParams({ mode: "visual" });
     const trimmed = q.trim();
     if (trimmed) params.set("q", trimmed);
-    router.push(`/search?${params}`);
+    startNavTransition(() => {
+      router.push(`/search?${params}`);
+    });
   }
 
   function handlePaste(e: React.ClipboardEvent) {
@@ -303,7 +309,7 @@ export function SearchBar({
           {!hideSubmit ? (
             <BusyButton
               type="submit"
-              busy={busy}
+              busy={isBusy}
               className={`inline-flex rounded-full bg-accent-gradient text-sm font-semibold text-white shadow-md shadow-accent-pink/20 transition-transform duration-200 hover:scale-[1.03] ${
                 compact ? "px-3 py-1.5 text-xs" : "px-5 py-3 sm:px-6"
               }`}

@@ -72,7 +72,7 @@ export default async function CollectionDetailPage({
                 kind: { in: [...CARD_MEDIA_KINDS] },
                 status: MEDIA_ASSET_STATUS.ready,
               },
-              select: { kind: true, hasAudio: true },
+              select: { kind: true, hasAudio: true, mimeType: true },
             },
           },
         })

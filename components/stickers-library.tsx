@@ -17,26 +17,51 @@ type ApiItem = StickerCardProps & {
   inCollection?: boolean;
 };
 
+function mapItems(
+  items: ApiItem[],
+  signedIn: boolean,
+  signInHref?: string,
+): StickerCardProps[] {
+  return items.map((item) => ({
+    ...item,
+    stickerId: item.id,
+    favourited: !!item.favourited,
+    inCollection: !!item.inCollection,
+    signedIn,
+    signInHref,
+    showActions: true,
+  }));
+}
+
 export function StickersLibrary({
   categories,
   initialQ,
   initialCategory,
   signedIn = false,
   signInHref,
+  initialItems,
+  initialCursor = null,
 }: {
   categories: CategoryPill[];
   initialQ: string;
   initialCategory: string;
   signedIn?: boolean;
   signInHref?: string;
+  initialItems?: ApiItem[];
+  initialCursor?: string | null;
 }) {
   const sentinelRef = useRef<HTMLDivElement>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const docked = useSearchDock(sentinelRef);
+  const hasInitial = initialItems != null;
 
-  const [items, setItems] = useState<StickerCardProps[]>([]);
-  const [cursor, setCursor] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [items, setItems] = useState<StickerCardProps[]>(() =>
+    hasInitial ? mapItems(initialItems, signedIn, signInHref) : [],
+  );
+  const [cursor, setCursor] = useState<string | null>(() =>
+    hasInitial ? initialCursor : null,
+  );
+  const [loading, setLoading] = useState(!hasInitial);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -53,28 +78,22 @@ export function StickersLibrary({
         items: ApiItem[];
         nextCursor: string | null;
       };
-      const mapped: StickerCardProps[] = json.items.map((item) => ({
-        ...item,
-        stickerId: item.id,
-        favourited: !!item.favourited,
-        inCollection: !!item.inCollection,
-        signedIn,
-        signInHref,
-        showActions: true,
-      }));
+      const mapped = mapItems(json.items, signedIn, signInHref);
       setItems((prev) => (replace ? mapped : [...prev, ...mapped]));
       setCursor(json.nextCursor);
     },
     [initialQ, initialCategory, signedIn, signInHref],
   );
 
+  // Parent remounts via key on q/category; only client-fetch when no SSR seed.
   useEffect(() => {
+    if (hasInitial) return;
     setLoading(true);
     setError(null);
     fetchPage(null, true)
       .catch(() => setError("Could not load stickers"))
       .finally(() => setLoading(false));
-  }, [fetchPage]);
+  }, [fetchPage, hasInitial]);
 
   useEffect(() => {
     const el = loadMoreRef.current;

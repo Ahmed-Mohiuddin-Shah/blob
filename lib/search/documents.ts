@@ -8,7 +8,7 @@ import {
   MEDIA_KIND,
   PROCESSING_STATUS,
   VISIBILITY,
-  previewMediaKind,
+  stickerPreviewUrl,
 } from "@/lib/stickers";
 import { SEARCH_META_STATUS } from "@/lib/search/constants";
 
@@ -71,9 +71,15 @@ export async function buildStickerSearchDoc(
   const kinds = s.media
     .filter((m) => m.status === MEDIA_ASSET_STATUS.ready)
     .map((m) => m.kind);
-  const previewKind = previewMediaKind(
-    s.media.map((m) => ({ kind: m.kind, status: m.status })),
-  );
+  // Still-safe URL for federated `<img>` (never VIDEO-matrix mp4).
+  const previewUrl = `${publicBase()}${stickerPreviewUrl(
+    s.id,
+    s.media.map((m) => ({
+      kind: m.kind,
+      status: m.status,
+      mimeType: m.mimeType,
+    })),
+  )}`;
   let aiVisualTags: string[] = [];
   try {
     aiVisualTags = s.aiVisualTags ? (JSON.parse(s.aiVisualTags) as string[]) : [];
@@ -96,11 +102,11 @@ export async function buildStickerSearchDoc(
     aiCaption: s.aiCaption ?? "",
     aiScenario: s.aiScenario ?? "",
     aiVisualTags,
-    previewUrl: `${publicBase()}/api/stickers/${s.id}/media/${previewKind}`,
+    previewUrl,
     // CLIP: storyboard for gif/video when present (same grid as vision enrich).
     clipPreviewUrl: kinds.includes(MEDIA_KIND.storyboard)
       ? `${publicBase()}/api/stickers/${s.id}/media/${MEDIA_KIND.storyboard}`
-      : `${publicBase()}/api/stickers/${s.id}/media/${previewKind}`,
+      : previewUrl,
     mediaKind: kinds.includes(MEDIA_KIND.video)
       ? "video"
       : kinds.includes(MEDIA_KIND.gif)

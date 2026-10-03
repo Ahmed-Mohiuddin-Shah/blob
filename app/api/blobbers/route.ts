@@ -87,7 +87,7 @@ export async function GET(request: Request) {
               kind: { in: [...CARD_MEDIA_KINDS] },
               status: MEDIA_ASSET_STATUS.ready,
             },
-            select: { kind: true },
+            select: { kind: true, mimeType: true },
           },
         },
       }),

@@ -12,19 +12,40 @@ import {
   WHATSAPP_OG_SIZE,
 } from "@/lib/whatsapp-og-encode";
 
-const ready = (kind: string) => ({
+const ready = (kind: string, mimeType?: string) => ({
   kind,
   status: MEDIA_ASSET_STATUS.ready,
+  ...(mimeType != null ? { mimeType } : {}),
 });
 
 describe("stickerPreviewUrl", () => {
   it("uses thumbnail for VIDEO (GIF thumb after matrix encode)", () => {
     const url = stickerPreviewUrl(BigInt(42), [
-      ready(MEDIA_KIND.thumbnail),
-      ready(MEDIA_KIND.gif),
-      ready(MEDIA_KIND.video),
+      ready(MEDIA_KIND.thumbnail, "image/png"),
+      ready(MEDIA_KIND.gif, "image/gif"),
+      ready(MEDIA_KIND.video, "video/mp4"),
     ]);
     expect(url).toBe("/api/stickers/42/media/thumbnail");
+  });
+
+  it("skips video/mp4 thumbnail and uses gif", () => {
+    const url = stickerPreviewUrl(BigInt(42), [
+      ready(MEDIA_KIND.thumbnail, "video/mp4"),
+      ready(MEDIA_KIND.chat, "video/mp4"),
+      ready(MEDIA_KIND.image, "video/mp4"),
+      ready(MEDIA_KIND.gif, "image/gif"),
+      ready(MEDIA_KIND.video, "video/mp4"),
+    ]);
+    expect(url).toBe("/api/stickers/42/media/gif");
+  });
+
+  it("falls back to og when only mp4 slots and og exist", () => {
+    const url = stickerPreviewUrl("9", [
+      ready(MEDIA_KIND.thumbnail, "video/mp4"),
+      ready(MEDIA_KIND.og, "image/jpeg"),
+      ready(MEDIA_KIND.video, "video/mp4"),
+    ]);
+    expect(url).toBe("/api/stickers/9/media/og");
   });
 
   it("falls back to gif when thumbnail missing", () => {

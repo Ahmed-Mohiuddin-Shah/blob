@@ -11,6 +11,7 @@ import { prisma } from "@/lib/prisma";
 import {
   canAccessSticker,
   isPublicBrowseable,
+  isStillImageMime,
   MEDIA_ASSET_STATUS,
   MEDIA_KIND,
 } from "@/lib/stickers";
@@ -68,29 +69,34 @@ export async function GET(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  let asset = sticker.media.find(
-    (m) => m.kind === kind && m.status === MEDIA_ASSET_STATUS.ready,
-  );
-  // Thumbnail miss: prefer small chat over full 1024 image for grids.
-  if (!asset && kind === MEDIA_KIND.thumbnail) {
-    asset =
-      sticker.media.find(
-        (m) =>
-          m.kind === MEDIA_KIND.chat && m.status === MEDIA_ASSET_STATUS.ready,
-      ) ??
-      sticker.media.find(
-        (m) =>
-          m.kind === MEDIA_KIND.image && m.status === MEDIA_ASSET_STATUS.ready,
-      );
+  const ready = (m: (typeof sticker.media)[number]) =>
+    m.status === MEDIA_ASSET_STATUS.ready;
+  const readyStill = (m: (typeof sticker.media)[number]) =>
+    ready(m) && isStillImageMime(m.mimeType);
+
+  let asset = sticker.media.find((m) => m.kind === kind && ready(m));
+  // Thumbnail: skip VIDEO-matrix mp4 slots; fall through stills for grids.
+  if (kind === MEDIA_KIND.thumbnail) {
+    if (asset && !isStillImageMime(asset.mimeType)) asset = undefined;
+    if (!asset) {
+      for (const fallback of [
+        MEDIA_KIND.chat,
+        MEDIA_KIND.image,
+        MEDIA_KIND.gif,
+        MEDIA_KIND.og,
+        MEDIA_KIND.prevThumbnail,
+      ] as const) {
+        asset = sticker.media.find((m) => m.kind === fallback && readyStill(m));
+        if (asset) break;
+      }
+    }
   }
   if (
     !asset &&
     (kind === MEDIA_KIND.image || kind === MEDIA_KIND.chat)
   ) {
     asset = sticker.media.find(
-      (m) =>
-        m.kind === MEDIA_KIND.thumbnail &&
-        m.status === MEDIA_ASSET_STATUS.ready,
+      (m) => m.kind === MEDIA_KIND.thumbnail && readyStill(m),
     );
   }
   if (!asset) {
