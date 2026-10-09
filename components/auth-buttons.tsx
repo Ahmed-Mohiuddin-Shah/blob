@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { signIn } from "@zitadel/next-auth/react";
 import { BusyButton } from "./busy-button";
+import { signInUrl } from "@/lib/auth-urls";
 
 export function SignInButton({ className = "" }: { className?: string }) {
   const [busy, setBusy] = useState(false);
@@ -13,7 +13,7 @@ export function SignInButton({ className = "" }: { className?: string }) {
       busy={busy}
       onClick={() => {
         setBusy(true);
-        void signIn("zitadel").finally(() => setBusy(false));
+        window.location.assign(signInUrl());
       }}
       className={`rounded-full bg-foreground px-5 py-2.5 text-sm font-semibold text-background transition-transform duration-200 hover:scale-105 ${className}`}
     >

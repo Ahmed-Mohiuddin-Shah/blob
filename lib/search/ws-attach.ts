@@ -8,7 +8,7 @@ import {
 
 export const SEARCH_WS_PATH = "/api/search/ws";
 
-// ponytail: lazy-import auth + runners — @zitadel/next-auth is ESM-only; tsx boots
+// ponytail: lazy-import auth + runners — keep ws boot light; tsx boots
 // server.ts as CJS and crashes on top-level import (ERR_PACKAGE_PATH_NOT_EXPORTED).
 
 async function sessionUser(

@@ -5,7 +5,7 @@ import { headers } from "next/headers";
 import { getSession } from "@/lib/auth";
 import { canManageAdmins, canManageUsers } from "@/lib/capabilities";
 import { createWorkerApiKey } from "@/lib/jobs/auth";
-import { hubPing } from "@/lib/jobs/hub";
+import { pingWorkerCrossInstance } from "@/lib/jobs/pg-listen";
 import { prisma } from "@/lib/prisma";
 
 export type WorkerKeyActionState = {
@@ -99,6 +99,6 @@ export async function pingWorkerAction(
     return { error: "Forbidden" };
   }
 
-  const alive = await hubPing(BigInt(id));
+  const alive = await pingWorkerCrossInstance(BigInt(id));
   return { ok: true, alive };
 }

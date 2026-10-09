@@ -1,6 +1,7 @@
 /**
- * In-process WSS hub for worker connections.
- * Attached from server.ts; enqueue notifies via this singleton.
+ * In-process WSS hub for worker connections on THIS app instance only.
+ * Cross-instance wakeups use Postgres LISTEN/NOTIFY → hubNotifyJobAvailable.
+ * Capability / local-encode decisions use DB heartbeats (lib/jobs/presence.ts).
  */
 
 import type { JobType } from "@/lib/jobs/types";

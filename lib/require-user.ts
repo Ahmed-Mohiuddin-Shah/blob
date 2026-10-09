@@ -1,24 +1,31 @@
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { getSession, signInUrl } from "@/lib/auth";
-import { canManageAdmins, canManageUsers, type CapabilityUser } from "@/lib/capabilities";
-import { prisma } from "@/lib/prisma";
+import { authUser } from "@/lib/auth-user";
+import { signInUrl } from "@/lib/auth-urls";
+import {
+  canManageAdmins,
+  canManageUsers,
+  type CapabilityUser,
+} from "@/lib/capabilities";
 
 export async function requireSessionUser() {
-  const reqHeaders = await headers();
-  const session = await getSession(
-    new Request("http://localhost", { headers: reqHeaders }),
-  );
-  if (!session?.user?.id) {
-    redirect(signInUrl({ redirectTo: "/profile" }));
-  }
-  const user = await prisma.user.findUnique({
-    where: { id: BigInt(session.user.id) },
-  });
+  const user = await authUser();
   if (!user) {
     redirect(signInUrl({ redirectTo: "/profile" }));
   }
-  return { session, user };
+  return {
+    session: {
+      user: {
+        id: user.id.toString(),
+        name: user.displayName,
+        email: user.email,
+        username: user.username,
+        displayName: user.displayName,
+        role: user.role,
+        accountStatus: user.accountStatus,
+      },
+    },
+    user,
+  };
 }
 
 export async function requireAdmin() {

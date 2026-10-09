@@ -27,8 +27,8 @@ BLOB is a **public sticker library and sticker creation/browsing website** with 
 - Styling: Tailwind CSS (Bloby / Zune; mobile-first editor chrome)
 - Metadata DB: PostgreSQL (access via Prisma or equivalent typed client)
 - Object storage: GLASS (via a gitsubmodule or custom npm package)
-- Jobs: separate Node workers (e.g. BullMQ / Redis, or equivalent) for composition render, smart cutout, media processing, and print generation — **not** inside the Next.js request lifecycle
-- Auth: Auth.js configured with **Zitadel as the sole provider** (OIDC + PKCE); no other IdPs or auth methods
+- Jobs: **Postgres `jobs` table** as SoT + outbound WSS workers; control-plane apps wake workers via **LISTEN/NOTIFY** (multi-instance safe). Local single-flight encode only when no capable worker has a fresh heartbeat. `catalog_reindex` stays app-local (Prisma + Meili). No Redis/BullMQ required.
+- Auth: **Zitadel only** (OIDC + PKCE for the website; APIs verify access tokens via JWKS); no other IdPs or auth methods
 - Avatars: [blobatar](https://blobatar.dev/) from `username` only (never Zitadel `picture`)
 - Search: PostgreSQL full-text search + `pg_trgm` (v1); **Meilisearch planned post-v1**
 
@@ -44,7 +44,7 @@ Search must find what the user typed (title, aliases, tags, categories, keywords
 | Decision                | Lock                                                                                                                                                                                                                                                                                                                                   |
 | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Authorization           | `role` + `account_status`, not `is_admin` / `is_member` booleans                                                                                                                                                                                                                                                                       |
-| Identity                | **Zitadel only** (OIDC + PKCE via Auth.js). No Credentials provider, no Google/GitHub/etc., no magic link, no local password or register form                                                                                                                                                                                          |
+| Identity                | **Zitadel only** (OIDC + PKCE website; JWKS access tokens for APIs). No Credentials provider, no Google/GitHub/etc., no magic link, no local password or register form                                                                                                                                                                 |
 | Sticker media           | `stickers` → composition + many `media_assets` (derivatives) + shared `assets` (originals); never `image_path` / `gif_path` / `video_path` columns                                                                                                                                                                                     |
 | Media mutation          | **Original binaries** are immutable after upload. **Composition document** is the editable source of truth (new revision on save). **Derivatives** (`image` / `chat` / `thumbnail` / …) are regenerable cache from the current revision — not the SoT. Metadata remains editable.                                                      |
 | Composition SoT         | Own versioned **BLOB Composition JSON** (canonical 1024×1024). Never persist Konva / Fabric / Polotno / tldraw canvas JSON as the document.                                                                                                                                                                                            |
@@ -89,7 +89,7 @@ Search must find what the user typed (title, aliases, tags, categories, keywords
 - Composition semantics trapped only in Next.js route handlers or React components (must remain package-extractable)
 - SVG print output (PDF + PNG only)
 - Hardcoding every pack×layout file permanently upfront
-- Any auth besides Zitadel (Credentials, social IdPs, magic links, API keys for end-user login, local password/register)
+- Any auth besides Zitadel (Credentials, social IdPs, magic links, app-minted API keys for end-user login, local password/register). External apps may use Zitadel-issued access tokens (Bearer) — not BLOB-minted API keys
 
 ---
 
@@ -168,15 +168,17 @@ Search must find what the user typed (title, aliases, tags, categories, keywords
 
 ### Must have
 
-- Login / logout via **Zitadel only** (OIDC + PKCE through Auth.js). Auth.js must register a single Zitadel provider — no Credentials, Google, GitHub, Apple, magic-link, or other providers
+- Login / logout via **Zitadel only** (OIDC + PKCE for the website). No Credentials, Google, GitHub, Apple, magic-link, or other providers
 - No local password hash, no email/password register or login UI, no multi-account linking
+- Website stores **thin httpOnly cookies** (access token, refresh token, id token for logout hint only) — not an Auth.js session JWT stuffed with tokens
+- **APIs** (and page identity helpers) authenticate by JWKS-verifying a Zitadel access token (`iss` = `ZITADEL_DOMAIN`, `aud` = `ZITADEL_API_CLIENT_ID`): from `Authorization: Bearer` (external clients) or the access-token cookie (website)
 - First login upserts local `users` by `zitadel_id` (OIDC `sub`); defaults `role=user`, `account_status=active` — except the first local user, who is assigned `superadmin`. If no `superadmin` exists yet, the lowest-`id` `admin` is promoted once on sign-in (Zitadel grant + local mirror)
 - **Roles:** Zitadel project roles (`user` · `member` · `admin` · `superadmin`) are source of truth. BLOB mirrors into `users.role` from OIDC claims on login. Fine-grained capabilities stay in app code (capability matrix)
 - **Role / profile writes:** BLOB drives Zitadel via Management API using a service-account PAT (`ZITADEL_SERVICE_PAT` + org/project ids). Admins assign `user`/`member` in-app; only a superadmin may assign/revoke `admin` in-app. `superadmin` is never assignable via BLOB — only Zitadel (or bootstrap). Nobody may change their own role; demoting the last superadmin is forbidden. Users edit display name / email in-app. No parallel role store for writes
 - Profile fields synced from Zitadel claims on login: display name, email, `email_verified_at` (never sync or display Zitadel `picture`). Users may also edit display name / email / local `username` from the BLOB profile UI
 - Local `username` set on first create (URL-safe handle); editable in BLOB only (blobatar)
 - Admin / superadmin: change `role` (via Zitadel user grant, subject to role-change guards). Only superadmin may change `account_status` (app DB only), and never their own
-- Protect routes with Next.js middleware / server-side session checks; expose role + account_status on the session for capability gates
+- Protect routes with Next.js middleware / server-side access-token checks; load local `role` + `account_status` for capability gates
 
 
 
@@ -190,7 +192,7 @@ Search must find what the user typed (title, aliases, tags, categories, keywords
 
 User faces are **[blobatar](https://blobatar.dev/)** generated from `username` only. Do **not** store or display Zitadel `picture` / profile images (no `avatar_url` column). Sticker/media binaries still go application server → GLASS.
 
-Auth.js establishes the app session after the Zitadel OIDC callback. Zitadel is the identity and role source; `users.role` is a local mirror for gates and queries.
+After the Zitadel OIDC callback, BLOB sets thin token cookies and JWKS-verifies the access token for identity. Zitadel is the identity and role source; `users.role` is a local mirror for gates and queries. External API clients use Zitadel-issued Bearer access tokens (same `aud`) without BLOB cookies.
 
 ---
 
@@ -797,7 +799,7 @@ GET    /api/packs/{id}/stickers
 ### Must have
 
 - [x] Users with `role` + `account_status` (role mirrored from Zitadel)
-- [x] Zitadel-only login/logout (no other Auth.js providers), local profile (`username` / `display_name`), blobatar avatars; profile edit via Management API
+- [x] Zitadel-only login/logout (thin token cookies + JWKS APIs), local profile (`username` / `display_name`), blobatar avatars; profile edit via Management API
 - [x] Admin member promotion (Zitadel grant via PAT) / local status management
 - [x] Public browse + search (cursor; contains / filters — FTS+pg_trgm hardening optional)
 - [x] Stickers with tags + primary category
@@ -843,12 +845,12 @@ GET    /api/packs/{id}/stickers
 - App: Next.js (App Router), Node.js runtime for Route Handlers that talk to GLASS / Postgres
 - Composition: portable core (TS → npm; Dart → Flutter) + web viewport (e.g. react-konva) + worker render; Flutter client **Should**
 - DB: PostgreSQL via `DATABASE_URL` (Prisma migrate or equivalent); enable `pg_trgm` extension
-- Queue: Redis + worker processes for composition render / cutout / media / print jobs; workers must run in deployment (not serverless-only for FFmpeg/ImageMagick)
-- Auth env: Zitadel domain + client id/secret (sole Auth.js provider); service-account PAT + org id + project id for Management API; Auth.js `SESSION_SECRET`; callback URL aligned with `AUTH_URL`
-- Session store: Auth.js JWT by default (no app `sessions` table; see DBML). Database adapter only if JWT proves insufficient
+- Queue: Postgres jobs + WSS workers (+ LISTEN/NOTIFY across app replicas); workers must run in deployment (not serverless-only for FFmpeg/ImageMagick). Ops: `GET /api/health`, `/profile/workers` control-plane + fleet presence (`app_instances` / worker heartbeats)
+- Auth env: Zitadel domain + Web client id/secret + API client id (`ZITADEL_API_CLIENT_ID` audience); service-account PAT + org id + project id for Management API; callback URL aligned with `AUTH_URL`
+- Session store: thin httpOnly access/refresh/id cookies (no app `sessions` table; see DBML). Identity via JWKS-verified access token — not an Auth.js session JWT
 - GLASS base URL + service API key via env (not committed secrets). **Public PRISM UUID is not env** — BLOB creates it and stores it in `public_prism`. Per-user private prism UUIDs live on `users`.
 - App origin (`AUTH_URL` / public site URL) and CORS on GLASS (if browser hits GLASS directly) must allow the BLOB origin; prefer proxying or signed URLs through the app when uncertain
-- Deployment: web (Next.js) + at least one media/print worker; do not rely on Next.js alone for CPU-heavy processing
+- Deployment: web (Next.js, optionally multi-instance behind LB sharing one Postgres + one Meili) + at least one media/print worker; do not rely on Next.js alone for CPU-heavy processing. Compose split: `docker-compose.data.yml` + `docker-compose.app.yml` (root compose includes both)
 
 ---
 

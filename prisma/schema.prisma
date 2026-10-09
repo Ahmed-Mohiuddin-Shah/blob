@@ -634,27 +634,45 @@ model WorkerApiKey {
   @@map("worker_api_keys")
 }
 
+/// Control-plane app process (multi-instance presence via DB heartbeats).
+model AppInstance {
+  id              String   @id @db.VarChar(64)
+  hostname        String   @db.VarChar(120)
+  version         String   @default("0") @db.VarChar(40)
+  status          String   @default("offline") @db.VarChar(20)
+  startedAt       DateTime @map("started_at") @db.Timestamptz(6)
+  lastHeartbeatAt DateTime @map("last_heartbeat_at") @db.Timestamptz(6)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([status, lastHeartbeatAt])
+  @@map("app_instances")
+}
+
 /// Connected / recently seen worker instance (heartbeat + capabilities).
 model Worker {
-  id              BigInt    @id @default(autoincrement())
-  apiKeyId        BigInt    @map("api_key_id")
-  instanceId      String    @map("instance_id") @db.VarChar(64)
-  version         String    @default("0") @db.VarChar(40)
+  id                    BigInt    @id @default(autoincrement())
+  apiKeyId              BigInt    @map("api_key_id")
+  instanceId            String    @map("instance_id") @db.VarChar(64)
+  version               String    @default("0") @db.VarChar(40)
   /// JSON string array of job types, e.g. ["composition_encode","sheet_encode"]
-  capabilities    String    @default("[]")
-  concurrency     Int       @default(1)
-  cpuPct          Float?    @map("cpu_pct")
-  memMb           Float?    @map("mem_mb")
-  status          String    @default("offline") @db.VarChar(20)
-  lastHeartbeatAt DateTime? @map("last_heartbeat_at") @db.Timestamptz(6)
-  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  capabilities          String    @default("[]")
+  concurrency           Int       @default(1)
+  cpuPct                Float?    @map("cpu_pct")
+  memMb                 Float?    @map("mem_mb")
+  status                String    @default("offline") @db.VarChar(20)
+  lastHeartbeatAt       DateTime? @map("last_heartbeat_at") @db.Timestamptz(6)
+  /// App instance currently holding this worker's WSS (null when offline).
+  connectedAppInstanceId String?  @map("connected_app_instance_id") @db.VarChar(64)
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   apiKey WorkerApiKey @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
   jobs   Job[]
 
   @@unique([apiKeyId, instanceId])
   @@index([status, lastHeartbeatAt])
+  @@index([connectedAppInstanceId])
   @@map("workers")
 }
 

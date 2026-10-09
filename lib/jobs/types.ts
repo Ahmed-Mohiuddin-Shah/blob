@@ -48,9 +48,33 @@ export const WORKER_STATUS = {
 
 export type WorkerStatus = (typeof WORKER_STATUS)[keyof typeof WORKER_STATUS];
 
+export const APP_INSTANCE_STATUS = {
+  online: "online",
+  offline: "offline",
+} as const;
+
+export type AppInstanceStatus =
+  (typeof APP_INSTANCE_STATUS)[keyof typeof APP_INSTANCE_STATUS];
+
+/** Heartbeat freshness window for workers / app instances (default 45s). */
+export function onlineSeconds(): number {
+  const n = Number(process.env.WORKER_ONLINE_SECONDS ?? "45");
+  return Number.isFinite(n) && n > 0 ? n : 45;
+}
+
 export function leaseSeconds(): number {
   const n = Number(process.env.WORKER_LEASE_SECONDS ?? "120");
   return Number.isFinite(n) && n > 0 ? n : 120;
+}
+
+/** True when lastHeartbeatAt is within the online window. */
+export function isHeartbeatFresh(
+  lastHeartbeatAt: Date | null | undefined,
+  nowMs = Date.now(),
+  windowSeconds = onlineSeconds(),
+): boolean {
+  if (!lastHeartbeatAt) return false;
+  return nowMs - lastHeartbeatAt.getTime() <= windowSeconds * 1000;
 }
 
 export function idempotencyKey(type: JobType, subjectId: bigint): string {

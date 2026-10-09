@@ -1,6 +1,12 @@
 import { WorkersAdmin } from "@/components/workers-admin";
 import { canManageAdmins } from "@/lib/capabilities";
-import { JOB_STATUS, JOB_SUBJECT, WORKER_STATUS } from "@/lib/jobs/types";
+import { listAppInstances } from "@/lib/jobs/app-instance";
+import {
+  isHeartbeatFresh,
+  JOB_STATUS,
+  JOB_SUBJECT,
+  WORKER_STATUS,
+} from "@/lib/jobs/types";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/require-user";
 
@@ -63,7 +69,7 @@ export default async function ProfileWorkersPage() {
     accountStatus: user.accountStatus,
   });
 
-  const [workers, keys] = await Promise.all([
+  const [workers, keys, appInstances] = await Promise.all([
     prisma.worker.findMany({
       // Hide offline workers whose key was revoked; keep offline if key still valid.
       where: {
@@ -82,6 +88,7 @@ export default async function ProfileWorkersPage() {
           take: 50,
         })
       : Promise.resolve([]),
+    listAppInstances(),
   ]);
 
   const activeJobs =
@@ -123,16 +130,26 @@ export default async function ProfileWorkersPage() {
     jobsByWorker.set(key, list);
   }
 
+  const now = Date.now();
+
   return (
     <div>
       <h1 className="text-2xl font-semibold tracking-tight">Workers</h1>
       <p className="mt-1 text-sm text-secondary">
-        Remote encode fleet status
-        {isSuperadmin ? " and API keys" : ""}.
+        Control plane, remote encode fleet
+        {isSuperadmin ? ", and API keys" : ""}.
       </p>
       <div className="mt-8">
         <WorkersAdmin
           isSuperadmin={isSuperadmin}
+          appInstances={appInstances.map((a) => ({
+            id: a.id,
+            hostname: a.hostname,
+            version: a.version,
+            online: a.online,
+            isSelf: a.isSelf,
+            lastHeartbeatAt: a.lastHeartbeatAt.toISOString(),
+          }))}
           workers={workers.map((w) => {
             let capabilities: string[] = [];
             try {
@@ -140,6 +157,7 @@ export default async function ProfileWorkersPage() {
             } catch {
               capabilities = [];
             }
+            const online = isHeartbeatFresh(w.lastHeartbeatAt, now);
             return {
               id: w.id.toString(),
               instanceId: w.instanceId,
@@ -148,8 +166,9 @@ export default async function ProfileWorkersPage() {
               concurrency: w.concurrency,
               cpuPct: w.cpuPct,
               memMb: w.memMb,
-              status: w.status,
+              status: online ? WORKER_STATUS.online : WORKER_STATUS.offline,
               lastHeartbeatAt: w.lastHeartbeatAt?.toISOString() ?? null,
+              connectedAppInstanceId: w.connectedAppInstanceId,
               keyName: w.apiKey.name,
               keyPrefix: w.apiKey.prefix,
               activeJobs: jobsByWorker.get(w.id.toString()) ?? [],

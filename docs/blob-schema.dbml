@@ -662,6 +662,23 @@ Table worker_api_keys {
   Note: 'Superadmin-minted bearer keys for remote encode workers. Store hash only.'
 }
 
+Table app_instances {
+  id varchar(64) [pk, note: 'APP_INSTANCE_ID or auto hostname-shortid']
+  hostname varchar(120) [not null]
+  version varchar(40) [not null, default: '0']
+  status varchar(20) [not null, default: 'offline', note: 'online | offline']
+  started_at timestamptz [not null]
+  last_heartbeat_at timestamptz [not null]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  indexes {
+    (status, last_heartbeat_at) [name: 'app_instances_status_last_heartbeat_at_idx']
+  }
+
+  Note: 'Control-plane Next process presence. Multi-app LB: each replica heartbeats here. Freshness of last_heartbeat_at is SoT for online.'
+}
+
 Table workers {
   id bigserial [pk]
   api_key_id bigint [not null]
@@ -673,15 +690,17 @@ Table workers {
   mem_mb float [null]
   status varchar(20) [not null, default: 'offline', note: 'online | offline']
   last_heartbeat_at timestamptz [null]
+  connected_app_instance_id varchar(64) [null, note: 'App instance holding this worker WSS']
   created_at timestamptz [not null]
   updated_at timestamptz [not null]
 
   indexes {
     (api_key_id, instance_id) [unique, name: 'workers_api_key_id_instance_id_key']
     (status, last_heartbeat_at) [name: 'workers_status_last_heartbeat_at_idx']
+    (connected_app_instance_id) [name: 'workers_connected_app_instance_id_idx']
   }
 
-  Note: 'Fleet row updated by WSS register/heartbeat. Control plane sole DB owner.'
+  Note: 'Fleet row updated by WSS register/heartbeat. Control plane sole DB owner. Online = fresh last_heartbeat_at across all app replicas.'
 }
 
 Ref: workers.api_key_id > worker_api_keys.id [delete: Cascade]
@@ -709,7 +728,7 @@ Table jobs {
     (subject_type, subject_id) [name: 'jobs_subject_type_subject_id_idx']
   }
 
-  Note: 'Durable encode work. Postgres SoT; WSS wakes workers. Expired leases reclaim to pending. Local fallback when no capable online worker.'
+  Note: 'Durable encode work. Postgres SoT; LISTEN/NOTIFY + WSS wake workers across app replicas. Expired leases reclaim to pending. Local fallback only when no capable worker has a fresh heartbeat.'
 }
 
 Ref: jobs.worker_id > workers.id [delete: SetNull]

@@ -1,5 +1,6 @@
 import type { IncomingMessage, Server as HttpServer } from "http";
 import { WebSocketServer, type WebSocket } from "ws";
+import { getAppInstanceId } from "@/lib/jobs/app-instance";
 import { hashWorkerKey } from "@/lib/jobs/auth";
 import {
   hubPong,
@@ -114,6 +115,7 @@ export function attachWorkerWebSocket(server: HttpServer): WebSocketServer {
                 Math.min(32, Number(msg.concurrency) || 1),
               );
               const version = String(msg.version ?? "0").slice(0, 40);
+              const appId = getAppInstanceId();
               const row = await prisma.worker.upsert({
                 where: {
                   apiKeyId_instanceId: {
@@ -129,6 +131,7 @@ export function attachWorkerWebSocket(server: HttpServer): WebSocketServer {
                   concurrency,
                   status: WORKER_STATUS.online,
                   lastHeartbeatAt: new Date(),
+                  connectedAppInstanceId: appId,
                 },
                 update: {
                   version,
@@ -136,6 +139,7 @@ export function attachWorkerWebSocket(server: HttpServer): WebSocketServer {
                   concurrency,
                   status: WORKER_STATUS.online,
                   lastHeartbeatAt: new Date(),
+                  connectedAppInstanceId: appId,
                 },
               });
               workerId = row.id;
@@ -166,6 +170,7 @@ export function attachWorkerWebSocket(server: HttpServer): WebSocketServer {
                 data: {
                   status: WORKER_STATUS.online,
                   lastHeartbeatAt: new Date(),
+                  connectedAppInstanceId: getAppInstanceId(),
                   cpuPct:
                     typeof msg.cpuPct === "number" ? msg.cpuPct : undefined,
                   memMb: typeof msg.memMb === "number" ? msg.memMb : undefined,
@@ -247,7 +252,10 @@ export function attachWorkerWebSocket(server: HttpServer): WebSocketServer {
         void prisma.worker
           .update({
             where: { id },
-            data: { status: WORKER_STATUS.offline },
+            data: {
+              status: WORKER_STATUS.offline,
+              connectedAppInstanceId: null,
+            },
           })
           .catch(() => {
             /* ignore */

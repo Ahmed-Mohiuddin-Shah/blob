@@ -18,6 +18,15 @@ export type WorkerActiveJob = {
   title: string;
 };
 
+export type AppInstanceRow = {
+  id: string;
+  hostname: string;
+  version: string;
+  online: boolean;
+  isSelf: boolean;
+  lastHeartbeatAt: string;
+};
+
 export type WorkerRow = {
   id: string;
   instanceId: string;
@@ -28,6 +37,7 @@ export type WorkerRow = {
   memMb: number | null;
   status: string;
   lastHeartbeatAt: string | null;
+  connectedAppInstanceId: string | null;
   keyName: string;
   keyPrefix: string;
   activeJobs: WorkerActiveJob[];
@@ -145,16 +155,53 @@ function PingForm({ workerId }: { workerId: string }) {
 }
 
 export function WorkersAdmin({
+  appInstances,
   workers,
   keys,
   isSuperadmin,
 }: {
+  appInstances: AppInstanceRow[];
   workers: WorkerRow[];
   keys: WorkerKeyRow[];
   isSuperadmin: boolean;
 }) {
   return (
     <div className="space-y-10">
+      <section>
+        <h2 className="text-sm font-bold uppercase tracking-wider text-inactive">
+          Control plane
+        </h2>
+        {appInstances.length === 0 ? (
+          <p className="mt-3 text-sm text-secondary">
+            No app instances heartbeating yet.
+          </p>
+        ) : (
+          <ul className="mt-3 divide-y divide-divider rounded-[28px] bg-surface ring-1 ring-divider">
+            {appInstances.map((a) => (
+              <li key={a.id} className="px-5 py-4">
+                <p className="font-semibold">
+                  <span
+                    className={`mr-2 inline-block h-2 w-2 rounded-full ${
+                      a.online ? "bg-emerald-500" : "bg-inactive"
+                    }`}
+                  />
+                  {a.id}
+                  {a.isSelf ? (
+                    <span className="ml-2 text-xs font-bold uppercase tracking-wider text-accent-pink">
+                      this instance
+                    </span>
+                  ) : null}
+                </p>
+                <p className="mt-1 text-xs text-secondary">
+                  {a.hostname} · v{a.version} · last{" "}
+                  {new Date(a.lastHeartbeatAt).toLocaleString()}
+                </p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
       <section>
         <h2 className="text-sm font-bold uppercase tracking-wider text-inactive">
           Fleet
@@ -185,6 +232,9 @@ export function WorkersAdmin({
                     concurrency {w.concurrency}
                     {w.cpuPct != null ? ` · cpu ~${w.cpuPct.toFixed(0)}%` : ""}
                     {w.memMb != null ? ` · mem ${Math.round(w.memMb)} MB` : ""}
+                    {w.connectedAppInstanceId
+                      ? ` · app ${w.connectedAppInstanceId}`
+                      : ""}
                     {w.lastHeartbeatAt
                       ? ` · last ${new Date(w.lastHeartbeatAt).toLocaleString()}`
                       : ""}

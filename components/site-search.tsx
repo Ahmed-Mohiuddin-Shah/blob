@@ -29,7 +29,7 @@ import {
   type ImageHandoff,
 } from "@/lib/search/image-handoff";
 import { runSearchOverWs } from "@/lib/search/search-ws-client";
-import { signIn } from "@zitadel/next-auth/react";
+import { signInUrl } from "@/lib/auth-urls";
 
 type Hit = {
   index: string;
@@ -658,7 +658,9 @@ export function SiteSearch({
             <button
               type="button"
               className="font-semibold text-accent-pink hover:underline"
-              onClick={() => void signIn("zitadel")}
+              onClick={() => {
+                window.location.assign(signInUrl());
+              }}
             >
               Sign in
             </button>

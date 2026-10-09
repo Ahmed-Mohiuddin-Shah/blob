@@ -1,6 +1,22 @@
 # Docker
 
-`docker compose up -d --build` starts the Next.js app (+ worker WSS), Postgres, Meilisearch, and daily DB backups.
+## Compose files
+
+| File | Services | Use |
+|------|----------|-----|
+| `docker-compose.yml` | includes data + app | **Single box** — `docker compose up -d --build` |
+| `docker-compose.data.yml` | `db`, `meilisearch`, `pgbackups` | Shared data plane (one host) |
+| `docker-compose.app.yml` | `app` (+ `/api/health` healthcheck) | One or more app hosts behind a LB |
+| `docker-compose.worker.yml` | encode worker | Remote workers (outbound WSS) |
+
+```bash
+# Single box (unchanged)
+docker compose up -d --build
+
+# Split hosts
+docker compose -f docker-compose.data.yml up -d          # data host
+docker compose -f docker-compose.app.yml up -d --build  # each app host
+```
 
 Remote encode workers use a **separate** compose file and env — see [Worker compose](#worker-compose) below.
 
@@ -8,9 +24,9 @@ Remote encode workers use a **separate** compose file and env — see [Worker co
 
 | Service | Role |
 |---------|------|
-| `app` | Next.js + worker WSS (`tsx server.ts` on :3000), runs `prisma migrate deploy` on boot |
-| `meilisearch` | Keyword + hybrid + multimodal search (v1.16+) |
-| `db` | Postgres 16 |
+| `app` | Next.js + worker WSS (`tsx server.ts` on :3000), runs `prisma migrate deploy` on boot; heartbeats into `app_instances`; LISTEN/NOTIFY for multi-app job wakeups |
+| `meilisearch` | Keyword + hybrid + multimodal search (v1.16+) — **one shared instance** for all apps |
+| `db` | Postgres 16 — **one shared instance** (jobs, workers, app presence) |
 | `pgbackups` | Daily gzipped dumps into `./storage/backups/postgres/` (14 days) |
 
 Host ports (from `.env`):
@@ -19,17 +35,28 @@ Host ports (from `.env`):
 - Meili: `MEILI_PUBLISH_PORT` → 7700 (default 7700)
 - DB: `DB_PUBLISH_PORT` → 5432 (default 5433)
 
+Health: `GET /api/health` on the app (db + meili status, online apps/workers, job counts). Compose `app` healthcheck curls that route. Meili/db keep their own healthchecks.
+
+## Multi-app / load balancer
+
+1. Run **one** data stack (`docker-compose.data.yml`) — shared Postgres + Meili.
+2. Run one or more apps (`docker-compose.app.yml`) with the same `DATABASE_URL` / `MEILI_HOST` pointing at that data host (published ports or private network / tunnel).
+3. Optional stable id per replica: `APP_INSTANCE_ID=app-1` (otherwise auto-generated). See `/profile/workers` → Control plane.
+4. Point workers’ `BLOB_URL` at the **load balancer** (Cloudflare Tunnel LB, nginx, etc.). Workers claim via WSS; apps sync the queue through Postgres LISTEN/NOTIFY.
+5. Local encode fallback runs only when **no** capable worker has a fresh DB heartbeat (not “no sockets on this process”).
+
 ## Env
 
 Copy `.env.example` → `.env`. Required:
 
-- `DATABASE_URL` (compose overrides host to `db` for the app service)
-- `SESSION_SECRET`, `AUTH_URL`
-- `ZITADEL_DOMAIN`, `ZITADEL_CLIENT_ID`, `ZITADEL_CLIENT_SECRET`
+- `DATABASE_URL` (combined compose forces `@db:5432` for the app service)
+- `AUTH_URL`
+- `ZITADEL_DOMAIN`, `ZITADEL_CLIENT_ID`, `ZITADEL_CLIENT_SECRET` (optional for public PKCE)
+- `ZITADEL_API_CLIENT_ID` (API app — JWT audience)
 - `ZITADEL_POST_LOGOUT_URL`
 - `ZITADEL_SERVICE_PAT`, `ZITADEL_ORG_ID`, `ZITADEL_PROJECT_ID` (Management API)
 - For Glass uploads: `GLASS_API_URL`, `GLASS_API_KEY` (public PRISM is created by the app into `public_prism`)
-- Optional: `WORKER_LEASE_SECONDS` (default 120) — how long a claimed job stays leased before reclaim
+- Optional: `WORKER_LEASE_SECONDS` (default 120), `WORKER_ONLINE_SECONDS` (default 45), `APP_INSTANCE_ID`
 - Search: `MEILI_HOST`, `MEILI_MASTER_KEY` (required for compose `meilisearch`), optional `MEILI_SEARCH_KEY`
 - Ollama: `OLLAMA_BASE_URL`, optional `OLLAMA_API_KEY` (required if using `docker-compose.proxy.yml` / `ollama-auth-proxy`), `OLLAMA_EMBED_MODEL`, `OLLAMA_VISION_MODEL`, `OLLAMA_AGENT_MODEL`
 - Multimodal CLIP REST (self-hosted beside Ollama): `MEILI_MULTIMODAL_URL`, `MEILI_MULTIMODAL_MODEL`, optional `MEILI_MULTIMODAL_API_KEY`
@@ -74,13 +101,12 @@ MEILI_MULTIMODAL_MODEL=openclip-vit-b-32         # must match CLIP_MODEL_ID
 
 Default weights are `ViT-B-32` / `laion2b_s34b_b79k` (~1–2GB VRAM). Idle unload (`CLIP_IDLE_UNLOAD_SECONDS=300`) frees the 1060 for Ollama. Meili must reach the CLIP URL **and** sticker `previewUrl`s (`AUTH_URL`) when indexing images. Without `MEILI_MULTIMODAL_*`, keyword + Ollama text hybrid still work; Image mode stays off.
 
-Zitadel app settings (must match exactly):
+Zitadel apps (same project):
 
-- Redirect URI: `{AUTH_URL}/api/auth/callback/zitadel`
-- Post-logout URI: `{AUTH_URL}/api/auth/logout/callback`
-- Auth method: Authorization Code + PKCE (Web)
+- **Web** PKCE: Redirect URI `{AUTH_URL}/api/auth/callback/zitadel`; Post-logout `{AUTH_URL}/api/auth/logout/callback`
+- **API**: client id → `ZITADEL_API_CLIENT_ID` (access-token `aud`)
 
-Login page: `/auth/login` (CSRF form → Zitadel). Logout: `POST /api/auth/logout`.
+Login: `/auth/login` → `/api/auth/signin`. Logout: `POST /api/auth/logout`.
 
 ## Backups
 
@@ -122,12 +148,13 @@ Or locally against a running app:
 npm run worker
 ```
 
-Workers connect to `wss://<BLOB_URL host>/api/workers/ws`. Mint keys as superadmin at `/profile/workers`. If no capable worker is online, the app falls back to single-flight in-process encode.
+Workers connect to `wss://<BLOB_URL host>/api/workers/ws`. Mint keys as superadmin at `/profile/workers`. If no capable worker has a fresh heartbeat, the app falls back to single-flight in-process encode.
 
 ## Local without Docker app
 
 ```bash
-docker compose up -d db pgbackups
+docker compose -f docker-compose.data.yml up -d
+# or: docker compose up -d db meilisearch pgbackups
 npm install
 npx prisma migrate deploy
 npm run dev

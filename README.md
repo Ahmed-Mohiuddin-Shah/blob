@@ -5,7 +5,7 @@ Public sticker library (Next.js). Phase 1: home shell, Zitadel-only auth (roles 
 ## Stack
 
 - Next.js (App Router) + Tailwind v4
-- Auth.js + Zitadel (OIDC/PKCE, sole provider; service-account PAT for roles/profile)
+- Zitadel OIDC/PKCE (website) + JWKS-verified access tokens (APIs); service-account PAT for roles/profile
 - PostgreSQL + Prisma
 - Meilisearch (keyword + hybrid + multimodal search; Prisma `contains` fallback if unset)
 - Object storage: [glass-ts](https://www.npmjs.com/package/glass-ts)
@@ -17,14 +17,17 @@ See [docs/blob-requirements.md](docs/blob-requirements.md), [docs/style-guide.md
 ## Quick start
 
 ```bash
-cp .env.example .env   # fill SESSION_SECRET, Zitadel, DB, MEILI_MASTER_KEY
-docker compose up -d --build
+cp .env.example .env   # fill Zitadel (incl. API client id), DB, MEILI_MASTER_KEY
+docker compose up -d --build   # data (db/meili/backups) + app via include
 ```
+
+Split hosts (shared DB/Meili, app replicas behind a LB): see [docs/docker.md](docs/docker.md). Health: `GET /api/health`.
 
 Or local app + Docker DB (+ Meili if you want search):
 
 ```bash
-docker compose up -d db meilisearch
+docker compose -f docker-compose.data.yml up -d
+# or: docker compose up -d db meilisearch
 npm install
 npx prisma migrate deploy
 npm run dev
@@ -49,10 +52,18 @@ npm run dev
 
 ## Zitadel console
 
-- Redirect URI: `{AUTH_URL}/api/auth/callback/zitadel`
-- Post-logout URI: `{AUTH_URL}/api/auth/logout/callback`
-- Auth method: Authorization Code + PKCE (Web)
-- Project roles: `user`, `member`, `admin` (BLOB creates them via PAT if missing)
+Register **two** apps in the same project:
+
+1. **Web** (PKCE) — website login (`ZITADEL_CLIENT_ID`)
+   - Redirect URI: `{AUTH_URL}/api/auth/callback/zitadel`
+   - Post-logout URI: `{AUTH_URL}/api/auth/logout/callback`
+   - Auth method: Authorization Code + PKCE (Web)
+2. **API** — resource server audience (`ZITADEL_API_CLIENT_ID`)
+   - BLOB verifies access tokens via Zitadel JWKS (`iss` + `aud` = API client id)
+
+Website stores thin httpOnly cookies (access / refresh / id-for-logout only). External clients (Flutter, etc.) register their own PKCE app in the same project, request the project audience scope, call BLOB APIs with `Authorization: Bearer <access_token>`, and refresh against Zitadel themselves.
+
+- Project roles: `user`, `member`, `admin`, `superadmin` (BLOB creates them via PAT if missing)
 - Service account with PAT + org/project manager rights for Management API (`ZITADEL_SERVICE_PAT`, `ZITADEL_ORG_ID`, `ZITADEL_PROJECT_ID`)
 
 
@@ -95,7 +106,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 
 ```bash
 cp .env.example .env
-# fill Zitadel, DB, GLASS, SESSION_SECRET, AUTH_URL
+# fill Zitadel (Web + API client ids), DB, GLASS, AUTH_URL
 # MEILI_MASTER_KEY=<generated>
 # MEILI_HOST=http://meilisearch:7700   # inside compose; use http://localhost:7700 for host-run app
 docker compose up -d --build
