@@ -21,4 +21,6 @@ sudo systemctl restart docker
 
 CPU fallback: `CLIP_DEVICE=cpu` in `.env.clip` and `-f docker-compose.clip.cpu.yml`.
 
+Apple Silicon / Mac workstation (temporary; native-arch CPU image): `-f docker-compose.clip.mac.yml`. See [docs/docker.md](../docs/docker.md).
+
 See root [README.md](../README.md) end-to-end search setup.

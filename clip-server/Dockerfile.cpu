@@ -1,0 +1,32 @@
+# Native-arch CPU image for workstation hosts without NVIDIA (e.g. Apple Silicon).
+# Not the prod GPU path — prefer clip-server/Dockerfile on a CUDA host.
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends curl libjpeg62-turbo zlib1g \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+# Match CUDA image torch 2.1.x; CPU wheels resolve to host arch (arm64 on Mac Docker).
+RUN pip install --no-cache-dir \
+      torch==2.1.2 \
+      --index-url https://download.pytorch.org/whl/cpu \
+  && pip install --no-cache-dir -r requirements.txt
+
+COPY app.py .
+
+ENV CLIP_MODEL=ViT-B-32 \
+    CLIP_PRETRAINED=laion2b_s34b_b79k \
+    CLIP_MODEL_ID=openclip-vit-b-32 \
+    CLIP_DEVICE=cpu \
+    CLIP_IDLE_UNLOAD_SECONDS=300 \
+    PYTHONUNBUFFERED=1
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=15s --timeout=5s --retries=5 --start-period=60s \
+  CMD curl -fsS http://127.0.0.1:8080/health || exit 1
+
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080"]

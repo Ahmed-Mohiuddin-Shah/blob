@@ -1,0 +1,16 @@
+# Override: Apple Silicon / native-arch CPU (pair with docker-compose.clip.yml).
+# Temporary workstation path — prefer the NVIDIA host when available.
+#   docker compose -f docker-compose.clip.yml -f docker-compose.clip.mac.yml up -d --build
+#
+# Builds Dockerfile.cpu (arm64-native torch). Plain .cpu.yml still uses the CUDA
+# amd64 base and emulates on Mac. No Metal/MPS inside Docker.
+
+services:
+  clip:
+    build:
+      context: ./clip-server
+      dockerfile: Dockerfile.cpu
+    runtime: runc
+    environment:
+      CLIP_DEVICE: cpu
+      NVIDIA_VISIBLE_DEVICES: ""

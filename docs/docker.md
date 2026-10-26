@@ -92,6 +92,17 @@ CPU-only (slow; no toolkit): set `CLIP_DEVICE=cpu` in `.env.clip`, then:
 docker compose -f docker-compose.clip.yml -f docker-compose.clip.cpu.yml up -d --build
 ```
 
+#### Apple Silicon / Mac workstation (temporary)
+
+Not production infra — prefer the NVIDIA GPU host when you have one. Apple Silicon needs `.mac.yml` (native-arch CPU image via `Dockerfile.cpu`). Plain `.cpu.yml` still builds the CUDA amd64 base and emulates under Docker. No Metal/MPS inside Linux containers.
+
+```bash
+cp .env.clip.example .env.clip
+# CLIP_DEVICE=cpu is forced by the mac override
+docker compose -f docker-compose.clip.yml -f docker-compose.clip.mac.yml up -d --build
+curl -s http://127.0.0.1:8081/health
+```
+
 Put TLS in front (Caddy/nginx) like Ollama, e.g. `https://clip.mamajees.com`, then on the **blob** `.env`:
 
 ```bash
