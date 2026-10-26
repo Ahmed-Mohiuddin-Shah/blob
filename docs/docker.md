@@ -24,8 +24,8 @@ Remote encode workers use a **separate** compose file and env — see [Worker co
 
 | Service | Role |
 |---------|------|
-| `app` | Next.js + worker WSS (`tsx server.ts` on :3000), runs `prisma migrate deploy` on boot; heartbeats into `app_instances`; LISTEN/NOTIFY for multi-app job wakeups |
-| `meilisearch` | Keyword + hybrid + multimodal search (v1.16+) — **one shared instance** for all apps |
+| `app` | Next.js + worker WSS (`tsx server.ts` on :3000), runs `prisma migrate deploy` on boot; heartbeats into `app_instances`; LISTEN/NOTIFY for multi-app job wakeups; local/reindex ownership via `jobs.owner_app_instance_id` |
+| `meilisearch` | Keyword + hybrid + multimodal search (v1.16+) — **one shared instance** for all apps (no HA replicas; Prisma fallback if down) |
 | `db` | Postgres 16 — **one shared instance** (jobs, workers, app presence) |
 | `pgbackups` | Daily gzipped dumps into `./storage/backups/postgres/` (14 days) |
 
@@ -39,11 +39,12 @@ Health: `GET /api/health` on the app (db + meili status, online apps/workers, jo
 
 ## Multi-app / load balancer
 
-1. Run **one** data stack (`docker-compose.data.yml`) — shared Postgres + Meili.
+1. Run **one** data stack (`docker-compose.data.yml`) — shared Postgres + **one** Meilisearch (no Meili HA replicas; Prisma `contains` is the search fallback).
 2. Run one or more apps (`docker-compose.app.yml`) with the same `DATABASE_URL` / `MEILI_HOST` pointing at that data host (published ports or private network / tunnel).
 3. Optional stable id per replica: `APP_INSTANCE_ID=app-1` (otherwise auto-generated). See `/profile/workers` → Control plane.
-4. Point workers’ `BLOB_URL` at the **load balancer** (Cloudflare Tunnel LB, nginx, etc.). Workers claim via WSS; apps sync the queue through Postgres LISTEN/NOTIFY.
-5. Local encode fallback runs only when **no** capable worker has a fresh DB heartbeat (not “no sockets on this process”).
+4. Point workers’ `BLOB_URL` at the **load balancer** (Cloudflare Tunnel LB, nginx, etc.). Workers claim via WSS (`FOR UPDATE SKIP LOCKED`); apps sync the queue through Postgres LISTEN/NOTIFY.
+5. Local encode fallback runs only when **no** capable worker has a fresh DB heartbeat (not “no sockets on this process”). Local runs set `jobs.owner_app_instance_id` + lease so a dead app’s work can reclaim.
+6. `catalog_reindex` is app-local: one shared job row; whichever online app claims it owns the run (visible under `/profile/workers` → Catalog reindex).
 
 ## Env
 

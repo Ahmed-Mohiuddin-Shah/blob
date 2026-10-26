@@ -27,7 +27,8 @@ BLOB is a **public sticker library and sticker creation/browsing website** with 
 - Styling: Tailwind CSS (Bloby / Zune; mobile-first editor chrome)
 - Metadata DB: PostgreSQL (access via Prisma or equivalent typed client)
 - Object storage: GLASS (via a gitsubmodule or custom npm package)
-- Jobs: **Postgres `jobs` table** as SoT + outbound WSS workers; control-plane apps wake workers via **LISTEN/NOTIFY** (multi-instance safe). Local single-flight encode only when no capable worker has a fresh heartbeat. `catalog_reindex` stays app-local (Prisma + Meili). No Redis/BullMQ required.
+- Jobs: **Postgres `jobs` table** as SoT + outbound WSS workers; control-plane apps wake workers via **LISTEN/NOTIFY** (multi-instance safe). Remote claim uses **`FOR UPDATE SKIP LOCKED`**. Local single-flight encode only when no capable worker has a fresh heartbeat (owner = `jobs.owner_app_instance_id` + lease). `catalog_reindex` stays app-local (Prisma + Meili): one shared job `catalog_reindex:0`; claiming app sets owner + lease; others skip; expired lease reclaims for another app. No Redis/BullMQ required.
+- Search HA: **one Meilisearch** shared by all app replicas (no Meili replica fan-out). If Meili is down, APIs fall back to Prisma `contains` on titles/tags/meta.
 - Auth: **Zitadel only** (OIDC + PKCE for the website; APIs verify access tokens via JWKS); no other IdPs or auth methods
 - Avatars: [blobatar](https://blobatar.dev/) from `username` only (never Zitadel `picture`)
 - Search: PostgreSQL full-text search + `pg_trgm` (v1); **Meilisearch planned post-v1**
@@ -845,7 +846,8 @@ GET    /api/packs/{id}/stickers
 - App: Next.js (App Router), Node.js runtime for Route Handlers that talk to GLASS / Postgres
 - Composition: portable core (TS → npm; Dart → Flutter) + web viewport (e.g. react-konva) + worker render; Flutter client **Should**
 - DB: PostgreSQL via `DATABASE_URL` (Prisma migrate or equivalent); enable `pg_trgm` extension
-- Queue: Postgres jobs + WSS workers (+ LISTEN/NOTIFY across app replicas); workers must run in deployment (not serverless-only for FFmpeg/ImageMagick). Ops: `GET /api/health`, `/profile/workers` control-plane + fleet presence (`app_instances` / worker heartbeats)
+- Queue: Postgres jobs + WSS workers (+ LISTEN/NOTIFY across app replicas); claim with `FOR UPDATE SKIP LOCKED`; local/reindex ownership via `owner_app_instance_id` + lease. Workers must run in deployment (not serverless-only for FFmpeg/ImageMagick). Ops: `GET /api/health`, `/profile/workers` — control plane, fleet, Meili probe, catalog reindex owner, job queue counts (`app_instances` / worker heartbeats)
+- Search: single shared Meilisearch (no HA replicas in compose); Prisma `contains` fallback when Meili is unset or unhealthy
 - Auth env: Zitadel domain + Web client id/secret + API client id (`ZITADEL_API_CLIENT_ID` audience); service-account PAT + org id + project id for Management API; callback URL aligned with `AUTH_URL`
 - Session store: thin httpOnly access/refresh/id cookies (no app `sessions` table; see DBML). Identity via JWKS-verified access token — not an Auth.js session JWT
 - GLASS base URL + service API key via env (not committed secrets). **Public PRISM UUID is not env** — BLOB creates it and stores it in `public_prism`. Per-user private prism UUIDs live on `users`.

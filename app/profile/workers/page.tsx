@@ -1,6 +1,14 @@
 import { WorkersAdmin } from "@/components/workers-admin";
 import { canManageAdmins } from "@/lib/capabilities";
-import { listAppInstances } from "@/lib/jobs/app-instance";
+import {
+  getAppInstanceId,
+  listAppInstances,
+} from "@/lib/jobs/app-instance";
+import {
+  getCatalogReindexStats,
+  getJobQueueStats,
+  probeMeili,
+} from "@/lib/jobs/ops-stats";
 import {
   isHeartbeatFresh,
   JOB_STATUS,
@@ -69,7 +77,7 @@ export default async function ProfileWorkersPage() {
     accountStatus: user.accountStatus,
   });
 
-  const [workers, keys, appInstances] = await Promise.all([
+  const [workers, keys, appInstances, meili, reindex, jobs] = await Promise.all([
     prisma.worker.findMany({
       // Hide offline workers whose key was revoked; keep offline if key still valid.
       where: {
@@ -89,6 +97,9 @@ export default async function ProfileWorkersPage() {
         })
       : Promise.resolve([]),
     listAppInstances(),
+    probeMeili(),
+    getCatalogReindexStats(),
+    getJobQueueStats(),
   ]);
 
   const activeJobs =
@@ -142,6 +153,10 @@ export default async function ProfileWorkersPage() {
       <div className="mt-8">
         <WorkersAdmin
           isSuperadmin={isSuperadmin}
+          selfAppInstanceId={getAppInstanceId()}
+          meili={meili}
+          reindex={reindex}
+          jobs={jobs}
           appInstances={appInstances.map((a) => ({
             id: a.id,
             hostname: a.hostname,

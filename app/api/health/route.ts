@@ -4,29 +4,20 @@ import {
   listAppInstances,
   type AppInstanceRow,
 } from "@/lib/jobs/app-instance";
+import {
+  getCatalogReindexStats,
+  getJobQueueStats,
+  probeMeili,
+} from "@/lib/jobs/ops-stats";
 import { dbHasCapable } from "@/lib/jobs/presence";
 import {
   isHeartbeatFresh,
-  JOB_STATUS,
   JOB_TYPE,
   onlineSeconds,
 } from "@/lib/jobs/types";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
-
-async function meiliOk(): Promise<boolean | null> {
-  const host = process.env.MEILI_HOST?.replace(/\/$/, "");
-  if (!host) return null;
-  try {
-    const res = await fetch(`${host}/health`, {
-      signal: AbortSignal.timeout(3000),
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
 
 export async function GET() {
   let dbOk = false;
@@ -37,7 +28,7 @@ export async function GET() {
     dbOk = false;
   }
 
-  const meili = await meiliOk();
+  const meili = await probeMeili();
   const ok = dbOk;
   const now = Date.now();
   const since = new Date(now - onlineSeconds() * 1000);
@@ -49,36 +40,39 @@ export async function GET() {
     connectedAppInstanceId: string | null;
     lastHeartbeatAt: Date | null;
   }> = [];
-  let pending = 0;
-  let leased = 0;
-  let running = 0;
+  let jobs = { pending: 0, leased: 0, running: 0, byType: [] as Array<{ type: string; status: string; count: number }> };
+  let reindex: Awaited<ReturnType<typeof getCatalogReindexStats>> = null;
   let remoteCapable = false;
 
   if (dbOk) {
-    [apps, workers, pending, leased, running, remoteCapable] =
-      await Promise.all([
-        listAppInstances(),
-        prisma.worker.findMany({
-          where: { lastHeartbeatAt: { gte: since } },
-          select: {
-            id: true,
-            instanceId: true,
-            connectedAppInstanceId: true,
-            lastHeartbeatAt: true,
-          },
-          take: 50,
-        }),
-        prisma.job.count({ where: { status: JOB_STATUS.pending } }),
-        prisma.job.count({ where: { status: JOB_STATUS.leased } }),
-        prisma.job.count({ where: { status: JOB_STATUS.running } }),
-        dbHasCapable(JOB_TYPE.compositionEncode),
-      ]);
+    const [appRows, workerRows, queue, reindexRow, capable] = await Promise.all([
+      listAppInstances(),
+      prisma.worker.findMany({
+        where: { lastHeartbeatAt: { gte: since } },
+        select: {
+          id: true,
+          instanceId: true,
+          connectedAppInstanceId: true,
+          lastHeartbeatAt: true,
+        },
+        take: 50,
+      }),
+      getJobQueueStats(),
+      getCatalogReindexStats(),
+      dbHasCapable(JOB_TYPE.compositionEncode),
+    ]);
+    apps = appRows;
+    workers = workerRows;
+    jobs = queue;
+    reindex = reindexRow;
+    remoteCapable = capable;
   }
 
   const body = {
     ok,
     db: dbOk,
     meili,
+    reindex,
     appInstanceId: getAppInstanceId(),
     onlineWindowSeconds: onlineSeconds(),
     apps: apps.map((a) => ({
@@ -100,7 +94,7 @@ export async function GET() {
         lastHeartbeatAt: w.lastHeartbeatAt?.toISOString() ?? null,
       })),
     },
-    jobs: { pending, leased, running },
+    jobs,
   };
 
   return NextResponse.json(body, { status: ok ? 200 : 503 });

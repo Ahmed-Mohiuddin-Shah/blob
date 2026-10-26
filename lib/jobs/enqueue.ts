@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { getAppInstanceId } from "@/lib/jobs/app-instance";
 import { hubNotifyJobAvailable } from "@/lib/jobs/hub";
 import { enqueueLocal } from "@/lib/jobs/local";
 import { notifyJobAvailable } from "@/lib/jobs/pg-listen";
@@ -10,8 +11,11 @@ import {
   JOB_SUBJECT,
   JOB_TYPE,
   type JobType,
+  leaseSeconds,
 } from "@/lib/jobs/types";
 import { prisma } from "@/lib/prisma";
+
+const LEASE_REFRESH_MS = 30_000;
 
 function subjectTypeFor(type: JobType) {
   if (
@@ -26,14 +30,16 @@ function subjectTypeFor(type: JobType) {
 }
 
 /** catalog_reindex is Prisma+Meili — always app-local. Else local only if no fresh remote worker. */
-async function mustRunLocal(type: JobType): Promise<boolean> {
+export async function mustRunLocal(type: JobType): Promise<boolean> {
   if (type === JOB_TYPE.catalogReindex) return true;
   return !(await dbHasCapable(type));
 }
 
 async function wakeWorkers(type: JobType, jobId: bigint): Promise<void> {
-  if (type === JOB_TYPE.catalogReindex) return;
-  hubNotifyJobAvailable(type, jobId);
+  // catalog_reindex: NOTIFY only (no remote workers). Other types wake WSS hubs too.
+  if (type !== JOB_TYPE.catalogReindex) {
+    hubNotifyJobAvailable(type, jobId);
+  }
   await notifyJobAvailable(type, jobId).catch((err) => {
     console.error("NOTIFY job_available failed:", err);
   });
@@ -78,6 +84,7 @@ export async function enqueueJobAsync(
         data: {
           status: JOB_STATUS.pending,
           workerId: null,
+          ownerAppInstanceId: null,
           leaseExpiresAt: null,
           payload: Prisma.DbNull,
           result: Prisma.DbNull,
@@ -104,8 +111,27 @@ export async function enqueueJobAsync(
   return job.id;
 }
 
+/**
+ * LISTEN handler: wake local WSS hubs; if this job must run app-local, try ownership.
+ */
+export async function onRemoteJobAvailable(
+  jobType: JobType,
+  jobId: bigint,
+): Promise<void> {
+  if (jobType !== JOB_TYPE.catalogReindex) {
+    hubNotifyJobAvailable(jobType, jobId);
+  }
+  if (!(await mustRunLocal(jobType))) return;
+  const job = await prisma.job.findUnique({ where: { id: jobId } });
+  if (!job || job.status !== JOB_STATUS.pending) return;
+  if (!Object.values(JOB_TYPE).includes(job.type as JobType)) return;
+  scheduleLocal(job.id, job.type as JobType, job.subjectId);
+}
+
 function scheduleLocal(jobId: bigint, type: JobType, subjectId: bigint): void {
   enqueueLocal(async () => {
+    await reclaimExpiredLeases();
+
     // Re-check: a worker may have claimed while we waited in the local queue.
     const job = await prisma.job.findUnique({ where: { id: jobId } });
     if (!job || job.status !== JOB_STATUS.pending) return;
@@ -114,16 +140,37 @@ function scheduleLocal(jobId: bigint, type: JobType, subjectId: bigint): void {
       return;
     }
 
+    const ownerId = getAppInstanceId();
+    const leaseMs = leaseSeconds() * 1000;
+    const leaseExpiresAt = new Date(Date.now() + leaseMs);
+
     const leased = await prisma.job.updateMany({
       where: { id: jobId, status: JOB_STATUS.pending },
       data: {
         status: JOB_STATUS.running,
         attempts: { increment: 1 },
-        leaseExpiresAt: null,
+        ownerAppInstanceId: ownerId,
+        leaseExpiresAt,
         workerId: null,
       },
     });
     if (leased.count === 0) return;
+
+    const refreshLease = () => {
+      void prisma.job
+        .updateMany({
+          where: {
+            id: jobId,
+            status: JOB_STATUS.running,
+            ownerAppInstanceId: ownerId,
+          },
+          data: { leaseExpiresAt: new Date(Date.now() + leaseMs) },
+        })
+        .catch(() => {
+          /* ignore */
+        });
+    };
+    const leaseTimer = setInterval(refreshLease, LEASE_REFRESH_MS);
 
     try {
       const { runLocalJob } = await import("@/lib/jobs/run-local");
@@ -133,7 +180,9 @@ function scheduleLocal(jobId: bigint, type: JobType, subjectId: bigint): void {
         data: {
           status: JOB_STATUS.succeeded,
           lastError: null,
-          result: { local: true },
+          ownerAppInstanceId: null,
+          leaseExpiresAt: null,
+          result: { local: true, ownerAppInstanceId: ownerId },
         },
       });
     } catch (err) {
@@ -143,10 +192,13 @@ function scheduleLocal(jobId: bigint, type: JobType, subjectId: bigint): void {
         data: {
           status: JOB_STATUS.failed,
           lastError: message.slice(0, 2000),
+          ownerAppInstanceId: null,
+          leaseExpiresAt: null,
         },
       });
-      // Domain fail already handled inside process* for most paths; ensure sticker fail if needed
       throw err;
+    } finally {
+      clearInterval(leaseTimer);
     }
   });
 }

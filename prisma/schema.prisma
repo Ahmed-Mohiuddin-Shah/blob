@@ -678,20 +678,22 @@ model Worker {
 
 /// Durable encode/print work unit. Postgres SoT; WSS wakes workers.
 model Job {
-  id             BigInt    @id @default(autoincrement())
-  type           String    @db.VarChar(40)
-  subjectType    String    @map("subject_type") @db.VarChar(40)
-  subjectId      BigInt    @map("subject_id")
-  status         String    @default("pending") @db.VarChar(20)
-  idempotencyKey String    @unique @map("idempotency_key") @db.VarChar(120)
-  payload        Json?
-  result         Json?
-  workerId       BigInt?   @map("worker_id")
-  leaseExpiresAt DateTime? @map("lease_expires_at") @db.Timestamptz(6)
-  attempts       Int       @default(0)
-  lastError      String?   @map("last_error")
-  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                 BigInt    @id @default(autoincrement())
+  type               String    @db.VarChar(40)
+  subjectType        String    @map("subject_type") @db.VarChar(40)
+  subjectId          BigInt    @map("subject_id")
+  status             String    @default("pending") @db.VarChar(20)
+  idempotencyKey     String    @unique @map("idempotency_key") @db.VarChar(120)
+  payload            Json?
+  result             Json?
+  workerId           BigInt?   @map("worker_id")
+  /// App instance running a local job (catalog_reindex / encode fallback). Cleared on reclaim.
+  ownerAppInstanceId String?   @map("owner_app_instance_id") @db.VarChar(64)
+  leaseExpiresAt     DateTime? @map("lease_expires_at") @db.Timestamptz(6)
+  attempts           Int       @default(0)
+  lastError          String?   @map("last_error")
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   worker Worker? @relation(fields: [workerId], references: [id], onDelete: SetNull)
 

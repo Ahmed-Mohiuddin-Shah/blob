@@ -12,6 +12,7 @@ export async function reclaimExpiredLeases(): Promise<number> {
     data: {
       status: JOB_STATUS.pending,
       workerId: null,
+      ownerAppInstanceId: null,
       leaseExpiresAt: null,
       lastError: "lease expired",
     },

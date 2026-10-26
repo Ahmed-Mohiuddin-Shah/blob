@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { hubSend } from "@/lib/jobs/hub";
 import { buildJobPayload } from "@/lib/jobs/payload";
 import { reclaimExpiredLeases } from "@/lib/jobs/reclaim";
@@ -13,6 +14,12 @@ function isJobType(v: string): v is JobType {
   return (JOB_TYPES as readonly string[]).includes(v);
 }
 
+type ClaimedRow = {
+  id: bigint;
+  type: string;
+  subject_id: bigint;
+};
+
 /** Atomically lease a pending job for a worker; send job.payload over WSS. */
 export async function claimJobForWorker(opts: {
   workerId: bigint;
@@ -21,43 +28,43 @@ export async function claimJobForWorker(opts: {
 }): Promise<{ jobId: bigint; jobType: JobType } | null> {
   await reclaimExpiredLeases();
 
+  const caps = [...opts.capabilities];
+  if (caps.length === 0) return null;
+
   const leaseMs = leaseSeconds() * 1000;
   const leaseExpiresAt = new Date(Date.now() + leaseMs);
 
+  // ponytail: SKIP LOCKED so contending workers take different rows (not CAS thrash).
   const claimed = await prisma.$transaction(async (tx) => {
-    const where = opts.jobId
-      ? {
-          id: opts.jobId,
-          status: JOB_STATUS.pending,
-          type: { in: [...opts.capabilities] },
-        }
-      : {
-          status: JOB_STATUS.pending,
-          type: { in: [...opts.capabilities] },
-        };
-
-    const job = await tx.job.findFirst({
-      where,
-      orderBy: { createdAt: "asc" },
-    });
-    if (!job || !isJobType(job.type)) return null;
-
-    const updated = await tx.job.updateMany({
-      where: { id: job.id, status: JOB_STATUS.pending },
-      data: {
-        status: JOB_STATUS.leased,
-        workerId: opts.workerId,
-        leaseExpiresAt,
-        attempts: { increment: 1 },
-      },
-    });
-    if (updated.count === 0) return null;
-    return job;
+    const idFilter =
+      opts.jobId != null ? Prisma.sql`AND id = ${opts.jobId}` : Prisma.empty;
+    const rows = await tx.$queryRaw<ClaimedRow[]>`
+      WITH cte AS (
+        SELECT id FROM jobs
+        WHERE status = ${JOB_STATUS.pending}
+          AND type IN (${Prisma.join(caps.map((c) => Prisma.sql`${c}`))})
+          ${idFilter}
+        ORDER BY created_at ASC
+        FOR UPDATE SKIP LOCKED
+        LIMIT 1
+      )
+      UPDATE jobs
+      SET
+        status = ${JOB_STATUS.leased},
+        worker_id = ${opts.workerId},
+        lease_expires_at = ${leaseExpiresAt},
+        attempts = attempts + 1,
+        updated_at = NOW()
+      FROM cte
+      WHERE jobs.id = cte.id
+      RETURNING jobs.id, jobs.type, jobs.subject_id
+    `;
+    return rows[0] ?? null;
   });
 
   if (!claimed || !isJobType(claimed.type)) return null;
 
-  const payload = await buildJobPayload(claimed.type, claimed.subjectId);
+  const payload = await buildJobPayload(claimed.type, claimed.subject_id);
   await prisma.job.update({
     where: { id: claimed.id },
     data: {

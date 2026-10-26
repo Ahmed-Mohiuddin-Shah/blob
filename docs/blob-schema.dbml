@@ -707,14 +707,15 @@ Ref: workers.api_key_id > worker_api_keys.id [delete: Cascade]
 
 Table jobs {
   id bigserial [pk]
-  type varchar(40) [not null, note: 'composition_encode | sheet_encode | pack_encode']
-  subject_type varchar(40) [not null, note: 'sticker | sticker_sheet | sticker_pack — polymorphic, NO FK']
-  subject_id bigint [not null, note: 'Polymorphic — NO FK']
+  type varchar(40) [not null, note: 'composition_encode | sheet_encode | pack_encode | search_enrich | catalog_reindex']
+  subject_type varchar(40) [not null, note: 'sticker | sticker_sheet | sticker_pack | catalog — polymorphic, NO FK']
+  subject_id bigint [not null, note: 'Polymorphic — NO FK; catalog_reindex uses 0']
   status varchar(20) [not null, default: 'pending', note: 'pending | leased | running | succeeded | failed']
   idempotency_key varchar(120) [unique, not null]
   payload jsonb [null]
   result jsonb [null]
   worker_id bigint [null]
+  owner_app_instance_id varchar(64) [null, note: 'App instance owning a local run (catalog_reindex / encode fallback); cleared on reclaim/complete']
   lease_expires_at timestamptz [null]
   attempts integer [not null, default: 0]
   last_error text [null]
@@ -728,7 +729,7 @@ Table jobs {
     (subject_type, subject_id) [name: 'jobs_subject_type_subject_id_idx']
   }
 
-  Note: 'Durable encode work. Postgres SoT; LISTEN/NOTIFY + WSS wake workers across app replicas. Expired leases reclaim to pending. Local fallback only when no capable worker has a fresh heartbeat.'
+  Note: 'Durable job SoT. Remote claim uses FOR UPDATE SKIP LOCKED. LISTEN/NOTIFY + WSS wake workers across app replicas. Local runs set owner_app_instance_id + lease; expired leases reclaim to pending (clears owner). catalog_reindex is app-local only (never remote workers); one shared row catalog_reindex:0.'
 }
 
 Ref: jobs.worker_id > workers.id [delete: SetNull]

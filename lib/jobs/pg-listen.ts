@@ -5,8 +5,9 @@
 
 import { randomBytes } from "crypto";
 import pg from "pg";
-import { hubGet, hubNotifyJobAvailable, hubPing } from "@/lib/jobs/hub";
+import { hubGet, hubPing } from "@/lib/jobs/hub";
 import type { JobType } from "@/lib/jobs/types";
+import { JOB_TYPES } from "@/lib/jobs/types";
 
 const CHANNEL = "blob_control";
 
@@ -104,7 +105,16 @@ function handleNotification(payload: string): void {
     return;
   }
   if (msg.kind === "job_available") {
-    hubNotifyJobAvailable(msg.jobType as JobType, BigInt(msg.jobId));
+    const jobType = msg.jobType;
+    if (!(JOB_TYPES as readonly string[]).includes(jobType)) return;
+    // Lazy import avoids enqueue ↔ pg-listen cycle at module load.
+    void import("@/lib/jobs/enqueue")
+      .then(({ onRemoteJobAvailable }) =>
+        onRemoteJobAvailable(jobType as JobType, BigInt(msg.jobId)),
+      )
+      .catch((err) => {
+        console.error("onRemoteJobAvailable failed:", err);
+      });
     return;
   }
   if (msg.kind === "worker_ping") {

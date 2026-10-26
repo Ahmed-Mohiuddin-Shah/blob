@@ -51,6 +51,29 @@ export type WorkerKeyRow = {
   createdAt: string;
 };
 
+export type MeiliStatsRow = {
+  configured: boolean;
+  host: string | null;
+  ok: boolean | null;
+  latencyMs: number | null;
+};
+
+export type ReindexStatsRow = {
+  status: string;
+  ownerAppInstanceId: string | null;
+  leaseExpiresAt: string | null;
+  attempts: number;
+  lastError: string | null;
+  updatedAt: string;
+} | null;
+
+export type JobQueueRow = {
+  pending: number;
+  leased: number;
+  running: number;
+  byType: Array<{ type: string; status: string; count: number }>;
+};
+
 const keyInitial: WorkerKeyActionState = {};
 const pingInitial: HealthPingState = {};
 
@@ -159,14 +182,112 @@ export function WorkersAdmin({
   workers,
   keys,
   isSuperadmin,
+  meili,
+  reindex,
+  jobs,
+  selfAppInstanceId,
 }: {
   appInstances: AppInstanceRow[];
   workers: WorkerRow[];
   keys: WorkerKeyRow[];
   isSuperadmin: boolean;
+  meili: MeiliStatsRow;
+  reindex: ReindexStatsRow;
+  jobs: JobQueueRow;
+  selfAppInstanceId: string;
 }) {
   return (
     <div className="space-y-10">
+      <section>
+        <h2 className="text-sm font-bold uppercase tracking-wider text-inactive">
+          Search
+        </h2>
+        <div className="mt-3 rounded-[28px] bg-surface px-5 py-4 ring-1 ring-divider">
+          {!meili.configured ? (
+            <p className="text-sm text-secondary">
+              Meilisearch not configured — Prisma text fallback only.
+            </p>
+          ) : (
+            <>
+              <p className="font-semibold">
+                <span
+                  className={`mr-2 inline-block h-2 w-2 rounded-full ${
+                    meili.ok ? "bg-emerald-500" : "bg-red-500"
+                  }`}
+                />
+                {meili.ok ? "Meilisearch up" : "Meilisearch down"}
+              </p>
+              <p className="mt-1 break-all text-xs text-secondary">
+                {meili.host}
+                {meili.latencyMs != null ? ` · ${meili.latencyMs} ms` : ""}
+                {!meili.ok
+                  ? " · browse/search falls back to Prisma contains"
+                  : ""}
+              </p>
+            </>
+          )}
+        </div>
+      </section>
+
+      <section>
+        <h2 className="text-sm font-bold uppercase tracking-wider text-inactive">
+          Catalog reindex
+        </h2>
+        <div className="mt-3 rounded-[28px] bg-surface px-5 py-4 ring-1 ring-divider">
+          {!reindex ? (
+            <p className="text-sm text-secondary">No catalog_reindex job yet.</p>
+          ) : (
+            <>
+              <p className="font-semibold">
+                {reindex.status.replace(/_/g, " ")}
+                {reindex.ownerAppInstanceId ? (
+                  <span className="ml-2 text-xs font-bold uppercase tracking-wider text-inactive">
+                    owner {reindex.ownerAppInstanceId}
+                    {reindex.ownerAppInstanceId === selfAppInstanceId ? (
+                      <span className="ml-1 text-accent-pink">this instance</span>
+                    ) : null}
+                  </span>
+                ) : null}
+              </p>
+              <p className="mt-1 text-xs text-secondary">
+                attempts {reindex.attempts}
+                {reindex.leaseExpiresAt
+                  ? ` · lease until ${new Date(reindex.leaseExpiresAt).toLocaleString()}`
+                  : ""}
+                {" · updated "}
+                {new Date(reindex.updatedAt).toLocaleString()}
+              </p>
+              {reindex.lastError ? (
+                <p className="mt-2 text-xs text-red-500">{reindex.lastError}</p>
+              ) : null}
+            </>
+          )}
+        </div>
+      </section>
+
+      <section>
+        <h2 className="text-sm font-bold uppercase tracking-wider text-inactive">
+          Job queue
+        </h2>
+        <div className="mt-3 rounded-[28px] bg-surface px-5 py-4 ring-1 ring-divider">
+          <p className="text-sm text-secondary">
+            pending {jobs.pending} · leased {jobs.leased} · running{" "}
+            {jobs.running}
+          </p>
+          {jobs.byType.length > 0 ? (
+            <ul className="mt-2 space-y-1 text-xs text-secondary">
+              {jobs.byType.map((row) => (
+                <li key={`${row.type}:${row.status}`}>
+                  {row.type.replace(/_/g, " ")} · {row.status} · {row.count}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-2 text-xs text-inactive">No in-flight jobs.</p>
+          )}
+        </div>
+      </section>
+
       <section>
         <h2 className="text-sm font-bold uppercase tracking-wider text-inactive">
           Control plane
